@@ -49,15 +49,11 @@ const toRupee = (paise: number) => Number(divRound(B(paise), 100n)) * 100;
 const ceilRupee = (paise: number) => Math.ceil(paise / 100) * 100;
 
 export function computePayslip(e: PayEmployee, i: PayInput): Payslip {
-  let basic = 0, hra = 0, allowances = 0;
-  if (e.pay_type === "hourly") {
-    basic = prorate(e.hourly_rate, i.worked_minutes, 60);
-  } else {
-    const den = i.working_days * 1000;
-    basic = prorate(e.monthly_basic, i.paid_days_milli, den);
-    hra = prorate(e.hra, i.paid_days_milli, den);
-    allowances = prorate(e.other_allowances, i.paid_days_milli, den);
-  }
+  const den = i.working_days * 1000;
+  const hourly = e.pay_type === "hourly";
+  const basic = hourly ? prorate(e.hourly_rate, i.worked_minutes, 60) : prorate(e.monthly_basic, i.paid_days_milli, den);
+  const hra = hourly ? 0 : prorate(e.hra, i.paid_days_milli, den);
+  const allowances = hourly ? 0 : prorate(e.other_allowances, i.paid_days_milli, den);
   const overtime = prorate(e.overtime_rate, i.overtime_minutes, 60);
   const gross = basic + hra + allowances + overtime;
 
