@@ -41,10 +41,11 @@ export async function makeEnv(): Promise<{ env: Env; mf: Miniflare }> {
 
 export class Client {
   cookie = "";
+  ip = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
   constructor(private env: Env, public base = "http://localhost") {}
 
   async req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
-    const h: Record<string, string> = { "x-requested-with": "arthika", ...headers };
+    const h: Record<string, string> = { "x-requested-with": "arthika", "cf-connecting-ip": this.ip, ...headers };
     if (this.cookie) h.cookie = this.cookie;
     let payload: BodyInit | undefined;
     if (body instanceof Uint8Array) payload = body as unknown as BodyInit;

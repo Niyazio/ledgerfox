@@ -123,12 +123,13 @@ contacts.delete("/:id", async (c) => {
   requirePerm(c, "masters.write");
   const company = c.get("company");
   const id = c.req.param("id");
+  // Ownership first, so another tenant's IDs are indistinguishable from non-existent ones.
+  const r = await first(c.env.DB, `SELECT 1 FROM contacts WHERE id = ? AND company_id = ?`, id, company.id);
+  if (!r) throw notFound("Contact");
   const used = await first(c.env.DB,
     `SELECT 1 FROM documents WHERE contact_id = ? UNION ALL SELECT 1 FROM payments WHERE contact_id = ? UNION ALL SELECT 1 FROM journal_lines WHERE contact_id = ? UNION ALL SELECT 1 FROM expenses WHERE contact_id = ? LIMIT 1`,
     id, id, id, id);
   if (used) throw conflict("CONTACT_IN_USE", "This contact has transactions. Mark it inactive instead.");
-  const r = await first(c.env.DB, `SELECT 1 FROM contacts WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!r) throw notFound("Contact");
   await batch(c.env.DB, [stmt(c.env.DB, `DELETE FROM contacts WHERE id = ? AND company_id = ?`, id, company.id), audit(c, "contact.delete", "contact", id)]);
   return c.json({ ok: true });
 });
