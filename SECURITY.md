@@ -45,6 +45,23 @@
     per (company, user, key) for 7 days and replays it for repeats, so a record is never created twice. Keys are scoped
     to the signed-in user, so one member cannot read another member's stored response.
 
+## Desktop edition
+
+- Data stays in the user's file; nothing leaves the computer unless phone or internet access is turned on.
+- The data file and its automatic backups are **not encrypted** by LedgerFox. Use OS login passwords and
+  BitLocker/FileVault. Anyone who can copy the file can read it with SQLite tools.
+- Only the first user can register; others are invited. Passwords use PBKDF2-SHA256 at 100,000 iterations (the
+  maximum the cloud runtime accepts, kept so a file can later move to the cloud).
+- Same-Wi-Fi access is plain http inside the local network: anyone on that network who can capture traffic could see
+  session cookies. Enable it only on trusted networks; Windows firewall should allow private networks only.
+- Internet link: https via Cloudflare; LedgerFox login always required; optional Cloudflare email one-time code in
+  front. Client IPs are taken from Cloudflare's header only for requests that arrive through the local tunnel process.
+  The random address is the only thing that changes; it is not a secret and must not be relied on for protection.
+- Installers are unsigned (no paid certificates), so users see OS warnings and cannot verify the publisher; download
+  only from the project's GitHub Releases.
+- The window shows only LedgerFox (`127.0.0.1`); other links open in the system browser. Renderer is sandboxed,
+  context-isolated, with no Node integration.
+
 ## Reporting
 
 Report vulnerabilities privately to the repository owner. Do not open public issues for security problems.

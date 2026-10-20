@@ -25,6 +25,14 @@ export function splitSql(sql: string): string[] {
 }
 
 export async function makeEnv(): Promise<{ env: Env; mf: Miniflare }> {
+  if (process.env.LEDGERFOX_TEST_DB === "sqlite") {
+    // Desktop engine: the same suite against Node's SQLite through the D1 facade.
+    const { SqliteD1, asD1 } = await import("../src/server/sqlite-d1");
+    const { migrate } = await import("../src/server/migrate");
+    const db = new SqliteD1(":memory:");
+    migrate(db, join(import.meta.dirname, "..", "migrations"));
+    return { env: { DB: asD1(db), PBKDF2_ITERATIONS: "1000", BRAND_NAME: "LedgerFox", APP_ENV: "test" }, mf: { dispose: async () => db.close() } as unknown as Miniflare };
+  }
   const mf = new Miniflare({
     modules: true,
     script: "export default { fetch() { return new Response('ok') } }",

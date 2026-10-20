@@ -25,6 +25,13 @@ The app's largest query binds ~20 parameters.
 - Storage: ~1–2 KB per journal line; 5 GB holds millions of lines, but receipts (≤ 1 MB each) consume it fastest.
 - CPU: report aggregation runs inside D1 (not counted as Worker CPU). Password hashing is the heaviest step (~9 ms).
 
+## Desktop edition
+
+Free: MIT-licensed app, data on the user's computer, Electron and SQLite (open source), installers built on GitHub
+Actions (free for public repositories; macOS minutes count 10× on private repositories), optional Cloudflare Quick
+Tunnel (no account or card; temporary, no uptime guarantee). Optional costs only if you choose them: Windows
+code-signing certificate, Apple Developer Program (US$99/year) for signed/notarised macOS builds.
+
 ## Possible charges — only if you choose them
 
 | Action | Charge |

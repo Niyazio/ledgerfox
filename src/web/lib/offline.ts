@@ -72,8 +72,15 @@ export async function retryOutboxEntry(e: OutboxEntry) { await putEntry({ ...e, 
  * Create a record, or queue it on this device when there is no connection. Returns the server response, or
  * `{ queued: true }` when stored for later. Server-side validation errors are thrown as usual when online.
  */
+/** crypto.randomUUID needs a secure context; phones on the office Wi-Fi reach the desktop app over plain http. */
+export function randomKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
 export async function postOrQueue<T = any>(path: string, body: unknown, opts: { label: string; then?: string }): Promise<T | Queued> {
-  const id = crypto.randomUUID();
+  const id = randomKey();
   if (navigator.onLine) {
     try {
       return await api.post<T>(path, body, { "idempotency-key": id });

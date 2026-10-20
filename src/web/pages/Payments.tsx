@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
-import { isQueued, postOrQueue } from "../lib/offline";
+import { isQueued, postOrQueue, randomKey } from "../lib/offline";
 import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, isCashOrBank } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
@@ -55,7 +55,7 @@ export function PaymentForm() {
   const [contact, setContact] = useState<any>(null);
   const [v, setV] = useState({ payment_date: today(), account_id: accounts.find((a) => a.system_key === "BANK")?.id ?? "", amount: "", method: "bank_transfer", reference: "", notes: "", fx_rate: "" });
   const [alloc, setAlloc] = useState<Record<string, string>>({});
-  const [idem] = useState(() => `ui-${crypto.randomUUID()}`);
+  const [idem] = useState(() => `ui-${randomKey()}`);
   const { busy, error, run } = useAction();
   const docType = direction === "in" ? "invoice" : "bill";
   const contactRes = useApi<any>(contactId ? path(`/contacts/${contactId}`) : null);

@@ -18,6 +18,8 @@ Cloudflare Workers **Free** plan with a D1 (SQLite) database, with no paid servi
   inventory valuation and budget vs actual all come from posted ledger lines and show reconciliation checks.
 - **Works offline** — installable app; pages you have opened are kept on the device, and new entries made without
   internet are queued and synced automatically (never twice) when you reconnect.
+- **Desktop edition (Windows, macOS, Linux)** — free installers; data in one file in a folder you choose, daily
+  automatic backups, optional phone access over Wi-Fi or a temporary free internet link. See [DESKTOP.md](DESKTOP.md).
 - **No paid AI** — rule-based category suggestions, duplicate-bill warnings, anomaly flags, bank-match
   suggestions, a cash projection and plain-language P&L summaries. Nothing posts without a person.
 

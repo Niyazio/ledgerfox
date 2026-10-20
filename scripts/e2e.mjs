@@ -18,9 +18,13 @@ const shot = async (n) => { if (process.env.SHOTS) await page.screenshot({ path:
 try {
   await page.goto(`${base}/`);
   await page.locator("h1").first().waitFor();
-  await shot("01-landing");
-  step("landing page");
-  await page.getByRole("link", { name: "Create account" }).first().click();
+  if (new URL(page.url()).pathname === "/register") {
+    step("desktop edition: first launch opens owner registration");
+  } else {
+    await shot("01-landing");
+    step("landing page");
+    await page.getByRole("link", { name: "Create account" }).first().click();
+  }
   const email = `e2e${Date.now()}@example.com`;
   await page.getByLabel("Your name").fill("Asha Rao");
   await page.getByLabel("Email").fill(email);

@@ -14,9 +14,12 @@ const FEATURES = [
 ];
 
 export default function Landing() {
-  const { me } = useSession();
+  const { me, loading } = useSession();
   const { dark, toggle } = useTheme();
+  if (loading) return null;
   if (me?.user) return <Navigate to="/app" replace />;
+  // The desktop app has no marketing page: first launch creates the owner, later launches sign in.
+  if (me?.edition === "desktop") return <Navigate to={me.registration === "open" ? "/register" : "/login"} replace />;
   const brand = me?.brand ?? "LedgerFox";
   return (
     <div className="min-h-full">

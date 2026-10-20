@@ -7,6 +7,9 @@ export interface Me {
   organisations: { org_id: string; org_name: string; role: string }[];
   companies: { id: string; name: string; org_id: string; base_currency: string; country: string }[];
   brand: string;
+  /** "desktop" when running from a data file on a PC/Mac. */
+  edition?: "cloud" | "desktop";
+  registration?: "open" | "closed";
 }
 
 interface SessionCtx {

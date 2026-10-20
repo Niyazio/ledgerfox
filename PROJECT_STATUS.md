@@ -32,6 +32,9 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Rule-based insights | ✅ Done | Category suggestions, duplicate bills, anomalies, bank match, cash projection, P&L explanation |
 | Data export | ✅ Done | Per-company JSON (owner/admin); DB-level backup script |
 | Light/dark theme, responsive layout | ✅ Done | |
+| Desktop edition (Windows/macOS/Linux) | ✅ Done (Linux build verified here) | Data file in a chosen folder, daily backups, Wi-Fi phone access with QR, temporary free internet link. Windows/macOS installers are built by GitHub Actions (cannot be built in this Linux environment); unsigned. |
+| Move desktop data to the cloud | ❌ Not yet | Same schema; needs an import tool |
+| Permanent per-client internet address | ❌ Not yet | Options: relay on Cloudflare Workers (free tier, counts against 100k requests/day) or named tunnels on each client's Cloudflare account |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 
 ## Incomplete, partial or not implemented (honest list)

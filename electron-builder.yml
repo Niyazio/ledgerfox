@@ -1,0 +1,46 @@
+# Desktop installers. Unsigned builds (no paid certificates): see DESKTOP.md for the one-time "open anyway" steps.
+appId: com.niyazio.ledgerfox
+productName: LedgerFox
+copyright: "Copyright © LedgerFox contributors. MIT licence."
+directories:
+  output: release
+  buildResources: build
+files:
+  - desktop-build/**
+  - package.json
+  - "!node_modules/**"
+extraResources:
+  - from: dist
+    to: web
+  - from: migrations
+    to: migrations
+asar: true
+fileAssociations:
+  - ext: ledgerfox
+    name: LedgerFox data
+    description: LedgerFox accounting data
+    role: Editor
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  artifactName: LedgerFox-Setup-${version}-${arch}.${ext}
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.finance
+  # Ad-hoc signature only (Apple Developer ID costs money); required for Apple Silicon to launch at all.
+  identity: "-"
+  artifactName: LedgerFox-${version}-${arch}.${ext}
+linux:
+  target: [AppImage]
+  category: Office
+  artifactName: LedgerFox-${version}-${arch}.${ext}
+publish: null

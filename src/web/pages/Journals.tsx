@@ -4,7 +4,7 @@ import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
-import { isQueued, postOrQueue } from "../lib/offline";
+import { isQueued, postOrQueue, randomKey } from "../lib/offline";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
 import { AccountSelect, DimensionSelect, CURRENCY_OPTIONS } from "../components/pickers";
 import { fmtDate, fmtDateTime, today, toInput } from "../lib/format";
@@ -83,7 +83,7 @@ export function JournalForm() {
   const [showFx, setShowFx] = useState(false);
   const [showDims, setShowDims] = useState(false);
   const { busy, error, run } = useAction();
-  const [idemKey] = useState(() => `ui-${crypto.randomUUID()}`); // one key per form: double submits cannot post twice
+  const [idemKey] = useState(() => `ui-${randomKey()}`); // one key per form: double submits cannot post twice
   const existing = useApi<any>(journalId ? path(`/journals/${journalId}`) : null);
   useEffect(() => {
     const d = existing.data;

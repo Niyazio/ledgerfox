@@ -29,6 +29,9 @@ async function makeRecoveryCodes(db: D1Database, userId: string) {
 
 auth.post("/register", async (c) => {
   if (c.env.ALLOW_REGISTRATION === "false") throw forbidden("Registration is disabled on this instance");
+  if (c.env.ALLOW_REGISTRATION === "first" && (await first(c.env.DB, `SELECT 1 FROM users LIMIT 1`))) {
+    throw forbidden("This LedgerFox already has an owner. Ask them to invite you from Settings → Users.");
+  }
   if (!(await rateLimit(c.env.DB, `register:${clientIp(c)}`, 10, 3600))) {
     throw new AppError(429, "RATE_LIMITED", "Too many registrations from this address. Try again later.");
   }
@@ -77,7 +80,11 @@ auth.post("/logout", async (c) => {
 
 auth.get("/me", async (c) => {
   const user = await loadSessionUser(c);
-  if (!user) return c.json({ user: null });
+  const edition = c.env.APP_ENV === "desktop" ? "desktop" : "cloud";
+  if (!user) {
+    const closed = c.env.ALLOW_REGISTRATION === "false" || (c.env.ALLOW_REGISTRATION === "first" && Boolean(await first(c.env.DB, `SELECT 1 FROM users LIMIT 1`)));
+    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open" });
+  }
   const orgs = await all<{ org_id: string; org_name: string; role: string }>(
     c.env.DB,
     `SELECT o.id AS org_id, o.name AS org_name, m.role FROM memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = ? ORDER BY o.created_at`,
@@ -94,6 +101,7 @@ auth.get("/me", async (c) => {
     organisations: orgs,
     companies,
     brand: c.env.BRAND_NAME ?? "LedgerFox",
+    edition,
   });
 });
 

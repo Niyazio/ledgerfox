@@ -6,7 +6,12 @@ Run date: 20 Oct 2026 · Node 22.22 · all commands run in this repository.
 |---|---|
 | `npm run lint` (ESLint, typescript-eslint, react-hooks) | ✅ 0 problems |
 | `npm run typecheck` (`tsc --noEmit`, strict) | ✅ 0 errors |
-| `npm test` (Vitest + Miniflare D1) | ✅ **111 passed**, 0 failed, 0 skipped (7 files, ~22 s) |
+| `npm test` (Vitest + Miniflare D1) | ✅ **116 passed**, 0 failed, 0 skipped (8 files, ~25 s) |
+| `npm run test:desktop` (same suite on Node SQLite, desktop engine) | ✅ **116 passed** |
+| Browser e2e against the headless desktop server (`server-build/ledgerfox-server.mjs`) | ✅ passed, incl. offline round trip |
+| Packaged Linux desktop app (`electron-builder --linux`, Electron 44) launched under Xvfb | ✅ data file + migrations + daily backup created; owner registration → company → dashboard driven through the real window; Wi-Fi access window shows QR and the LAN address answers |
+| Windows/macOS installers | ⚠️ not built here (Windows needs Wine on Linux; macOS needs a Mac) — built by `.github/workflows/desktop.yml` on GitHub's runners, not yet run |
+| Internet link (Cloudflare Quick Tunnel) | ⚠️ not reachable from this sandbox (DNS blocked); the server-side handling is covered by `test/desktop-server.test.ts` |
 | `npm run build` (Vite) | ✅ initial JS 266 KB (83 KB gzip), pages lazy-loaded; precache manifest emitted |
 | `npx wrangler d1 migrations apply ledgerfox --local` | ✅ all three migrations applied by wrangler |
 | `npm run test:e2e` against `wrangler dev` (real Workers runtime, Chromium) | ✅ passed, 0 browser console errors; includes an offline round trip (app reloads offline, a customer created offline is queued on the device, then synced exactly once on reconnect) |

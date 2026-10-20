@@ -36,7 +36,7 @@ export function Login() {
     if (ok) { await refresh(); nav(params.get("next") ?? "/app"); }
   };
   return (
-    <AuthCard title="Sign in" subtitle={<>New here? <Link className="text-brand-700 hover:underline dark:text-brand-300" to="/register">Create an account</Link></>}>
+    <AuthCard title="Sign in" subtitle={me?.registration === "closed" ? "Ask the owner for an invitation if you don't have an account." : <>New here? <Link className="text-brand-700 hover:underline dark:text-brand-300" to="/register">Create an account</Link></>}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
         <Field label="Email">{(id) => <Input id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>

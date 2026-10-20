@@ -4,7 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", ".wrangler", "coverage"] },
+  { ignores: ["dist", "node_modules", ".wrangler", "coverage", "desktop-build", "server-build", "release"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { files: ["scripts/**/*.mjs", "public/**/*.js"], languageOptions: { globals: { ...globals.node, ...globals.browser } } },

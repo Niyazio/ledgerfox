@@ -6,3 +6,7 @@ dist
 coverage
 backups/
 .env
+desktop-build
+server-build
+release
+*.ledgerfox

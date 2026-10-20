@@ -83,6 +83,30 @@ amount within 30 days), 3σ anomaly flags per account, a due-date-based cash pro
 from the computed figures. An optional adapter for a self-hosted model (`LOCAL_LLM_URL`) is reserved in `Env` but
 **not implemented** — no LLM is called anywhere.
 
+## Desktop edition
+
+```
+Electron window ──http://127.0.0.1:4780──► Node server (src/server/http.ts, @hono/node-server)
+phones (same Wi-Fi) ──http://<lan-ip>:4780──┘   ├─ same Hono app as the Worker (src/worker)
+internet link (cloudflared quick tunnel) ──┘    └─ DB = SqliteD1 facade (src/server/sqlite-d1.ts) over node:sqlite
+                                                      └─ one .ledgerfox SQLite file chosen by the user
+```
+
+- `src/server/sqlite-d1.ts` implements the subset of the D1 API the code uses (`prepare/bind/first/all/run/raw`,
+  atomic `batch`) on Node's built-in SQLite, so no native module has to be compiled per platform. WAL journal,
+  `synchronous=FULL`, foreign keys on. The same migrations and triggers apply; `src/server/migrate.ts` records them in
+  `d1_migrations` like wrangler.
+- The whole Vitest suite runs against both engines (`npm test` = Miniflare D1, `npm run test:desktop` = node:sqlite).
+- Request trust: only loopback requests carrying Cloudflare headers are treated as coming through the internet link;
+  for all other requests the client address comes from the socket, so it cannot be spoofed. The browser Origin of the
+  internet link is accepted only for the hostname the app itself started, which also switches cookies to
+  `__Host-…; Secure`.
+- `ALLOW_REGISTRATION=first` (desktop default): only the first user can register; others need an invitation.
+- `src/desktop/main.ts`: data-file chooser, daily backups (`VACUUM INTO`), menus, phone-access window with QR codes,
+  single-instance lock, `.ledgerfox` file association. `src/desktop/tunnel.ts`: downloads and runs `cloudflared`.
+- Packaging: esbuild bundles main + server (`scripts/build-desktop.mjs`); electron-builder (`electron-builder.yml`)
+  makes NSIS (Windows), DMG (macOS, ad-hoc signed) and AppImage (Linux). CI: `.github/workflows/desktop.yml`.
+
 ## Offline mode
 
 - `public/sw.js` (service worker) precaches the app shell from `precache-manifest.json` (emitted by a Vite plugin at
