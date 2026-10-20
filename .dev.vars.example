@@ -1,0 +1,3 @@
+# Local development overrides (copy to .dev.vars; never commit .dev.vars)
+APP_ENV=development
+PBKDF2_ITERATIONS=10000
