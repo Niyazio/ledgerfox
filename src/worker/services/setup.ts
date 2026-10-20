@@ -2,6 +2,9 @@ import { stmt } from "../lib/db";
 import { newId } from "../lib/crypto";
 import { seedAccountsFor } from "@shared/coa";
 import { DEFAULT_IN_GST_CODES, schemeForCountry } from "@shared/tax";
+import { businessType } from "@shared/industries";
+import { parseDecimal } from "@shared/money";
+import { currencyExponent } from "@shared/currencies";
 
 export const SEQUENCES: [string, string][] = [
   ["JV", "JV-"],
@@ -75,6 +78,8 @@ export interface CompanyInput {
   phone?: string | null;
   email?: string | null;
   number_locale?: string;
+  business_type?: string | null;
+  is_demo?: boolean;
 }
 
 export function companySetupStatements(db: D1Database, input: CompanyInput, today: string) {
@@ -83,18 +88,19 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
     stmt(
       db,
       `INSERT INTO companies (id, org_id, name, legal_name, country, base_currency, fiscal_year_start_month, tax_id, state_code,
-         address, city, postal_code, phone, email, number_locale)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         address, city, postal_code, phone, email, number_locale, business_type, is_demo)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       companyId, input.org_id, input.name, input.legal_name ?? null, input.country, input.base_currency,
       input.fiscal_year_start_month, input.tax_id ?? null, input.state_code ?? null, input.address ?? null,
       input.city ?? null, input.postal_code ?? null, input.phone ?? null, input.email ?? null,
-      input.number_locale ?? (input.country === "IN" ? "en-IN" : "en-US"),
+      input.number_locale ?? (input.country === "IN" ? "en-IN" : "en-US"), businessType(input.business_type).key, input.is_demo ? 1 : 0,
     ),
   ];
+  const biz = businessType(input.business_type);
 
   // Chart of accounts — parents first (array order guarantees this).
   const idByCode = new Map<string, string>();
-  for (const a of seedAccountsFor(input.country)) {
+  for (const a of [...seedAccountsFor(input.country), ...biz.accounts]) {
     const id = newId();
     idByCode.set(a.code, id);
     stmts.push(
@@ -107,10 +113,13 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
   }
 
   const scheme = schemeForCountry(input.country);
+  const taxIdByName = new Map<string, string>();
   if (scheme === "in_gst") {
     for (const t of DEFAULT_IN_GST_CODES) {
+      const id = newId();
+      taxIdByName.set(t.name, id);
       stmts.push(stmt(db, `INSERT INTO tax_codes (id, company_id, name, scheme, rate_bp, category, is_active) VALUES (?,?,?,?,?,?,?)`,
-        newId(), companyId, t.name, "in_gst", t.rate_bp, t.category, t.active === false ? 0 : 1));
+        id, companyId, t.name, "in_gst", t.rate_bp, t.category, t.active === false ? 0 : 1));
     }
   } else {
     stmts.push(stmt(db, `INSERT INTO tax_codes (id, company_id, name, scheme, rate_bp, category) VALUES (?,?,?,?,?,?)`, newId(), companyId, "No tax", "simple", 0, "exempt"));
@@ -121,8 +130,17 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
   }
 
   stmts.push(stmt(db, `INSERT INTO warehouses (id, company_id, name, code) VALUES (?,?,?,?)`, newId(), companyId, "Main Warehouse", "MAIN"));
-  for (const [code, name] of [["nos", "Numbers"], ["kg", "Kilograms"], ["ltr", "Litres"], ["mtr", "Metres"], ["box", "Boxes"], ["hrs", "Hours"]]) {
+  const units = new Map<string, string>([["nos", "Numbers"], ["kg", "Kilograms"], ["ltr", "Litres"], ["mtr", "Metres"], ["box", "Boxes"], ["hrs", "Hours"], ...biz.units]);
+  for (const [code, name] of units) {
     stmts.push(stmt(db, `INSERT INTO units (id, company_id, code, name) VALUES (?,?,?,?)`, newId(), companyId, code, name));
+  }
+  // Starter items for the business type (prices in the company currency; editable later).
+  const exp = currencyExponent(input.base_currency);
+  for (const it of biz.items) {
+    stmts.push(stmt(db,
+      `INSERT INTO items (id, company_id, kind, name, unit, hsn_sac, sale_price, tax_code_id, income_account_id, track_inventory) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      newId(), companyId, it.kind, it.name, it.unit, scheme === "in_gst" ? it.hsn ?? null : null, parseDecimal(it.price, exp),
+      scheme === "in_gst" && it.gst ? taxIdByName.get(it.gst) ?? null : null, it.income ? idByCode.get(it.income) ?? null : null, it.track ? 1 : 0));
   }
   stmts.push(stmt(db, `INSERT INTO branches (id, company_id, name, code, state_code) VALUES (?,?,?,?,?)`, newId(), companyId, "Head Office", "HO", input.state_code ?? null));
 

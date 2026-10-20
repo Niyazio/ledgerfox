@@ -26,20 +26,23 @@ export function Login() {
   const { me, refresh } = useSession();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const { busy, error, run } = useAction();
   if (me?.user) return <Navigate to={params.get("next") ?? "/app"} replace />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const ok = await run(() => api.post("/api/auth/login", { email, password }));
+    const ok = await run(() => api.post("/api/auth/login", { login, password }));
     if (ok) { await refresh(); nav(params.get("next") ?? "/app"); }
   };
   return (
     <AuthCard title="Sign in" subtitle={me?.registration === "closed" ? "Ask the owner for an invitation if you don't have an account." : <>New here? <Link className="text-brand-700 hover:underline dark:text-brand-300" to="/register">Create an account</Link></>}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
-        <Field label="Email">{(id) => <Input id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
+        {me?.default_login && (
+          <Alert kind="info">First time? Sign in with username <b>admin</b> and password <b>admin</b>. You will be asked to choose your own password straight away.</Alert>
+        )}
+        <Field label="Username or email">{(id) => <Input id={id} autoComplete="username" autoCapitalize="none" spellCheck={false} required value={login} onChange={(e) => setLogin(e.target.value)} />}</Field>
         <Field label="Password">{(id) => <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
         <Button type="submit" loading={busy} className="w-full">Sign in</Button>
         <p className="text-center text-sm"><Link to="/forgot" className="muted hover:underline">Forgot password?</Link></p>
@@ -52,7 +55,7 @@ export function Register() {
   const { me, refresh } = useSession();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ name: "", email: "", username: "", password: "", confirm: "" });
   const [codes, setCodes] = useState<string[] | null>(null);
   const [saved, setSaved] = useState(false);
   const { busy, error, setError, run } = useAction();
@@ -60,7 +63,7 @@ export function Register() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (form.password !== form.confirm) return setError("Passwords do not match");
-    const r = await run(() => api.post<{ recovery_codes: string[] }>("/api/auth/register", { name: form.name, email: form.email, password: form.password }));
+    const r = await run(() => api.post<{ recovery_codes: string[] }>("/api/auth/register", { name: form.name, email: form.email, username: form.username || null, password: form.password }));
     if (r) setCodes(r.recovery_codes);
   };
   if (codes) {
@@ -84,6 +87,7 @@ export function Register() {
         {error && <Alert>{error}</Alert>}
         <Field label="Your name">{(id) => <Input id={id} required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}</Field>
         <Field label="Email">{(id) => <Input id={id} type="email" required autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />}</Field>
+        <Field label="Username (optional)" hint="Sign in with this instead of your email.">{(id) => <Input id={id} autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />}</Field>
         <Field label="Password" hint="At least 10 characters. A short sentence works well.">{(id) => <Input id={id} type="password" required minLength={10} autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />}</Field>
         <Field label="Confirm password">{(id) => <Input id={id} type="password" required minLength={10} autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />}</Field>
         <Button type="submit" loading={busy} className="w-full">Create account</Button>
@@ -160,6 +164,32 @@ export function AcceptInvite() {
     <AuthCard title="Join organisation" subtitle={`Signed in as ${me.user.email}`}>
       {error && <Alert className="mb-4">{error}</Alert>}
       <Button loading={busy} className="w-full" onClick={async () => { if (await run(() => api.post("/api/invitations/accept", { token }))) { await refresh(); nav("/app"); } }}>Accept invitation</Button>
+    </AuthCard>
+  );
+}
+
+/** Shown instead of the app while the account is on a default or temporary password. */
+export function ChangePasswordFirst() {
+  const { me, refresh, logout } = useSession();
+  const [form, setForm] = useState({ current_password: "", new_password: "", confirm: "", username: me?.user?.username ?? "" });
+  const { busy, error, setError, run } = useAction();
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (form.new_password !== form.confirm) return setError("The new passwords do not match");
+    const ok = await run(() => api.post("/api/auth/change-password", { current_password: form.current_password, new_password: form.new_password, username: form.username || undefined }));
+    if (ok) await refresh();
+  };
+  return (
+    <AuthCard title="Choose your own password" subtitle="For your security, replace the temporary password before using LedgerFox.">
+      <form onSubmit={submit} className="space-y-4">
+        {error && <Alert>{error}</Alert>}
+        <Field label="Username" hint="You sign in with this.">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />}</Field>
+        <Field label="Current (temporary) password" required>{(id) => <Input id={id} type="password" autoComplete="current-password" required value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} />}</Field>
+        <Field label="New password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.new_password} onChange={(e) => setForm({ ...form, new_password: e.target.value })} />}</Field>
+        <Field label="Confirm new password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />}</Field>
+        <Button type="submit" loading={busy} className="w-full">Save and continue</Button>
+        <p className="text-center text-sm"><button type="button" className="muted hover:underline" onClick={() => void logout()}>Sign out</button></p>
+      </form>
     </AuthCard>
   );
 }

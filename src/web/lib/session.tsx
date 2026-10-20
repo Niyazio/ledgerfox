@@ -3,13 +3,15 @@ import { api } from "./api";
 import { clearOfflineData, setOfflineUser } from "./offline";
 
 export interface Me {
-  user: { id: string; email: string; name: string } | null;
+  user: { id: string; email: string; name: string; username?: string | null; must_change_password?: boolean } | null;
   organisations: { org_id: string; org_name: string; role: string }[];
-  companies: { id: string; name: string; org_id: string; base_currency: string; country: string }[];
+  companies: { id: string; name: string; org_id: string; base_currency: string; country: string; business_type?: string; is_demo?: number }[];
   brand: string;
   /** "desktop" when running from a data file on a PC/Mac. */
   edition?: "cloud" | "desktop";
   registration?: "open" | "closed";
+  /** Desktop only, on the computer itself: the default admin / admin sign-in has not been changed yet. */
+  default_login?: boolean;
 }
 
 interface SessionCtx {

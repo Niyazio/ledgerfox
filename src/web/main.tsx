@@ -6,7 +6,7 @@ import { SessionProvider, useSession } from "./lib/session";
 import { Spinner, ToastProvider } from "./components/ui";
 import { CompanyLayout } from "./components/Layout";
 import Landing from "./pages/Landing";
-import { Login, Register, Forgot, ResetWithToken, AcceptInvite } from "./pages/Auth";
+import { Login, Register, Forgot, ResetWithToken, AcceptInvite, ChangePasswordFirst } from "./pages/Auth";
 import { AppHome, NewCompany } from "./pages/Onboarding";
 import { startOfflineSync } from "./lib/offline";
 function named<M, K extends keyof M>(p: Promise<M>, k: K) {
@@ -42,6 +42,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const loc = useLocation();
   if (loading) return <Spinner />;
   if (!me?.user) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  if (me.user.must_change_password) return <ChangePasswordFirst />;
   return <>{children}</>;
 }
 

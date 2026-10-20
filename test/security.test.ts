@@ -51,7 +51,7 @@ describe("authentication", () => {
     const c = new Client(A.env);
     const r = await c.post("/api/auth/login", { email: "nobody-here@example.com", password: "whatever123" });
     expect(r.status).toBe(401);
-    expect(r.json.error.message).toBe("Invalid email or password");
+    expect(r.json.error.message).toBe("Invalid username or password");
   });
 
   it("recovery code resets the password exactly once", async () => {

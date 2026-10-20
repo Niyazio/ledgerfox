@@ -7,6 +7,7 @@ import { Alert, Button, Card, Field, Input, Select, Spinner } from "../component
 import { Wordmark } from "../components/Layout";
 import { INDIA_STATES } from "@shared/tax";
 import { CURRENCY_OPTIONS } from "../components/pickers";
+import { BUSINESS_TYPES } from "@shared/industries";
 
 const COUNTRIES: [string, string, string, number][] = [
   ["IN", "India", "INR", 4], ["AE", "United Arab Emirates", "AED", 1], ["SA", "Saudi Arabia", "SAR", 1], ["US", "United States", "USD", 1],
@@ -17,17 +18,30 @@ const COUNTRIES: [string, string, string, number][] = [
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any) => void; busy: boolean; withOrg?: boolean }) {
-  const [v, setV] = useState({ org: "", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
+  const [v, setV] = useState({ org: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const company = { name: v.name, legal_name: v.legal_name || null, country: v.country, base_currency: v.base_currency, fiscal_year_start_month: Number(v.fiscal_year_start_month),
-      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null };
+      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type };
     onSubmit(withOrg ? { name: v.org || v.name, company } : company);
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
       {withOrg && <Field label="Organisation name" hint="Groups your companies and team. You can add more companies later." className="sm:col-span-2">{(id) => <Input id={id} value={v.org} placeholder="e.g. Sharma Group" onChange={(e) => set("org", e.target.value)} />}</Field>}
+      <fieldset className="sm:col-span-2">
+        <legend className="mb-2 text-sm font-medium">What kind of business is it?</legend>
+        <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
+          {BUSINESS_TYPES.map((b) => (
+            <label key={b.key} className={`card flex cursor-pointer flex-col gap-0.5 p-3 text-sm ${v.business_type === b.key ? "border-brand-600 ring-2 ring-brand-600/20" : "hover:bg-[var(--surface-2)]"}`}>
+              <input type="radio" name="business_type" value={b.key} checked={v.business_type === b.key} onChange={() => set("business_type", b.key)} className="sr-only" />
+              <span className="font-medium">{b.label}</span>
+              <span className="text-xs muted">{b.description}</span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs muted">Adds matching income and expense accounts, units and a few starter items. You can edit or remove them later.</p>
+      </fieldset>
       <Field label="Company name" required>{(id) => <Input id={id} required value={v.name} onChange={(e) => set("name", e.target.value)} />}</Field>
       <Field label="Legal name">{(id) => <Input id={id} value={v.legal_name} onChange={(e) => set("legal_name", e.target.value)} />}</Field>
       <Field label="Country" required hint="Determines the default tax setup and chart of accounts.">{(id) => (

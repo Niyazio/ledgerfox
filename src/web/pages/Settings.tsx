@@ -52,6 +52,7 @@ function MembersTab() {
   const toast = useToast();
   const org = useApi<any>(`/api/orgs/${orgId}`);
   const [inv, setInv] = useState({ email: "", role: "accountant" });
+  const [nu, setNu] = useState({ name: "", username: "", password: "", role: "accountant" });
   const [link, setLink] = useState<string | null>(null);
   const { busy, error, run } = useAction();
   const myRole = org.data?.role as Role | undefined;
@@ -61,9 +62,9 @@ function MembersTab() {
     <div className="space-y-4">
       <Card title="Members" padded={false}>
         <TableWrap><table className="table">
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Username / email</th><th>Role</th><th /></tr></thead>
           <tbody>{org.data?.members.map((m: any) => (
-            <tr key={m.id}><td>{m.name}{m.id === me?.user?.id && <span className="ml-2"><Badge>you</Badge></span>}</td><td>{m.email}</td>
+            <tr key={m.id}><td>{m.name}{m.id === me?.user?.id && <span className="ml-2"><Badge>you</Badge></span>}</td><td>{m.username ? <><b>{m.username}</b>{m.must_change_password ? <span className="ml-2"><Badge>temporary password</Badge></span> : null}</> : m.email}</td>
               <td>{manage && m.role !== "owner" && m.id !== me?.user?.id ? (
                 <Select value={m.role} className="max-w-[11rem]" aria-label="Role" onChange={async (e) => { try { await api.patch(`/api/orgs/${orgId}/members/${m.id}`, { role: e.target.value }); org.reload(); toast("success", "Role updated"); } catch (err) { toast("error", errorMessage(err)); } }}>
                   {(["admin", "accountant", "auditor", "viewer"] as Role[]).map((r) => <option key={r} value={r} disabled={myRole !== "owner" && r === "admin"}>{ROLE_LABELS[r]}</option>)}
@@ -76,6 +77,18 @@ function MembersTab() {
         </table></TableWrap>
       </Card>
       {link && <Alert kind="success"><p>One-time password reset link (valid 24 hours). Send it to the member privately:</p><p className="mt-1 break-all font-mono text-xs">{link}</p><Button size="sm" variant="secondary" className="mt-2" onClick={() => copy(link)}><Copy className="h-3.5 w-3.5" />Copy</Button></Alert>}
+      {manage && (
+        <Card title="Add a user">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Name">{(id) => <Input id={id} value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} />}</Field>
+            <Field label="Username">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={nu.username} onChange={(e) => setNu({ ...nu, username: e.target.value })} />}</Field>
+            <Field label="Temporary password">{(id) => <Input id={id} type="password" autoComplete="new-password" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} />}</Field>
+            <Field label="Role">{(id) => <Select id={id} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>{(["admin", "accountant", "auditor", "viewer"] as Role[]).filter((r) => myRole === "owner" || r !== "admin").map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>}</Field>
+            <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/users`, nu)); if (r) { toast("success", `User ${r.username} added. They choose their own password at first sign-in.`); setNu({ name: "", username: "", password: "", role: nu.role }); org.reload(); } }}>Add user</Button>
+          </div>
+          <p className="mt-2 text-xs muted">Like Tally: give the person their username and temporary password. They must set their own password the first time they sign in.</p>
+        </Card>
+      )}
       {manage && (
         <Card title="Invite someone">
           {error && <Alert className="mb-3">{error}</Alert>}

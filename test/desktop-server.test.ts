@@ -8,7 +8,9 @@ let dir: string;
 let srv: RunningServer;
 let base: string;
 const json = { "x-requested-with": "ledgerfox", "content-type": "application/json" };
-const owner = { name: "Owner", email: "owner@example.com", password: "correct horse battery" };
+const owner = { password: "correct horse battery" };
+let cookie = "";
+let orgId = "";
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "lf-desktop-"));
@@ -29,9 +31,9 @@ afterAll(async () => {
 describe("desktop server", () => {
   it("creates the data file, applies migrations and reports the desktop edition", async () => {
     const names = (srv.db.raw.prepare("SELECT name FROM d1_migrations ORDER BY name").all() as { name: string }[]).map((r) => r.name);
-    expect(names).toEqual(["0001_core.sql", "0002_business.sql", "0003_idempotency.sql"]);
+    expect(names.slice(0, 4)).toEqual(["0001_core.sql", "0002_business.sql", "0003_idempotency.sql", "0004_business_types_payroll.sql"]);
     const me = await (await fetch(`${base}/api/auth/me`)).json();
-    expect(me).toMatchObject({ user: null, edition: "desktop", registration: "open" });
+    expect(me).toMatchObject({ user: null, edition: "desktop", registration: "closed", default_login: true });
   });
 
   it("serves the UI with SPA fallback, security headers, and nothing outside the web folder", async () => {
@@ -45,18 +47,43 @@ describe("desktop server", () => {
     expect(await (await fetch(`${base}/%2e%2e/secret.txt`)).text()).not.toContain("do not serve");
   });
 
-  it("only the first person can register; others need an invitation", async () => {
-    expect((await fetch(`${base}/api/auth/register`, { method: "POST", headers: json, body: JSON.stringify(owner) })).status).toBe(201);
-    const second = await fetch(`${base}/api/auth/register`, { method: "POST", headers: json, body: JSON.stringify({ ...owner, email: "second@example.com" }) });
-    expect(second.status).toBe(403);
-    expect(((await (await fetch(`${base}/api/auth/me`)).json()) as { registration: string }).registration).toBe("closed");
+  it("starts with admin / admin, which works only on this computer and must be changed first", async () => {
+    expect((await fetch(`${base}/api/auth/register`, { method: "POST", headers: json, body: JSON.stringify({ name: "X", email: "x@example.com", password: "whatever123" }) })).status).toBe(403);
+    // Over the internet link (or network) the default password is refused.
+    const remote = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { ...json, "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ login: "admin", password: "admin" }) });
+    expect(remote.status).toBe(403);
+    const local = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "admin", password: "admin" }) });
+    expect(local.status).toBe(200);
+    expect(((await local.json()) as { must_change_password: boolean }).must_change_password).toBe(true);
+    cookie = local.headers.get("set-cookie")!.split(";")[0];
+    const blocked = await fetch(`${base}/api/orgs`, { method: "POST", headers: { ...json, cookie }, body: "{}" });
+    expect(blocked.status).toBe(403);
+    expect(((await blocked.json()) as { error: { code: string } }).error.code).toBe("PASSWORD_CHANGE_REQUIRED");
+    const same = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: "admin", new_password: "admin" }) });
+    expect(same.status).toBe(400);
+    const changed = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: "admin", new_password: owner.password }) });
+    expect(changed.status).toBe(200);
+    expect(((await (await fetch(`${base}/api/auth/me`)).json()) as { default_login: boolean }).default_login).toBe(false);
+    const org = await fetch(`${base}/api/orgs`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Shop", company: { name: "Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" } }) });
+    expect(org.status).toBe(201);
+    orgId = ((await org.json()) as { org_id: string }).org_id;
+  });
+
+  it("owner adds users Tally-style with username + temporary password", async () => {
+    const r = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Cashier", username: "cashier1", password: "temp123", role: "accountant" }) });
+    expect(r.status).toBe(201);
+    const dup = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Again", username: "CASHIER1", password: "temp123", role: "viewer" }) });
+    expect(dup.status).toBe(409);
+    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "Cashier1", password: "temp123" }) });
+    expect(login.status).toBe(200);
+    expect(((await login.json()) as { must_change_password: boolean }).must_change_password).toBe(true);
   });
 
   it("internet link: accepts its public https origin with a Secure cookie, rejects unknown origins", async () => {
     const login = (origin: string) => fetch(`${base}/api/auth/login`, {
       method: "POST",
       headers: { ...json, origin, "cf-connecting-ip": "203.0.113.9", "x-forwarded-proto": "https", host: "abc-def.trycloudflare.com" },
-      body: JSON.stringify({ email: owner.email, password: owner.password }),
+      body: JSON.stringify({ login: "admin", password: owner.password }),
     });
     expect((await login("https://abc-def.trycloudflare.com")).status).toBe(403);
     srv.publicHosts.add("abc-def.trycloudflare.com");
@@ -74,7 +101,7 @@ describe("desktop server", () => {
     srv = await startServer({ dataFile: file, webDir: join(dir, "web"), migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0 });
     base = `http://127.0.0.1:${srv.port}`;
     const n = srv.db.raw.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
-    expect(n.n).toBe(1);
+    expect(n.n).toBe(2);
   });
 });
 

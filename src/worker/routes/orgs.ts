@@ -5,7 +5,8 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt, nowIso, todayIso } from "../lib/db";
 import { AppError, badRequest, forbidden, notFound } from "../lib/errors";
 import { body, reqText, shortText, currencyCode } from "../lib/validate";
-import { newId, randomToken, sha256Hex } from "../lib/crypto";
+import { hashPassword, newId, randomToken, sha256Hex } from "../lib/crypto";
+import { iterations, passwordSchema, usernameSchema } from "./auth";
 import { audit, requireAuth } from "../lib/auth";
 import { can, canAssignRole, type Role } from "@shared/permissions";
 import { companySetupStatements } from "../services/setup";
@@ -28,6 +29,8 @@ export const companySchema = z.object({
   postal_code: shortText(20).nullish(),
   phone: shortText(40).nullish(),
   email: z.string().trim().email().max(254).nullish().or(z.literal("")),
+  business_type: z.string().max(40).nullish(),
+  is_demo: z.boolean().optional(),
 });
 
 export function validateCompanyInput(input: z.infer<typeof companySchema>) {
@@ -79,13 +82,31 @@ orgs.post("/:orgId/companies", async (c) => {
   return c.json({ company_id: setup.companyId }, 201);
 });
 
+/** Delete a demo company and everything in it. Real companies cannot be deleted (accounting records are kept). */
+orgs.delete("/:orgId/companies/:companyId", async (c) => {
+  const orgId = c.req.param("orgId");
+  const companyId = c.req.param("companyId");
+  const role = await membership(c, orgId);
+  if (!can(role, "company.manage")) throw forbidden();
+  const co = await first<{ is_demo: number; name: string }>(c.env.DB, `SELECT is_demo, name FROM companies WHERE id = ? AND org_id = ?`, companyId, orgId);
+  if (!co) throw notFound("Company");
+  if (!co.is_demo) throw new AppError(409, "NOT_DEMO", "Only demo companies can be deleted. Real companies keep their accounting records.");
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO company_purge (company_id) VALUES (?)`, companyId),
+    stmt(c.env.DB, `DELETE FROM companies WHERE id = ? AND is_demo = 1`, companyId),
+    stmt(c.env.DB, `DELETE FROM company_purge WHERE company_id = ?`, companyId),
+    audit(c, "company.delete_demo", "company", companyId, { name: co.name }, { orgId, companyId: null }),
+  ]);
+  return c.json({ ok: true });
+});
+
 orgs.get("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
   const role = await membership(c, orgId);
   const org = await first(c.env.DB, `SELECT id, name, owner_user_id, created_at FROM organisations WHERE id = ?`, orgId);
   const members = await all(
     c.env.DB,
-    `SELECT u.id, u.name, u.email, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
+    `SELECT u.id, u.name, u.email, u.username, u.must_change_password, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
     orgId,
   );
   const invitations = can(role, "org.manage")
@@ -126,6 +147,33 @@ orgs.post("/:orgId/invitations", async (c) => {
     audit(c, "member.invite", "invitation", id, { email: input.email, role: input.role }, { orgId, companyId: null }),
   ]);
   return c.json({ id, token, expires_at: expires }, 201);
+});
+
+/**
+ * Tally-style user creation: an owner/admin sets a username and a temporary password; the person must choose their
+ * own password at first sign-in. No email needed.
+ */
+orgs.post("/:orgId/users", async (c) => {
+  const orgId = c.req.param("orgId");
+  const role = await membership(c, orgId);
+  if (!can(role, "org.manage")) throw forbidden();
+  const input = await body(c, z.object({
+    name: reqText(120),
+    username: usernameSchema,
+    password: passwordSchema(c.env),
+    role: z.enum(["admin", "accountant", "auditor", "viewer"]),
+  }));
+  if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
+  if (await first(c.env.DB, `SELECT 1 FROM users WHERE username = ?`, input.username)) throw new AppError(409, "USERNAME_TAKEN", "That username is already taken");
+  const id = newId();
+  const h = await hashPassword(input.password, iterations(c.env));
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, must_change_password) VALUES (?,?,?,?,?,?,?,1)`,
+      id, `${input.username}.${id.slice(0, 8)}@users.ledgerfox.local`, input.username, input.name, h.hash, h.salt, h.iterations),
+    stmt(c.env.DB, `INSERT INTO memberships (org_id, user_id, role) VALUES (?,?,?)`, orgId, id, input.role),
+    audit(c, "member.create", "user", id, { username: input.username, role: input.role }, { orgId, companyId: null }),
+  ]);
+  return c.json({ id, username: input.username }, 201);
 });
 
 orgs.delete("/:orgId/invitations/:id", async (c) => {

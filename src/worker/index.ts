@@ -19,6 +19,7 @@ import assets from "./routes/assets";
 import reports from "./routes/reports";
 import files from "./routes/files";
 import exportdata from "./routes/exportdata";
+import payroll from "./routes/payroll";
 import { VERSION } from "./version";
 
 
@@ -94,6 +95,7 @@ company.route("/assets", assets);
 company.route("/reports", reports);
 company.route("/attachments", files);
 company.route("/export", exportdata);
+company.route("/payroll", payroll);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

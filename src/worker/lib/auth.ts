@@ -46,21 +46,36 @@ export async function loadSessionUser(c: Context<AppEnv>): Promise<SessionUser |
   const token = getCookie(c, cookieName(c));
   if (!token || token.length > 200) return null;
   const sid = await sha256Hex(token);
-  const row = await first<{ id: string; email: string; name: string; expires_at: string; is_disabled: number }>(
+  const row = await first<{ id: string; email: string; name: string; username: string | null; must_change_password: number; expires_at: string; is_disabled: number }>(
     c.env.DB,
-    `SELECT u.id, u.email, u.name, s.expires_at, u.is_disabled FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    `SELECT u.id, u.email, u.name, u.username, u.must_change_password, s.expires_at, u.is_disabled FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     sid,
   );
   if (!row || row.is_disabled || row.expires_at < new Date().toISOString()) return null;
-  return { id: row.id, email: row.email, name: row.name, session_id: sid };
+  return { id: row.id, email: row.email, name: row.name, username: row.username, must_change_password: Boolean(row.must_change_password), session_id: sid };
 }
 
+/** Signed-in user required; accounts still on a temporary/default password may only change it. */
 export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const user = await loadSessionUser(c);
+  if (!user) throw unauthorized();
+  if (user.must_change_password) throw new AppError(403, "PASSWORD_CHANGE_REQUIRED", "Set a new password before continuing");
+  c.set("user", user);
+  await next();
+};
+
+/** Like requireAuth but lets a user with a temporary password through (for changing it). */
+export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = await loadSessionUser(c);
   if (!user) throw unauthorized();
   c.set("user", user);
   await next();
 };
+
+export function isLocalRequest(c: Context<AppEnv>): boolean {
+  const ip = clientIp(c);
+  return ip === "127.0.0.1" || ip === "::1";
+}
 
 /**
  * Tenant scoping: resolves :companyId and the caller's role via organisation membership.

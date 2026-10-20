@@ -22,21 +22,26 @@ export type Permission =
   | "bank.reconcile"
   | "reports.read"
   | "audit.read"
-  | "data.export";        // full company data export / backup
+  | "data.export"         // full company data export / backup
+  | "payroll.manage"      // employees, timesheets, payroll runs
+  | "payroll.read";       // salary reports and payslips (salary data is sensitive)
 
 const MATRIX: Record<Role, Permission[]> = {
   owner: [
     "org.manage", "company.manage", "masters.write", "txn.write", "txn.post", "txn.reverse",
     "expense.approve", "period.manage", "bank.reconcile", "reports.read", "audit.read", "data.export",
+    "payroll.manage", "payroll.read",
   ],
   admin: [
     "org.manage", "company.manage", "masters.write", "txn.write", "txn.post", "txn.reverse",
     "expense.approve", "period.manage", "bank.reconcile", "reports.read", "audit.read", "data.export",
+    "payroll.manage", "payroll.read",
   ],
   accountant: [
     "masters.write", "txn.write", "txn.post", "txn.reverse", "expense.approve", "bank.reconcile", "reports.read",
+    "payroll.manage", "payroll.read",
   ],
-  auditor: ["reports.read", "audit.read"],
+  auditor: ["reports.read", "audit.read", "payroll.read"],
   viewer: ["reports.read"],
 };
 

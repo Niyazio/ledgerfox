@@ -11,6 +11,7 @@ import app from "../worker/index";
 import type { Env } from "../worker/env";
 import { SqliteD1, asD1 } from "./sqlite-d1";
 import { migrate } from "./migrate";
+import { ensureDefaultAdmin } from "../worker/routes/auth";
 
 export interface ServerOptions {
   dataFile: string;
@@ -56,10 +57,12 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     APP_ENV: "desktop",
     // 100k is the most the cloud runtime accepts, so a file moved to the cloud later keeps working logins.
     PBKDF2_ITERATIONS: "100000",
-    // Only the first person can sign up; everyone else joins by invitation from inside the app.
-    ALLOW_REGISTRATION: "first",
+    // Sign-in starts as admin / admin (changed at first sign-in); more users are added from Settings → Users.
+    ALLOW_REGISTRATION: "false",
+    PASSWORD_MIN_LENGTH: "6",
     ...opts.env,
   };
+  await ensureDefaultAdmin(env);
   const publicHosts = new Set<string>();
   const webRoot = normalize(opts.webDir + sep);
 
