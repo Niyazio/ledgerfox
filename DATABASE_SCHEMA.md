@@ -1,6 +1,6 @@
 # Database schema
 
-Engine: Cloudflare D1 (SQLite). Migrations: `migrations/0001_core.sql`, `migrations/0002_business.sql`, `migrations/0003_idempotency.sql`
+Engine: Cloudflare D1 (SQLite). Migrations: `0001_core.sql`, `0002_business.sql`, `0003_idempotency.sql`, `0004_business_types_payroll.sql`
 (applied with `wrangler d1 migrations apply ledgerfox`). Both have been applied successfully with wrangler to a local D1
 and are applied by the test harness to every test database.
 
@@ -30,6 +30,9 @@ and are applied by the test harness to every test database.
 | Assets | `fixed_assets` (SLM/WDV), `depreciation_entries` (unique asset+month) |
 | Planning | `budgets`, `budget_lines` |
 | Audit | `audit_logs` (append-only) |
+| Payroll | `employees`, `timesheets` (minutes), `payroll_runs` (draft → posted → paid, unique per month), `payslips` (CHECK net = gross − deductions; frozen after posting) |
+| Verification | `verifications` (random token → document / payment / payslip) |
+| Demo purge | `company_purge` (only `is_demo` companies may be listed; delete guards step aside for them) |
 | Reliability | `idempotency_keys` (company, user, key → stored first response; `status` NULL while in flight; purged after 7 days) |
 
 ## Invariants enforced by triggers / constraints

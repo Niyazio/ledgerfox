@@ -20,6 +20,11 @@ Cloudflare Workers **Free** plan with a D1 (SQLite) database, with no paid servi
   internet are queued and synced automatically (never twice) when you reconnect.
 - **Desktop edition (Windows, macOS, Linux)** — free installers; data in one file in a folder you choose, daily
   automatic backups, optional phone access over Wi-Fi or a temporary free internet link. See [DESKTOP.md](DESKTOP.md).
+- **Payroll** — employees, monthly or hourly pay, timesheets, PF/ESI/PT/TDS (India), salary journal and payment, salary register, printable payslips.
+- **Business types** — restaurant, supermarket, software, school/college, clinic, manufacturing, hotel and more add matching accounts and starter items.
+- **Print & share** — modern/classic A4, A5 and 80/58 mm thermal layouts with amount in words, UPI "scan to pay" QR and a QR code anyone can scan to verify the document.
+- **Demo company** — one click loads a complete sample company; delete it when done.
+- **Android app** — opens LedgerFox Cloud or the office computer (scan its QR code).
 - **No paid AI** — rule-based category suggestions, duplicate-bill warnings, anomaly flags, bank-match
   suggestions, a cash projection and plain-language P&L summaries. Nothing posts without a person.
 

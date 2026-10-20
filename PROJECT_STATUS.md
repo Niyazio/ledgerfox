@@ -35,6 +35,14 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Desktop edition (Windows/macOS/Linux) | ✅ Done (Linux build verified here) | Data file in a chosen folder, daily backups, Wi-Fi phone access with QR, temporary free internet link. Windows/macOS installers are built by GitHub Actions (cannot be built in this Linux environment); unsigned. |
 | Move desktop data to the cloud | ❌ Not yet | Same schema; needs an import tool |
 | Permanent per-client internet address | ❌ Not yet | Options: relay on Cloudflare Workers (free tier, counts against 100k requests/day) or named tunnels on each client's Cloudflare account |
+| Username login, Tally-style user creation, desktop admin/admin with forced change | ✅ Done | |
+| Business types (12) with tailored accounts, units, starter items | ✅ Done | |
+| Demo company (load / delete) | ✅ Done | Loaded through the normal API |
+| Payroll: employees, timesheets, monthly runs, PF/ESI/PT/TDS, posting, salary payment, salary register, payslips | ✅ Done | Statutory defaults for India; PT and TDS are per-employee fixed amounts (no slab/tax computation) |
+| Print preview: A4 modern/classic, A5, thermal 80/58 mm; amount in words; UPI pay QR; QR verification page | ✅ Done | Browser printing (no direct ESC/POS driver) |
+| AdSense on public pages + ads.txt + privacy policy | ✅ Done | Ads appear only after Google approves the site; EEA/UK visitors need Google's consent message enabled in AdSense |
+| Android app (APK) | ✅ Built by CI | Not on Google Play; temporary signing key until secrets are added |
+| Multi-branch access control, 7 roles, daybook, product barcodes (phase 2 brief) | ⏳ Next | On a separate branch, for review before merging |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 
 ## Incomplete, partial or not implemented (honest list)

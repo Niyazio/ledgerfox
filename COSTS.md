@@ -32,6 +32,11 @@ Actions (free for public repositories; macOS minutes count 10× on private repos
 Tunnel (no account or card; temporary, no uptime guarantee). Optional costs only if you choose them: Windows
 code-signing certificate, Apple Developer Program (US$99/year) for signed/notarised macOS builds.
 
+## Ads and mobile
+
+AdSense is free to join and pays you; Google reviews the site before ads show. Android APKs are built free on GitHub
+Actions and installed directly. Google Play publishing (optional) needs a one-time US$25 developer registration.
+
 ## Possible charges — only if you choose them
 
 | Action | Charge |

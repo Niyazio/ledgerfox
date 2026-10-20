@@ -62,6 +62,26 @@
 - The window shows only LedgerFox (`127.0.0.1`); other links open in the system browser. Renderer is sandboxed,
   context-isolated, with no Node integration.
 
+## Features added in v0.2
+
+- **Default desktop sign-in (admin / admin):** seeded only in the desktop edition, flagged `must_change_password`;
+  every API except changing the password returns `PASSWORD_CHANGE_REQUIRED` until it is changed; it is refused from
+  any address other than the computer itself; "admin" cannot be reused as the new password. The cloud edition has no
+  default account. Staff accounts created by an owner also start with a temporary password that must be changed.
+- **Usernames:** case-insensitive and unique; login accepts username or email with the same rate limits.
+- **QR verification:** 128-bit random tokens per document/payment/payslip, created only by members of that company;
+  the public lookup is rate-limited and returns number, date, amount, status, issuer and party name only. Payslip
+  tokens reveal the employee's name and net pay to whoever holds the printed payslip.
+- **Payroll data** is readable only with `payroll.read` (owner, admin, accountant, auditor); posted payroll and its
+  payslips are frozen by database triggers.
+- **Demo companies:** deletable only when flagged `is_demo`; a trigger on `company_purge` refuses real companies, so
+  the posted-record guards cannot be bypassed for real books.
+- **AdSense:** loaded only on the public home, download and privacy pages of the cloud website, with a relaxed CSP on
+  those three paths only. Links into the app do full page loads, so ad code is never present on sign-in, app,
+  verification or desktop pages. The strict CSP still applies everywhere else.
+- **Android app:** a launcher that only opens http(s) addresses after confirming `/api/health` is LedgerFox;
+  cleartext is enabled for office-network addresses (same caveat as Wi-Fi access).
+
 ## Reporting
 
 Report vulnerabilities privately to the repository owner. Do not open public issues for security problems.

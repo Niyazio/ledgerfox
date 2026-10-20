@@ -28,8 +28,11 @@ to publish a GitHub Release).
   and keeps the newest 14. **File → Back up now…** saves a copy anywhere (USB drive, Google Drive folder, etc.).
 - Backups are consistent snapshots (SQLite `VACUUM INTO`), safe to take while the app is open. To restore, open the
   backup file with **File → Open data file…**.
-- The first person to open a new data file becomes its owner. Other people join only by invitation
-  (Settings → Users), so a stranger on your network cannot sign up.
+- **First sign-in: username `admin`, password `admin`.** LedgerFox immediately asks for a new password (and lets you
+  pick your own username). The default password works only on the computer itself — never from phones or the internet
+  link — so nobody on the network can use it first.
+- Add staff in **Settings → Users → Add a user** with a username and a temporary password; they choose their own
+  password at first sign-in. Nobody can register themselves.
 - The file is a standard SQLite database. It is **not encrypted** by LedgerFox; protect the computer with a login
   password and disk encryption (BitLocker / FileVault).
 - Use one computer per data file. Do **not** open the same file from several computers over a shared network drive —
@@ -53,6 +56,22 @@ Cloudflare's official GitHub releases. You get an `https://<random>.trycloudflar
 - A permanent address per client (e.g. `rao-traders.ledgerfox.niyazio.com`) is **not implemented**. It is possible
   for free with a small relay on the existing Cloudflare Workers account, or with named Cloudflare Tunnels on each
   client's own Cloudflare account; see PROJECT_STATUS.md.
+
+## Android app
+
+`LedgerFox-android.apk` (from the download page) opens LedgerFox Cloud or your office computer. On the computer turn on
+**Access → Phones on the same Wi-Fi**, then in the app tap **Scan QR code** (or type the address). Android asks to
+allow installing apps from your browser because the app is not on Google Play (publishing there needs a one-time
+US$25 Google developer account). Builds are signed with your key when the repository secrets
+`ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` exist; otherwise with a temporary key, which means an
+update must be installed after uninstalling the old app. To create a key once:
+
+```bash
+keytool -genkeypair -keystore ledgerfox.jks -alias ledgerfox -keyalg RSA -keysize 3072 -validity 10000
+base64 -w0 ledgerfox.jks   # paste into the ANDROID_KEYSTORE_BASE64 secret; keep the .jks file and password safe
+```
+
+iPhone/iPad: open the cloud site in Safari → Share → Add to Home Screen (no App Store build).
 
 ## Always-on server without the window
 

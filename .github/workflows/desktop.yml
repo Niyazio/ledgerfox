@@ -45,9 +45,55 @@ jobs:
             release/*.dmg
             release/*.AppImage
           if-no-files-found: error
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm install --no-audit --no-fund
+      - name: Create the Android project
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ inputs.version || github.ref_name }}
+        run: npx cap add android && node scripts/prepare-android.mjs && npx cap sync android
+      - name: Build release APK
+        run: cd android && ./gradlew --no-daemon assembleRelease
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > release.jks
+            PASS="$KEYSTORE_PASSWORD"
+          else
+            # No signing key configured: a temporary key is generated, so installing a newer build needs the old one uninstalled.
+            PASS=$(openssl rand -hex 16)
+            keytool -genkeypair -keystore release.jks -storepass "$PASS" -keypass "$PASS" -alias ledgerfox -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=LedgerFox"
+            echo "::warning::APK signed with a temporary key. Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets for stable updates."
+          fi
+          "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks release.jks --ks-pass "pass:$PASS" --ks-key-alias ledgerfox --out ../LedgerFox-android.apk aligned.apk
+          "$BT/apksigner" verify ../LedgerFox-android.apk
+          rm -f release.jks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ledgerfox-android
+          path: LedgerFox-android.apk
+          if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.version, 'v')
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -58,4 +104,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version || github.ref_name }}
-        run: gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes "Desktop installers for Windows, macOS and Linux. See DESKTOP.md for first-run steps on unsigned builds."
+        run: gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes "Installers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds."

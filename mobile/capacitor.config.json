@@ -1,0 +1,12 @@
+{
+  "appId": "com.niyazio.ledgerfox",
+  "appName": "LedgerFox",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["ledgerfox.niyazio.com", "*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

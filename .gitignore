@@ -10,3 +10,5 @@ desktop-build
 server-build
 release
 *.ledgerfox
+mobile/node_modules
+mobile/android

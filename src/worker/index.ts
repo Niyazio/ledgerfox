@@ -63,6 +63,7 @@ app.get("/api/downloads", (c) => {
       mac_arm64: `${latest}LedgerFox-mac-arm64.dmg`,
       mac_x64: `${latest}LedgerFox-mac-x64.dmg`,
       linux: `${latest}LedgerFox-linux-x86_64.AppImage`,
+      android: `${latest}LedgerFox-android.apk`,
     } : null,
   });
 });
@@ -74,6 +75,8 @@ app.get("/api/health", async (c) => {
   } catch {
     db = "error";
   }
+  // Public and non-sensitive; readable cross-origin so the Android launcher can confirm an address is a LedgerFox server.
+  c.header("Access-Control-Allow-Origin", "*");
   return c.json({ status: db === "ok" ? "ok" : "degraded", db, version: VERSION, brand: c.env.BRAND_NAME ?? "LedgerFox", time: new Date().toISOString() }, db === "ok" ? 200 : 503);
 });
 
