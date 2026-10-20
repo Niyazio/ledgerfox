@@ -1,8 +1,13 @@
 # Builds the desktop installers on GitHub's free Windows, macOS and Linux runners.
-# Run it from the Actions tab ("Run workflow"), or push a tag like v0.2.0 to also publish a GitHub Release.
+# Run it from the Actions tab ("Run workflow"): with a version (e.g. v0.2.0) it also publishes a GitHub Release, which
+# the website's /download page links to. Pushing a tag like v0.2.0 does the same.
 name: Desktop installers
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to publish, e.g. v0.2.0 (leave empty for a test build)"
+        required: false
   push:
     tags: ["v*"]
 permissions:
@@ -41,7 +46,7 @@ jobs:
             release/*.AppImage
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.version, 'v')
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -52,4 +57,5 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "LedgerFox $GITHUB_REF_NAME" --notes "Desktop installers for Windows, macOS and Linux. See DESKTOP.md for first-run steps on unsigned builds."
+          VERSION: ${{ inputs.version || github.ref_name }}
+        run: gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes "Desktop installers for Windows, macOS and Linux. See DESKTOP.md for first-run steps on unsigned builds."
