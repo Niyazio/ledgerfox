@@ -172,7 +172,7 @@ export function PaymentView() {
     <>
       <PageHeader title={`${p.direction === "in" ? "Receipt" : "Payment"} ${p.number}`} subtitle={p.contact_name} back={{ to: `/app/${id}/payments/${p.direction}`, label: p.direction === "in" ? "Receipts" : "Payments" }}
         actions={<>
-          <Button variant="secondary" onClick={() => window.print()}>Print</Button>
+          <LinkButton variant="secondary" to={`/print/${id}/payment/${p.id}`}>Print receipt</LinkButton>
           {p.status === "posted" && p.amount - allocated > 0 && can("txn.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
           {p.status === "posted" && can("txn.reverse") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}
         </>} />

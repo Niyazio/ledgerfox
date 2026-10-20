@@ -8,6 +8,8 @@ import { Wordmark } from "../components/Layout";
 import { INDIA_STATES } from "@shared/tax";
 import { CURRENCY_OPTIONS } from "../components/pickers";
 import { BUSINESS_TYPES } from "@shared/industries";
+import { createDemoCompany } from "../lib/demo";
+import { errorMessage } from "../lib/api";
 
 const COUNTRIES: [string, string, string, number][] = [
   ["IN", "India", "INR", 4], ["AE", "United Arab Emirates", "AED", 1], ["SA", "Saudi Arabia", "SAR", 1], ["US", "United States", "USD", 1],
@@ -78,6 +80,30 @@ export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any) =>
   );
 }
 
+/** One click: a sample company of the chosen type with invoices, bills, receipts, expenses and a posted payroll. */
+export function DemoLoader({ orgId }: { orgId: string | null }) {
+  const { refresh } = useSession();
+  const nav = useNavigate();
+  const [type, setType] = useState("retail");
+  const [step, setStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Card title="Explore with a demo company">
+      <p className="text-sm muted">Creates a sample company with customers, invoices, bills, receipts, expenses and payroll so you can try every screen. Delete it any time from Settings.</p>
+      {error && <Alert className="mt-3">{error}</Alert>}
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <Field label="Type of business">{(id) => <Select id={id} value={type} onChange={(e) => setType(e.target.value)}>{BUSINESS_TYPES.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}</Select>}</Field>
+        <Button variant="secondary" loading={Boolean(step)} onClick={async () => {
+          setError(null);
+          try { const id = await createDemoCompany(orgId, type, setStep); await refresh(); nav(`/app/${id}/dashboard`); }
+          catch (e) { setError(errorMessage(e)); } finally { setStep(null); }
+        }}>Load demo company</Button>
+        {step && <span className="text-sm muted">{step}…</span>}
+      </div>
+    </Card>
+  );
+}
+
 /** /app — pick a company, or create the first organisation + company. */
 export function AppHome() {
   const { me, loading, refresh } = useSession();
@@ -85,8 +111,8 @@ export function AppHome() {
   const { busy, error, run } = useAction();
   if (loading) return <Spinner />;
   if (!me?.user) return <Navigate to="/login?next=/app" replace />;
-  if (me.companies.length === 1) return <Navigate to={`/app/${me.companies[0].id}/dashboard`} replace />;
-  if (me.companies.length > 1) {
+  if (me.companies.length === 1 && !me.companies[0].is_demo) return <Navigate to={`/app/${me.companies[0].id}/dashboard`} replace />;
+  if (me.companies.length > 1 || me.companies[0]?.is_demo) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
         <div className="mb-6 text-lg"><Wordmark brand={me.brand} /></div>
@@ -94,11 +120,12 @@ export function AppHome() {
         <div className="grid gap-3 sm:grid-cols-2">
           {me.companies.map((c) => (
             <Link key={c.id} to={`/app/${c.id}/dashboard`} className="card p-4 hover:border-brand-500">
-              <p className="font-medium">{c.name}</p><p className="text-xs muted">{c.country} · {c.base_currency}</p>
+              <p className="font-medium">{c.name}{c.is_demo ? <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">demo</span> : null}</p><p className="text-xs muted">{c.country} · {c.base_currency}</p>
             </Link>
           ))}
         </div>
         <Link to="/app/new-company" className="mt-4 inline-block text-sm text-brand-700 hover:underline dark:text-brand-300">+ Add another company</Link>
+        <div className="mt-6"><DemoLoader orgId={me.organisations[0]?.org_id ?? null} /></div>
       </div>
     );
   }
@@ -108,6 +135,7 @@ export function AppHome() {
       <h1 className="text-2xl font-semibold">Set up your first company</h1>
       <p className="mb-6 mt-1 text-sm muted">We'll create a chart of accounts, tax codes, numbering and the current financial year. Everything can be adjusted later.</p>
       {error && <Alert className="mb-4">{error}</Alert>}
+      <div className="mb-6"><DemoLoader orgId={null} /></div>
       <Card><CompanyForm withOrg busy={busy} onSubmit={async (v) => {
         const r = await run(() => api.post<{ company_id: string }>("/api/orgs", v));
         if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
@@ -131,6 +159,7 @@ export function NewCompany() {
       {me.organisations.length > 1 && (
         <Field label="Organisation" className="mb-4">{(id) => <Select id={id} value={org} onChange={(e) => setOrg(e.target.value)}>{me.organisations.map((o) => <option key={o.org_id} value={o.org_id}>{o.org_name}</option>)}</Select>}</Field>
       )}
+      <div className="mb-6"><DemoLoader orgId={org} /></div>
       <Card><CompanyForm busy={busy} onSubmit={async (v) => {
         const r = await run(() => api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v));
         if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }

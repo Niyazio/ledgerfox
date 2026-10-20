@@ -190,3 +190,13 @@ describe("permissions", () => {
     expect(canAssignRole("accountant", "viewer")).toBe(false);
   });
 });
+
+import { amountInWords } from "../src/shared/words";
+describe("amount in words", () => {
+  it("uses lakh/crore for rupees and million for other currencies", () => {
+    expect(amountInWords(118000, "INR")).toBe("Rupees One Thousand One Hundred Eighty Only");
+    expect(amountInWords(1234567850, "INR")).toBe("Rupees One Crore Twenty Three Lakh Forty Five Thousand Six Hundred Seventy Eight and Fifty Paise Only");
+    expect(amountInWords(123456700, "USD")).toBe("Dollars One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven Only");
+    expect(amountInWords(0, "INR")).toBe("Rupees Zero Only");
+  });
+});

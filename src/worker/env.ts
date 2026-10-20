@@ -44,6 +44,10 @@ export interface CompanyRow {
   number_locale: string;
   round_off_invoices: number;
   invoice_terms: string | null;
+  business_type: string;
+  is_demo: number;
+  upi_id: string | null;
+  print_template: string;
   created_at: string;
 }
 

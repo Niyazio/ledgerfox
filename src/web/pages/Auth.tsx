@@ -25,15 +25,16 @@ function AuthCard({ title, subtitle, children }: { title: string; subtitle?: Rea
 export function Login() {
   const { me, refresh } = useSession();
   const [params] = useSearchParams();
-  const nav = useNavigate();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const { busy, error, run } = useAction();
+  // A temporary password is replaced right here, without a redirect in between.
+  if (me?.user?.must_change_password) return <ChangePasswordFirst />;
   if (me?.user) return <Navigate to={params.get("next") ?? "/app"} replace />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const ok = await run(() => api.post("/api/auth/login", { login, password }));
-    if (ok) { await refresh(); nav(params.get("next") ?? "/app"); }
+    if (ok) await refresh(); // the <Navigate> above then redirects once
   };
   return (
     <AuthCard title="Sign in" subtitle={me?.registration === "closed" ? "Ask the owner for an invitation if you don't have an account." : <>New here? <Link className="text-brand-700 hover:underline dark:text-brand-300" to="/register">Create an account</Link></>}>
@@ -183,10 +184,10 @@ export function ChangePasswordFirst() {
     <AuthCard title="Choose your own password" subtitle="For your security, replace the temporary password before using LedgerFox.">
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
-        <Field label="Username" hint="You sign in with this.">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />}</Field>
-        <Field label="Current (temporary) password" required>{(id) => <Input id={id} type="password" autoComplete="current-password" required value={form.current_password} onChange={(e) => setForm({ ...form, current_password: e.target.value })} />}</Field>
-        <Field label="New password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.new_password} onChange={(e) => setForm({ ...form, new_password: e.target.value })} />}</Field>
-        <Field label="Confirm new password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />}</Field>
+        <Field label="Username" hint="You sign in with this.">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />}</Field>
+        <Field label="Current (temporary) password" required>{(id) => <Input id={id} type="password" autoComplete="current-password" required value={form.current_password} onChange={(e) => setForm((f) => ({ ...f, current_password: e.target.value }))} />}</Field>
+        <Field label="New password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.new_password} onChange={(e) => setForm((f) => ({ ...f, new_password: e.target.value }))} />}</Field>
+        <Field label="Confirm new password" required>{(id) => <Input id={id} type="password" autoComplete="new-password" required value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} />}</Field>
         <Button type="submit" loading={busy} className="w-full">Save and continue</Button>
         <p className="text-center text-sm"><button type="button" className="muted hover:underline" onClick={() => void logout()}>Sign out</button></p>
       </form>

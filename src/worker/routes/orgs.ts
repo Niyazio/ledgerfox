@@ -93,6 +93,8 @@ orgs.delete("/:orgId/companies/:companyId", async (c) => {
   if (!co.is_demo) throw new AppError(409, "NOT_DEMO", "Only demo companies can be deleted. Real companies keep their accounting records.");
   await batch(c.env.DB, [
     stmt(c.env.DB, `INSERT INTO company_purge (company_id) VALUES (?)`, companyId),
+    // Allocations are not linked to the company by a cascading key, so remove them before their documents/payments.
+    stmt(c.env.DB, `DELETE FROM allocations WHERE company_id = ?`, companyId),
     stmt(c.env.DB, `DELETE FROM companies WHERE id = ? AND is_demo = 1`, companyId),
     stmt(c.env.DB, `DELETE FROM company_purge WHERE company_id = ?`, companyId),
     audit(c, "company.delete_demo", "company", companyId, { name: co.name }, { orgId, companyId: null }),

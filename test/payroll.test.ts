@@ -136,6 +136,13 @@ describe("business types, demo companies and usernames", () => {
     const cust = (await W.owner.post(c("/contacts"), { kind: "customer", name: "Walk-in", state_code: "29" })).json.id;
     const inv = await W.owner.post(c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: "2026-05-05", lines: [{ description: "x", quantity: "1", unit_price: "100" }] });
     expect((await W.owner.post(c(`/documents/${inv.json.id}/issue`))).status).toBe(200);
+    const accs = (await W.owner.get(c("/accounts"))).json.accounts;
+    const bank = accs.find((a: any) => a.system_key === "BANK").id;
+    expect((await W.owner.post(c("/payments"), { direction: "in", contact_id: cust, payment_date: "2026-05-06", account_id: bank, amount: "50", allocations: [{ document_id: inv.json.id, amount: "50" }] })).status).toBe(201);
+    expect((await W.owner.post(c("/payroll/employees"), { code: "E1", name: "Demo staff", monthly_basic: "10000" })).status).toBe(201);
+    const run = await W.owner.post(c("/payroll/runs"), { period: "2026-05", pay_date: "2026-05-31" });
+    expect((await W.owner.post(c(`/payroll/runs/${run.json.id}/post`))).status).toBe(200);
+    expect((await W.owner.post(c("/verify"), { entity_type: "document", entity_id: inv.json.id })).status).toBe(200);
     const del = await W.owner.del(`/api/orgs/${W.orgId}/companies/${demoId}`);
     expect(del.status).toBe(200);
     expect((await W.owner.get(c("/settings"))).status).toBe(404);
@@ -156,4 +163,27 @@ describe("business types, demo companies and usernames", () => {
   });
 });
 
-void contact;
+
+
+describe("QR verification", () => {
+  it("returns only summary details for a valid token and nothing for unknown ones", async () => {
+    const W = await world();
+    const cust = await contact(W, "customer", { state_code: "29" });
+    const inv = await W.owner.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: "2026-05-05", lines: [{ description: "x", quantity: "2", unit_price: "500" }] });
+    const draftTok = (await W.owner.post(W.c("/verify"), { entity_type: "document", entity_id: inv.json.id })).json.token;
+    const anon = new Client(W.env);
+    expect((await anon.get(`/api/verify/${draftTok}`)).json.valid).toBe(false);
+    await W.owner.post(W.c(`/documents/${inv.json.id}/issue`));
+    const again = await W.owner.post(W.c("/verify"), { entity_type: "document", entity_id: inv.json.id });
+    expect(again.json.token).toBe(draftTok);
+    const r = await anon.get(`/api/verify/${draftTok}`);
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ valid: true, kind: "Invoice", amount: 100_000, currency: "INR" });
+    expect(JSON.stringify(r.json)).not.toMatch(/company_id|contact_id|email/);
+    expect((await anon.get("/api/verify/abcdefghijklmnopqrstuv")).status).toBe(404);
+    expect((await anon.get("/api/verify/x")).status).toBe(404);
+    // Another company's member cannot mint tokens for this invoice.
+    const other = await world();
+    expect((await other.owner.post(other.c("/verify"), { entity_type: "document", entity_id: inv.json.id })).status).toBe(404);
+  });
+});

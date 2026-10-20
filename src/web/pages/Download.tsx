@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { Apple, Monitor, Laptop, Download as DownloadIcon, ShieldAlert } from "lucide-react";
 import { useApi } from "../lib/hooks";
+import { AdSense } from "../components/Ads";
 import { Wordmark } from "../components/Layout";
 
 interface Downloads {
@@ -36,9 +37,10 @@ export default function Download() {
   const f = data?.files ?? undefined;
   return (
     <div className="min-h-full">
+      <AdSense />
       <header className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5 sm:px-6">
         <Link to="/" className="text-lg"><Wordmark iconClass="h-8 w-8" /></Link>
-        <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Use it online instead</Link>
+        <a href="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Use it online instead</a>
       </header>
       <main className="mx-auto max-w-4xl px-4 pb-16 pt-6 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Download LedgerFox for your computer</h1>

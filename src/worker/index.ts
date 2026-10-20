@@ -20,6 +20,7 @@ import reports from "./routes/reports";
 import files from "./routes/files";
 import exportdata from "./routes/exportdata";
 import payroll from "./routes/payroll";
+import { verifyPublic, verifyToken } from "./routes/verify";
 import { VERSION } from "./version";
 
 
@@ -79,6 +80,7 @@ app.get("/api/health", async (c) => {
 app.route("/api/auth", authRoutes);
 app.route("/api/orgs", orgRoutes);
 app.route("/api/invitations", invitations);
+app.route("/api/verify", verifyPublic);
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
@@ -96,6 +98,7 @@ company.route("/reports", reports);
 company.route("/attachments", files);
 company.route("/export", exportdata);
 company.route("/payroll", payroll);
+company.route("/verify", verifyToken);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

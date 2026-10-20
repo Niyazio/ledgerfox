@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router";
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
-  Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, CloudOff, RefreshCw, AlertTriangle, Trash2,
+  Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
@@ -72,6 +72,9 @@ const NAV: NavGroup[] = [
     { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" /> },
     { to: "inventory", label: "Inventory", icon: <Package className="h-4 w-4" /> },
     { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" /> },
+  ] },
+  { label: "People", items: [
+    { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
   ] },
   { label: "Insight", items: [
     { to: "reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },

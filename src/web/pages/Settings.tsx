@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Copy, Download, Lock, Unlock } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useSession } from "../lib/session";
@@ -17,7 +17,7 @@ function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const c = settings!.company;
-  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale });
+  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern" });
   const { busy, error, run } = useAction();
   const disabled = !can("company.manage");
   return (
@@ -36,12 +36,30 @@ function CompanyTab() {
         <Field label="Date format">{(id) => <Select id={id} disabled={disabled} value={v.date_format} onChange={(e) => setV({ ...v, date_format: e.target.value })}>{["DD-MM-YYYY", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"].map((f) => <option key={f}>{f}</option>)}</Select>}</Field>
         <Field label="Number format">{(id) => <Select id={id} disabled={disabled} value={v.number_locale} onChange={(e) => setV({ ...v, number_locale: e.target.value })}><option value="en-IN">1,23,456.78 (India)</option><option value="en-US">123,456.78 (US)</option><option value="en-GB">123,456.78 (UK)</option><option value="de-DE">123.456,78 (Germany)</option><option value="fr-FR">123 456,78 (France)</option><option value="ar-AE">UAE</option></Select>}</Field>
         <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" disabled={disabled} checked={v.round_off_invoices} onChange={(e) => setV({ ...v, round_off_invoices: e.target.checked })} /> Round invoice totals to the nearest whole currency unit (difference posts to Rounding Off)</label>
+        <Field label="UPI ID for payment QR" hint="Printed invoices show a 'Scan to pay' UPI QR for the balance due.">{(id) => <Input id={id} disabled={disabled} placeholder="business@okbank" value={v.upi_id} onChange={(e) => setV({ ...v, upi_id: e.target.value })} />}</Field>
+        <Field label="Default print layout">{(id) => <Select id={id} disabled={disabled} value={v.print_template} onChange={(e) => setV({ ...v, print_template: e.target.value })}><option value="modern">A4 — modern</option><option value="classic">A4 — classic</option><option value="compact">Compact</option></Select>}</Field>
         <Field label="Default invoice terms" className="sm:col-span-2">{(id) => <Textarea id={id} disabled={disabled} value={v.invoice_terms} onChange={(e) => setV({ ...v, invoice_terms: e.target.value })} />}</Field>
         <div className="text-sm muted sm:col-span-2">Country {c.country} · base currency {c.base_currency} · financial year starts month {c.fiscal_year_start_month}. These cannot be changed after creation.</div>
         <div className="rounded-lg bg-[var(--surface-2)] p-3 text-sm sm:col-span-2"><p className="font-medium">Tax capability for {settings!.jurisdiction.name}: <Badge color={settings!.jurisdiction.status === "implemented" ? "green" : "amber"}>{settings!.jurisdiction.status}</Badge></p><p className="mt-1 muted">{settings!.jurisdiction.notes}</p></div>
       </div>
+      {c.is_demo ? <DeleteDemo /> : null}
       {!disabled && <Button className="mt-5" loading={busy} onClick={async () => { if (await run(() => api.patch(path("/settings"), { ...v, legal_name: v.legal_name || null, tax_id: v.tax_id || null, state_code: v.state_code || null, email: v.email || null }))) { toast("success", "Saved"); reload(); } }}>Save</Button>}
     </Card>
+  );
+}
+
+function DeleteDemo() {
+  const { settings, can } = useCompany();
+  const { refresh } = useSession();
+  const nav = useNavigate();
+  if (!can("company.manage")) return null;
+  return (
+    <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+      <p className="font-medium">This is a demo company.</p>
+      <p className="mt-1 muted">Delete it when you are done exploring. All of its sample data is removed; your other companies are not affected.</p>
+      <div className="mt-3"><ConfirmButton label="Delete demo company" title="Delete this demo company?" body="All demo invoices, bills, payroll and reports in this company are deleted permanently." confirmLabel="Delete"
+        onConfirm={async () => { await api.del(`/api/orgs/${settings!.company.org_id}/companies/${settings!.company.id}`); await refresh(); nav("/app"); }} /></div>
+    </div>
   );
 }
 

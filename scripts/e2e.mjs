@@ -18,23 +18,35 @@ const shot = async (n) => { if (process.env.SHOTS) await page.screenshot({ path:
 try {
   await page.goto(`${base}/`);
   await page.locator("h1").first().waitFor();
-  if (new URL(page.url()).pathname === "/register") {
-    step("desktop edition: first launch opens owner registration");
+  await page.waitForTimeout(500);
+  if (new URL(page.url()).pathname === "/login") {
+    // Desktop edition: first sign-in with admin / admin, then a new password is required.
+    await page.getByText("First time?").waitFor();
+    await page.getByLabel("Username or email").fill("admin");
+    await page.getByLabel("Password", { exact: true }).fill("admin");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByText("Choose your own password").waitFor();
+    await page.getByLabel("Username", { exact: true }).fill("asha");
+    await page.getByLabel(/Current/).fill("admin");
+    await page.getByLabel(/^New password/).fill("correct horse battery");
+    await page.getByLabel(/Confirm new/).fill("correct horse battery");
+    await page.getByRole("button", { name: "Save and continue" }).click();
+    step("desktop edition: admin / admin sign-in, forced password change");
   } else {
     await shot("01-landing");
     step("landing page");
     await page.getByRole("link", { name: "Create account" }).first().click();
+    const email = `e2e${Date.now()}@example.com`;
+    await page.getByLabel("Your name").fill("Asha Rao");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password", { exact: true }).fill("correct horse battery");
+    await page.getByLabel("Confirm password").fill("correct horse battery");
+    await page.getByRole("button", { name: "Create account" }).click();
+    await page.getByText("Save your recovery codes").waitFor();
+    step(`registered, ${await page.locator(".font-mono span").count()} recovery codes shown`);
+    await page.getByLabel("I have stored these codes somewhere safe").check();
+    await page.getByRole("button", { name: "Continue" }).click();
   }
-  const email = `e2e${Date.now()}@example.com`;
-  await page.getByLabel("Your name").fill("Asha Rao");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill("correct horse battery");
-  await page.getByLabel("Confirm password").fill("correct horse battery");
-  await page.getByRole("button", { name: "Create account" }).click();
-  await page.getByText("Save your recovery codes").waitFor();
-  step(`registered, ${await page.locator(".font-mono span").count()} recovery codes shown`);
-  await page.getByLabel("I have stored these codes somewhere safe").check();
-  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByText("Set up your first company").waitFor();
   await page.getByLabel("Organisation name").fill("Rao Group");
   await page.getByLabel(/^Company name/).fill("Rao Traders");

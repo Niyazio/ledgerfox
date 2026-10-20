@@ -36,6 +36,10 @@ const ReportRouter = lazy(() => named(import("./pages/Reports"), "ReportRouter")
 const Statement = lazy(() => named(import("./pages/Reports"), "Statement"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Download = lazy(() => import("./pages/Download"));
+const Verify = lazy(() => import("./pages/Verify"));
+const PrintPage = lazy(() => import("./pages/Print"));
+const Payroll = lazy(() => import("./pages/Payroll"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
@@ -62,6 +66,9 @@ function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/download" element={<Download />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/verify/:token" element={<Verify />} />
+      <Route path="/print/:companyId/:kind/:id" element={<RequireAuth><PrintPage /></RequireAuth>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot" element={<Forgot />} />
@@ -99,6 +106,7 @@ function App() {
         <Route path="reports/:reportKey" element={<ReportRouter />} />
         <Route path="insights" element={<Insights />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="payroll" element={<Payroll />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="*" element={<NotFound />} />

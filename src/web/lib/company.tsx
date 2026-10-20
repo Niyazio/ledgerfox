@@ -8,6 +8,7 @@ export interface CompanySettings {
     fiscal_year_start_month: number; tax_id: string | null; state_code: string | null; address: string | null; city: string | null;
     postal_code: string | null; phone: string | null; email: string | null; date_format: string; number_locale: string;
     round_off_invoices: number; invoice_terms: string | null;
+    business_type?: string; is_demo?: number; upi_id?: string | null; print_template?: string;
   };
   role: string;
   permissions: Permission[];
