@@ -1,0 +1,67 @@
+# Project status
+
+_Last updated: 20 Oct 2026_
+
+**Overall: suitable for a demo and a supervised pilot (one small business, accountant reviewing reports, monthly
+backups). Not yet production-ready** for unsupervised use or as a statutory system of record. See "Before production".
+
+## Functional modules
+
+| Module | Status | Notes |
+|---|---|---|
+| Registration, login, sessions, password change | ✅ Done | PBKDF2, hashed session tokens, rate limiting |
+| Password recovery | ✅ Done | One-time recovery codes; admin reset links. No email. |
+| Organisations, multiple companies, company switching | ✅ Done | |
+| Roles (owner/admin/accountant/auditor/read-only), invitations | ✅ Done | Invitation links are copied manually (no email) |
+| Branches, departments, projects, cost centres | ✅ Done | Tag lines; P&L filters by dimension |
+| Chart of accounts (groups, types, detail types, system accounts) | ✅ Done | India / generic seeds |
+| Journals: draft, post, reverse, adjustment, opening balances | ✅ Done | DB-enforced balance & immutability |
+| Fiscal years, monthly periods, period locking | ✅ Done | |
+| Audit log | ✅ Done | Append-only |
+| Customers / suppliers | ✅ Done | GSTIN validation, terms, currency |
+| Quotations, sales orders, purchase orders | ✅ Done | Non-posting; convert to invoice/bill |
+| Invoices, credit notes, bills, debit notes | ✅ Done | GST, discounts, round-off, multi-currency, void via reversal |
+| Receipts & payments, partial payments, advances, FX gain/loss | ✅ Done | Apply advances/notes later |
+| Printable invoices / statements / reports, "PDF" | ✅ Done | Browser print-to-PDF (no PDF library or API) |
+| Expenses: approval, receipts (≤ 1 MB), recurring templates | ✅ Done | Recurring generation is user-triggered |
+| Banking: CSV import, duplicate detection, matching, reconciliation, history | ✅ Done | |
+| Inventory: items, SKUs, units, warehouses, transfers, adjustments, reorder alerts | ✅ Done | Moving weighted average; reconciles to GL |
+| Fixed assets: register, SLM/WDV, depreciation journals, disposal | ✅ Done | |
+| Reports: TB, P&L, BS, cash flow, GL, AR/AP ageing, statements, sales/purchases by party, expenses, inventory valuation, GST summary, budget vs actual | ✅ Done | CSV + print on all |
+| Dashboard | ✅ Done | All figures from the ledger |
+| Rule-based insights | ✅ Done | Category suggestions, duplicate bills, anomalies, bank match, cash projection, P&L explanation |
+| Data export | ✅ Done | Per-company JSON (owner/admin); DB-level backup script |
+| Light/dark theme, responsive layout | ✅ Done | |
+
+## Incomplete, partial or not implemented (honest list)
+
+- **GST compliance:** no GSTR-1/3B export, e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess.
+- **Optional local LLM adapter:** reserved in config (`LOCAL_LLM_URL`) but **not implemented**; no AI model is called.
+- **No email** (invitations, invoices, reminders, password resets are all copy-link/manual).
+- **No MFA**; no email verification.
+- Bank feeds (only CSV import); OFX/MT940 not supported.
+- Foreign-currency revaluation of open balances at period end (unrealised FX) — not implemented; realised FX is.
+- Budgets entered as an annual amount per account split evenly; no monthly budget editor or budget versions.
+- Inventory: no batch/serial numbers, no FIFO option, no landed cost; purchase returns priced at average cost.
+- Payment allocation requires the payment and invoice to share a currency.
+- Ageing is document-based; manual journals to AR/AP show as an "unreconciled difference" (flagged on the report).
+- No year-end closing entry (retained earnings are computed); no consolidation across companies.
+- No payroll, CRM, manufacturing or other ERP modules.
+- Not tested: real production Cloudflare deployment (not deployed yet), load against free-tier limits, accessibility audit.
+
+## Before production
+
+1. Deploy (DEPLOYMENT.md), run the e2e script against the live URL, and run `npm run backup` + restore drill.
+2. Decide on the password work factor vs. plan (SECURITY.md §1); consider Workers Paid if you need higher.
+3. Have an accountant review the chart of accounts, GST codes and report formats for your business.
+4. Add MFA and an email provider if you need them (free tiers exist, e.g. Resend/Brevo — not integrated).
+5. Set `ALLOW_REGISTRATION` to `"false"` after onboarding your team.
+
+## Next highest-priority tasks
+
+1. Production deploy + custom domain + first real backup (needs your GitHub repo and Cloudflare dashboard steps).
+2. GSTR-1 / GSTR-3B summary exports in the portal's JSON/Excel layouts (data is already captured per line).
+3. TOTP multi-factor authentication.
+4. Unrealised FX revaluation and cross-currency payment allocation.
+5. Scheduled jobs via a free Cron Trigger (recurring expenses, depreciation reminders).
+6. Accessibility audit (axe) and keyboard-shortcut layer for power users.
