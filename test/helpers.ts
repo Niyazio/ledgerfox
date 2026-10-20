@@ -36,7 +36,7 @@ export async function makeEnv(): Promise<{ env: Env; mf: Miniflare }> {
     const stmts = splitSql(readFileSync(join(dir, f), "utf8"));
     await db.batch(stmts.map((s) => db.prepare(s)));
   }
-  return { env: { DB: db, PBKDF2_ITERATIONS: "1000", BRAND_NAME: "Arthika", APP_ENV: "test" }, mf };
+  return { env: { DB: db, PBKDF2_ITERATIONS: "1000", BRAND_NAME: "LedgerFox", APP_ENV: "test" }, mf };
 }
 
 export class Client {
@@ -45,7 +45,7 @@ export class Client {
   constructor(private env: Env, public base = "http://localhost") {}
 
   async req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
-    const h: Record<string, string> = { "x-requested-with": "arthika", "cf-connecting-ip": this.ip, ...headers };
+    const h: Record<string, string> = { "x-requested-with": "ledgerfox", "cf-connecting-ip": this.ip, ...headers };
     if (this.cookie) h.cookie = this.cookie;
     let payload: BodyInit | undefined;
     if (body instanceof Uint8Array) payload = body as unknown as BodyInit;

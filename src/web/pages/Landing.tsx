@@ -1,6 +1,6 @@
 import { Link, Navigate } from "react-router";
 import { BookOpen, ShieldCheck, FileText, Landmark, Package, BarChart3, Globe2, Lock } from "lucide-react";
-import { Logo, useTheme } from "../components/Layout";
+import { Wordmark, useTheme } from "../components/Layout";
 import { useSession } from "../lib/session";
 import { Moon, Sun } from "lucide-react";
 
@@ -17,11 +17,11 @@ export default function Landing() {
   const { me } = useSession();
   const { dark, toggle } = useTheme();
   if (me?.user) return <Navigate to="/app" replace />;
-  const brand = me?.brand ?? "Arthika";
+  const brand = me?.brand ?? "LedgerFox";
   return (
     <div className="min-h-full">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
-        <span className="flex items-center gap-2 text-lg font-semibold"><Logo className="h-8 w-8" />{brand}</span>
+        <span className="text-lg"><Wordmark brand={brand} iconClass="h-8 w-8" /></span>
         <nav className="flex items-center gap-2">
           <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Toggle theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
           <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Sign in</Link>

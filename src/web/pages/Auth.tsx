@@ -4,14 +4,14 @@ import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Field, Input } from "../components/ui";
-import { Logo } from "../components/Layout";
+import { Wordmark } from "../components/Layout";
 
 function AuthCard({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   const { me } = useSession();
   return (
     <div className="flex min-h-full items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        <Link to="/" className="mb-6 flex items-center justify-center gap-2 text-lg font-semibold"><Logo className="h-8 w-8" />{me?.brand ?? "Arthika"}</Link>
+        <Link to="/" className="mb-6 flex justify-center text-lg"><Wordmark brand={me?.brand} iconClass="h-8 w-8" /></Link>
         <div className="card p-6 shadow-sm">
           <h1 className="text-xl font-semibold">{title}</h1>
           {subtitle && <p className="mt-1 text-sm muted">{subtitle}</p>}
@@ -71,7 +71,7 @@ export function Register() {
         </div>
         <div className="mt-3 flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => navigator.clipboard?.writeText(codes.join("\n"))}>Copy</Button>
-          <Button variant="secondary" size="sm" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([codes.join("\n")], { type: "text/plain" })); a.download = "arthika-recovery-codes.txt"; a.click(); }}>Download</Button>
+          <Button variant="secondary" size="sm" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([codes.join("\n")], { type: "text/plain" })); a.download = "ledgerfox-recovery-codes.txt"; a.click(); }}>Download</Button>
         </div>
         <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I have stored these codes somewhere safe</label>
         <Button className="mt-4 w-full" disabled={!saved} onClick={async () => { await refresh(); nav(params.get("next") ?? "/app"); }}>Continue</Button>

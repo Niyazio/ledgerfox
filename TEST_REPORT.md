@@ -6,10 +6,10 @@ Run date: 20 Oct 2026 · Node 22.22 · all commands run in this repository.
 |---|---|
 | `npm run lint` (ESLint, typescript-eslint, react-hooks) | ✅ 0 problems |
 | `npm run typecheck` (`tsc --noEmit`, strict) | ✅ 0 errors |
-| `npm test` (Vitest + Miniflare D1) | ✅ **105 passed**, 0 failed, 0 skipped (6 files, ~20 s) |
-| `npm run build` (Vite) | ✅ initial JS 258 KB (80 KB gzip), pages lazy-loaded |
-| `npx wrangler d1 migrations apply arthika --local` | ✅ both migrations applied by wrangler |
-| `npm run test:e2e` against `wrangler dev` (real Workers runtime, Chromium) | ✅ passed, 0 browser console errors |
+| `npm test` (Vitest + Miniflare D1) | ✅ **111 passed**, 0 failed, 0 skipped (7 files, ~22 s) |
+| `npm run build` (Vite) | ✅ initial JS 266 KB (83 KB gzip), pages lazy-loaded; precache manifest emitted |
+| `npx wrangler d1 migrations apply ledgerfox --local` | ✅ all three migrations applied by wrangler |
+| `npm run test:e2e` against `wrangler dev` (real Workers runtime, Chromium) | ✅ passed, 0 browser console errors; includes an offline round trip (app reloads offline, a customer created offline is queued on the device, then synced exactly once on reconnect) |
 | Backup/restore drill (`wrangler d1 export --local` → `scripts/restore-test.sh`) | ✅ restored; 0 unbalanced entries; every company nets to 0 |
 | `npm audit --omit=dev` | ✅ 0 vulnerabilities |
 | `npm audit` (incl. dev tooling) | ⚠️ 3 high in `undici` via wrangler/miniflare (dev-only, not deployed) |
@@ -31,7 +31,7 @@ defence in depth).
 | Debit/credit balancing | unbalanced rejection (API and DB trigger), both-sides/negative lines, group accounts |
 | Journal posting & numbering | sequential numbers, gap-free under concurrency, drafts editable then posted |
 | Journal reversal | equal & opposite entry, once only, reversal of reversal blocked, net zero |
-| Duplicate posting prevention | idempotency key, source-document uniqueness, double issue/approve blocked |
+| Duplicate posting prevention | idempotency key, source-document uniqueness, double issue/approve blocked; `Idempotency-Key` replay (same response, nothing re-run), follow-up replay, key release on failure, cross-endpoint reuse rejected, in-flight 409 and stale retry, per-user scoping |
 | Transaction rollback | failed posting leaves no rows and does not consume a number |
 | Concurrent posting | 4 simultaneous posts of one draft → exactly 1 succeeds; 6 parallel posts → unique numbers |
 | Closed periods | locked period rejected, unlock works, no-period dates rejected, lock-through |
@@ -57,7 +57,3 @@ defence in depth).
   (not yet deployed).
 - The recurring-template test depends on today's date (it asserts at least two generated periods).
 
-## Full list (105)
-
-See `npx vitest run --reporter=verbose`. Files: `test/money-tax.test.ts` (28), `test/ledger.test.ts` (18),
-`test/documents.test.ts` (21), `test/reports.test.ts` (10), `test/security.test.ts` (20), `test/banking.test.ts` (8).

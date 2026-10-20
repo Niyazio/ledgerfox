@@ -10,7 +10,7 @@ export const SESSION_DAYS = 14;
 
 export function cookieName(c: Context<AppEnv>): string {
   // __Host- prefix requires Secure; plain name in local http development/tests.
-  return isSecure(c) ? "__Host-arthika_sid" : "arthika_sid";
+  return isSecure(c) ? "__Host-ledgerfox_sid" : "ledgerfox_sid";
 }
 
 function isSecure(c: Context<AppEnv>): boolean {

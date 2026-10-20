@@ -18,7 +18,7 @@ function IncomeExpenseChart({ months, fmt }: { months: { month: string; income: 
           <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
             <div className="flex h-[160px] w-full items-end justify-center gap-1">
               <div title={`Income ${fmt(m.income)}`} className="w-1/2 max-w-6 rounded-t bg-brand-600" style={{ height: `${Math.max(0, (m.income / max) * H)}px` }} />
-              <div title={`Expenses ${fmt(m.expense)}`} className="w-1/2 max-w-6 rounded-t bg-amber-400" style={{ height: `${Math.max(0, (m.expense / max) * H)}px` }} />
+              <div title={`Expenses ${fmt(m.expense)}`} className="w-1/2 max-w-6 rounded-t bg-slate-400 dark:bg-slate-500" style={{ height: `${Math.max(0, (m.expense / max) * H)}px` }} />
             </div>
             <span className="text-xs muted">{label(m.month)}</span>
           </div>
@@ -26,7 +26,7 @@ function IncomeExpenseChart({ months, fmt }: { months: { month: string; income: 
       </div>
       <figcaption className="mt-3 flex gap-4 text-xs muted">
         <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-brand-600" /> Income</span>
-        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-400" /> Expenses</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-slate-400 dark:bg-slate-500" /> Expenses</span>
       </figcaption>
     </figure>
   );

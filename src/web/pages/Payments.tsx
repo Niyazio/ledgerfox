@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, isCashOrBank } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
@@ -82,11 +83,12 @@ export function PaymentForm() {
     setAlloc(next);
   };
   const submit = async () => {
-    const r = await run(() => api.post(path("/payments"), {
+    const r = await run(() => postOrQueue<{ id: string }>(path("/payments"), {
       direction, contact_id: contactId, payment_date: v.payment_date, account_id: v.account_id, currency, fx_rate: currency !== base ? v.fx_rate || null : null,
       amount: v.amount, method: v.method, reference: v.reference || null, notes: v.notes || null, idempotency_key: idem,
       allocations: Object.entries(alloc).filter(([, a]) => a && a !== "0").map(([document_id, amount]) => ({ document_id, amount })),
-    }));
+    }, { label: `${direction === "in" ? "Receipt" : "Payment"} ${v.amount} ${currency} (${v.payment_date})` }));
+    if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); nav(`/app/${id}/payments/${direction}`); return; }
     if (r) { toast("success", "Recorded"); nav(`/app/${id}/payments/view/${r.id}`); }
   };
   return (

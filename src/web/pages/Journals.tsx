@@ -4,6 +4,7 @@ import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
 import { AccountSelect, DimensionSelect, CURRENCY_OPTIONS } from "../components/pickers";
 import { fmtDate, fmtDateTime, today, toInput } from "../lib/format";
@@ -123,8 +124,9 @@ export function JournalForm() {
         if (post) await api.post(path(`/journals/${journalId}/post`));
         return { id: journalId };
       }
-      return api.post<{ id: string }>(path("/journals"), { ...body, post, idempotency_key: post ? idemKey : null });
+      return postOrQueue<{ id: string }>(path("/journals"), { ...body, post, idempotency_key: post ? idemKey : null }, { label: `Journal${memo ? `: ${memo}` : ""} (${date})${post ? "" : " — draft"}` });
     });
+    if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); nav(`/app/${id}/journals`); return; }
     if (r) { toast("success", post ? "Journal posted" : "Draft saved"); nav(`/app/${id}/journals/${r.id}`); }
   };
   if (journalId && existing.loading) return <Spinner />;

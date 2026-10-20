@@ -6,10 +6,12 @@ import { existsSync } from "node:fs";
 const base = process.env.BASE_URL ?? "http://127.0.0.1:8787";
 const exe = process.env.CHROMIUM_PATH ?? ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find(existsSync);
 const browser = await chromium.launch({ executablePath: exe });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const page = await context.newPage();
 const errors = [];
+let offline = false; // failed requests while deliberately offline are expected, not errors
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
-page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.text()}`); });
+page.on("console", (m) => { if (m.type() === "error" && !offline) errors.push(`console: ${m.text()}`); });
 const step = (s) => console.log(`✓ ${s}`);
 const shot = async (n) => { if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${n}.png`, fullPage: true }); };
 
@@ -90,6 +92,34 @@ try {
   await page.goto(`${base}/app/${cid}/dashboard`);
   await page.getByText("Receivables").waitFor();
   await shot("06-dashboard");
+
+  // Offline: the app opens from this device, shows data viewed earlier, and queues new records until reconnect.
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker?.controller), null, { timeout: 20000 });
+  await page.goto(`${base}/app/${cid}/customers`);
+  await page.getByRole("link", { name: "Bengaluru Retail Pvt Ltd" }).waitFor();
+  offline = true;
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole("link", { name: "Bengaluru Retail Pvt Ltd" }).waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: /Offline/ }).waitFor();
+  step("offline: app shell and saved customer list load from the device");
+  await page.getByRole("button", { name: /New customer/ }).click();
+  await page.getByLabel(/^Name/).fill("Offline Kirana Store");
+  await page.getByLabel("State / place of supply").selectOption("29");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: /1 on device/ }).waitFor();
+  await shot("06b-offline-queued");
+  step("offline: new customer saved on the device (1 waiting)");
+  await context.setOffline(false);
+  offline = false;
+  await page.getByRole("button", { name: /on device/ }).waitFor({ state: "detached", timeout: 20000 });
+  await page.reload();
+  await page.getByRole("link", { name: "Offline Kirana Store" }).waitFor();
+  const dupes = await page.getByRole("link", { name: "Offline Kirana Store" }).count();
+  if (dupes !== 1) throw new Error(`expected exactly one synced customer, found ${dupes}`);
+  step("back online: queued customer synced exactly once");
+  await page.goto(`${base}/app/${cid}/dashboard`);
+  await page.getByText("Receivables").waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await page.getByRole("button", { name: "Open menu" }).waitFor();

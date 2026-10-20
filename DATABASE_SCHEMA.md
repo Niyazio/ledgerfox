@@ -1,11 +1,11 @@
 # Database schema
 
-Engine: Cloudflare D1 (SQLite). Migrations: `migrations/0001_core.sql`, `migrations/0002_business.sql`
-(applied with `wrangler d1 migrations apply arthika`). Both have been applied successfully with wrangler to a local D1
+Engine: Cloudflare D1 (SQLite). Migrations: `migrations/0001_core.sql`, `migrations/0002_business.sql`, `migrations/0003_idempotency.sql`
+(applied with `wrangler d1 migrations apply ledgerfox`). Both have been applied successfully with wrangler to a local D1
 and are applied by the test harness to every test database.
 
-**Migration status (remote):** ✅ both migrations applied on 20 Oct 2026 to the production D1 database `arthika`
-(`f246d8db-3320-40ad-a45c-5b0b9d893add`, APAC) and recorded in `d1_migrations`; 24 triggers verified present.
+**Migration status (remote):** ✅ both migrations applied on 20 Oct 2026 to the production D1 database `ledgerfox`
+(`dc22c743-9ead-46c8-9c34-8609a73ca023`, APAC) and recorded in `d1_migrations`; 24 triggers verified present.
 
 ## Conventions
 
@@ -30,6 +30,7 @@ and are applied by the test harness to every test database.
 | Assets | `fixed_assets` (SLM/WDV), `depreciation_entries` (unique asset+month) |
 | Planning | `budgets`, `budget_lines` |
 | Audit | `audit_logs` (append-only) |
+| Reliability | `idempotency_keys` (company, user, key → stored first response; `status` NULL while in flight; purged after 7 days) |
 
 ## Invariants enforced by triggers / constraints
 

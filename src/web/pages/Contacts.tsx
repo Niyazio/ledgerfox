@@ -4,6 +4,7 @@ import { Plus, Download } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
 import { CURRENCY_OPTIONS } from "../components/pickers";
 import { INDIA_STATES } from "@shared/tax";
@@ -26,7 +27,8 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
     setBusy(true); setError(null);
     try {
       const body = { ...v, payment_terms_days: Number(v.payment_terms_days), currency: v.currency || null, state_code: v.state_code || null, tax_id: v.tax_id || null, credit_limit: v.credit_limit || null };
-      const r = initial ? await api.put(path(`/contacts/${initial.id}`), body) : await api.post(path("/contacts"), body);
+      const r = initial ? await api.put(path(`/contacts/${initial.id}`), body) : await postOrQueue(path("/contacts"), body, { label: `${v.kind === "supplier" ? "Supplier" : "Customer"}: ${v.name}` });
+      if (isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); onClose(); return; }
       toast("success", initial ? "Saved" : `${v.kind === "supplier" ? "Supplier" : "Customer"} added`);
       onClose(initial?.id ?? r.id);
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }

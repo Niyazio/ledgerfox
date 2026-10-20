@@ -93,7 +93,7 @@ auth.get("/me", async (c) => {
     user: { id: user.id, email: user.email, name: user.name },
     organisations: orgs,
     companies,
-    brand: c.env.BRAND_NAME ?? "Arthika",
+    brand: c.env.BRAND_NAME ?? "LedgerFox",
   });
 });
 

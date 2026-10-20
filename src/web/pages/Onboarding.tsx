@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Card, Field, Input, Select, Spinner } from "../components/ui";
-import { Logo } from "../components/Layout";
+import { Wordmark } from "../components/Layout";
 import { INDIA_STATES } from "@shared/tax";
 import { CURRENCY_OPTIONS } from "../components/pickers";
 
@@ -75,7 +75,7 @@ export function AppHome() {
   if (me.companies.length > 1) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
-        <div className="mb-6 flex items-center gap-2 text-lg font-semibold"><Logo />{me.brand}</div>
+        <div className="mb-6 text-lg"><Wordmark brand={me.brand} /></div>
         <h1 className="mb-4 text-2xl font-semibold">Choose a company</h1>
         <div className="grid gap-3 sm:grid-cols-2">
           {me.companies.map((c) => (
@@ -90,7 +90,7 @@ export function AppHome() {
   }
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-6 flex items-center gap-2 text-lg font-semibold"><Logo />{me.brand}</div>
+      <div className="mb-6 text-lg"><Wordmark brand={me.brand} /></div>
       <h1 className="text-2xl font-semibold">Set up your first company</h1>
       <p className="mb-6 mt-1 text-sm muted">We'll create a chart of accounts, tax codes, numbering and the current financial year. Everything can be adjusted later.</p>
       {error && <Alert className="mb-4">{error}</Alert>}

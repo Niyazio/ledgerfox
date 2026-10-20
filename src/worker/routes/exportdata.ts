@@ -45,7 +45,7 @@ exportdata.get("/", async (c) => {
   requirePerm(c, "data.export");
   const company = c.get("company");
   const out: Record<string, unknown> = {
-    format: "arthika-company-export",
+    format: "ledgerfox-company-export",
     version: 1,
     exported_at: new Date().toISOString(),
     note: "Money values are integer minor units; quantities are milli-units; exchange rates are scaled by 1e9. Attachment file contents are not included.",
@@ -56,7 +56,7 @@ exportdata.get("/", async (c) => {
   return new Response(JSON.stringify(out), {
     headers: {
       "Content-Type": "application/json",
-      "Content-Disposition": `attachment; filename="arthika-${company.name.replace(/[^\w-]+/g, "_")}-${out.exported_at as string}.json"`,
+      "Content-Disposition": `attachment; filename="ledgerfox-${company.name.replace(/[^\w-]+/g, "_")}-${out.exported_at as string}.json"`,
       "Cache-Control": "no-store",
     },
   });

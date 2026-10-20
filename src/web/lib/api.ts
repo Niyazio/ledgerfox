@@ -4,8 +4,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = { "x-requested-with": "arthika" };
+async function request<T>(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<T> {
+  const headers: Record<string, string> = { "x-requested-with": "ledgerfox", ...extraHeaders };
   let payload: BodyInit | undefined;
   if (body instanceof Blob || body instanceof ArrayBuffer) {
     payload = body as BodyInit;
@@ -16,7 +16,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
   }
   let res: Response;
   try {
-    res = await fetch(path, { method, headers, body: payload, credentials: "same-origin", ...init });
+    res = await fetch(path, { method, headers, body: payload, credentials: "same-origin" });
   } catch {
     throw new ApiError(0, "NETWORK", "Network error — check your connection and try again.");
   }
@@ -25,7 +25,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
   try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
   if (!res.ok) {
     const e = json?.error;
-    if (res.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event("arthika:unauthorized"));
+    if (res.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event("ledgerfox:unauthorized"));
     throw new ApiError(res.status, e?.code ?? "HTTP_ERROR", e?.message ?? `Request failed (${res.status})`, e?.details);
   }
   return json as T;
@@ -33,7 +33,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
 
 export const api = {
   get: <T = any>(p: string) => request<T>("GET", p),
-  post: <T = any>(p: string, b?: unknown) => request<T>("POST", p, b ?? {}),
+  post: <T = any>(p: string, b?: unknown, headers?: Record<string, string>) => request<T>("POST", p, b ?? {}, headers),
   put: <T = any>(p: string, b?: unknown) => request<T>("PUT", p, b ?? {}),
   patch: <T = any>(p: string, b?: unknown) => request<T>("PATCH", p, b ?? {}),
   del: <T = any>(p: string) => request<T>("DELETE", p),

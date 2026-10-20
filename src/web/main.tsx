@@ -8,6 +8,7 @@ import { CompanyLayout } from "./components/Layout";
 import Landing from "./pages/Landing";
 import { Login, Register, Forgot, ResetWithToken, AcceptInvite } from "./pages/Auth";
 import { AppHome, NewCompany } from "./pages/Onboarding";
+import { startOfflineSync } from "./lib/offline";
 function named<M, K extends keyof M>(p: Promise<M>, k: K) {
   return p.then((m) => ({ default: m[k] as M[K] & ComponentType<any> }));
 }
@@ -102,6 +103,8 @@ function App() {
     </Suspense>
   );
 }
+
+startOfflineSync();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

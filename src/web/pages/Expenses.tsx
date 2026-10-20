@@ -4,6 +4,7 @@ import { Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction, useDebounced } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Tabs, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
@@ -58,7 +59,9 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
   const save = async (andApprove: boolean) => {
     const body = { ...v, contact_id: v.contact_id || null, tax_code_id: v.tax_code_id || null, department_id: v.department_id || null, project_id: v.project_id || null, cost_centre_id: v.cost_centre_id || null };
     const r = await run(async () => {
-      const res = initial ? await api.put(path(`/expenses/${initial.id}`), body).then(() => ({ id: initial.id })) : await api.post(path("/expenses"), body);
+      if (recurring.on && !navigator.onLine) throw new Error("Recurring templates need an internet connection. Untick “repeat” to save this expense offline.");
+      const res = initial ? await api.put(path(`/expenses/${initial.id}`), body).then(() => ({ id: initial.id })) : await postOrQueue(path("/expenses"), body, { label: `Expense: ${v.description} (${v.expense_date})`, then: andApprove ? "/approve" : undefined });
+      if (isQueued(res)) return res;
       if (recurring.on) {
         const { expense_date: _d, ...tpl } = body;
         await api.post(path("/expenses/templates"), { name: recurring.name || v.description, frequency: recurring.frequency, next_run_date: recurring.next_run_date || v.expense_date, expense: tpl });
@@ -66,6 +69,7 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
       if (andApprove) await api.post(path(`/expenses/${res.id}/approve`));
       return res;
     });
+    if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); onClose(true); return; }
     if (r) { toast("success", andApprove ? "Expense posted" : "Saved"); onClose(true); }
   };
   return (

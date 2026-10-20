@@ -7,7 +7,7 @@
 | Passwords | PBKDF2-SHA256 with per-user 16-byte salt; minimum 10 characters; constant-time comparison; equal-time response for unknown emails. Work factor stored per user and **upgraded on next login** when `PBKDF2_ITERATIONS` increases. |
 | Sessions | 256-bit random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie with the `__Host-` prefix on HTTPS; only its SHA-256 is stored. 14-day expiry. Password change/recovery revokes other sessions. "Sign out everywhere". |
 | Account recovery | No email dependency: 8 one-time recovery codes (stored hashed) and owner/admin-issued one-time reset links (24 h, hashed; refused for users who belong to other organisations). |
-| CSRF | Mutations require `X-Requested-With: arthika` (forces a CORS preflight that is never approved cross-origin) and a same-host `Origin` when present; plus `SameSite=Lax`. |
+| CSRF | Mutations require `X-Requested-With: ledgerfox` (forces a CORS preflight that is never approved cross-origin) and a same-host `Origin` when present; plus `SameSite=Lax`. |
 | Tenant isolation | Every company route resolves the company **through the caller's membership**; non-members get 404. All queries filter by `company_id`; composite foreign keys reject cross-company references in the database. Tested by direct cross-tenant inserts. D1 has no row-level security, so isolation relies on server code + constraints. |
 | Authorisation | Five roles with a permission matrix (`src/shared/permissions.ts`), checked server-side on every mutation; admins cannot create admins; segregation of duties for expense approval. |
 | Ledger integrity | Database triggers enforce balance, period locks, immutability of posted data, append-only audit log, allocation limits, non-negative stock. |
@@ -35,6 +35,15 @@
 6. Audit log immutability is enforced by triggers; someone with Cloudflare account access could still alter the database.
 7. Dev-tooling advisories: `undici` inside `wrangler`/`miniflare` (local development only, never deployed).
 8. No independent penetration test has been performed.
+9. **Data on the device (offline mode).** To work offline, the browser keeps copies of the JSON pages a user has
+   opened (Cache Storage) and any records created offline that are not yet sent (IndexedDB). These copies are not
+   encrypted by the app; anyone with access to the unlocked device and browser profile could read them. Signing out
+   deletes them (and warns first if unsent records exist); a different user signing in on the same browser clears the
+   cached pages. Exports, attachments and other downloads are never cached. Use device encryption and a screen lock,
+   and do not use shared computers without signing out.
+10. **Replay protection.** Offline records carry an `Idempotency-Key`; the server stores the first successful response
+    per (company, user, key) for 7 days and replays it for repeats, so a record is never created twice. Keys are scoped
+    to the signed-in user, so one member cannot read another member's stored response.
 
 ## Reporting
 

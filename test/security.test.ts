@@ -147,7 +147,7 @@ describe("role-based access", () => {
     expect((await A.owner.post(`/api/orgs/${A.orgId}/invitations`, { email: "z@example.com", role: "admin" })).status).toBe(201);
     const ex = await A.owner.get(A.c("/export"));
     expect(ex.status).toBe(200);
-    expect(ex.json.format).toBe("arthika-company-export");
+    expect(ex.json.format).toBe("ledgerfox-company-export");
     expect(Array.isArray(ex.json.journal_entries)).toBe(true);
     expect(ex.json.users).toBeUndefined(); // no password hashes or other tenants' data
   });

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { clearOfflineData, setOfflineUser } from "./offline";
 
 export interface Me {
   user: { id: string; email: string; name: string } | null;
@@ -26,7 +27,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setMe(r);
       return r;
     } catch {
-      setMe({ user: null, organisations: [], companies: [], brand: "Arthika" });
+      setMe({ user: null, organisations: [], companies: [], brand: "LedgerFox" });
       return null;
     } finally {
       setLoading(false);
@@ -34,14 +35,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
   const logout = useCallback(async () => {
     await api.post("/api/auth/logout").catch(() => undefined);
-    setMe({ user: null, organisations: [], companies: [], brand: me?.brand ?? "Arthika" });
+    await clearOfflineData();
+    setOfflineUser(null);
+    setMe({ user: null, organisations: [], companies: [], brand: me?.brand ?? "LedgerFox" });
   }, [me?.brand]);
   useEffect(() => {
     refresh();
     const onUnauth = () => setMe((m) => (m ? { ...m, user: null } : m));
-    window.addEventListener("arthika:unauthorized", onUnauth);
-    return () => window.removeEventListener("arthika:unauthorized", onUnauth);
+    window.addEventListener("ledgerfox:unauthorized", onUnauth);
+    return () => window.removeEventListener("ledgerfox:unauthorized", onUnauth);
   }, [refresh]);
+  useEffect(() => { if (me) setOfflineUser(me.user?.id ?? null); }, [me]);
   const value = useMemo(() => ({ me, loading, refresh, logout }), [me, loading, refresh, logout]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -1,4 +1,4 @@
--- Arthika core schema (Cloudflare D1 / SQLite)
+-- LedgerFox core schema (Cloudflare D1 / SQLite)
 -- Conventions:
 --   * Money is stored as INTEGER minor units (e.g. paise). Never REAL.
 --   * Quantities are INTEGER milli-units (qty * 1000).

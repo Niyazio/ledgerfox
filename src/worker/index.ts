@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "./env";
 import { AppError, fromDbError } from "./lib/errors";
 import { requireAuth, requireCompany } from "./lib/auth";
+import { idempotency } from "./lib/idempotency";
 import { newId } from "./lib/crypto";
 import authRoutes from "./routes/auth";
 import orgRoutes, { invitations } from "./routes/orgs";
@@ -41,7 +42,7 @@ app.use("*", async (c, next) => {
 app.use("/api/*", async (c, next) => {
   const m = c.req.method;
   if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") {
-    if (c.req.header("x-requested-with") !== "arthika") throw new AppError(403, "CSRF", "Missing request header");
+    if (c.req.header("x-requested-with") !== "ledgerfox") throw new AppError(403, "CSRF", "Missing request header");
     const origin = c.req.header("origin");
     if (origin && new URL(origin).host !== new URL(c.req.url).host) throw new AppError(403, "CSRF", "Cross-origin request rejected");
   }
@@ -55,7 +56,7 @@ app.get("/api/health", async (c) => {
   } catch {
     db = "error";
   }
-  return c.json({ status: db === "ok" ? "ok" : "degraded", db, version: VERSION, brand: c.env.BRAND_NAME ?? "Arthika", time: new Date().toISOString() }, db === "ok" ? 200 : 503);
+  return c.json({ status: db === "ok" ? "ok" : "degraded", db, version: VERSION, brand: c.env.BRAND_NAME ?? "LedgerFox", time: new Date().toISOString() }, db === "ok" ? 200 : 503);
 });
 
 app.route("/api/auth", authRoutes);
@@ -63,7 +64,7 @@ app.route("/api/orgs", orgRoutes);
 app.route("/api/invitations", invitations);
 
 const company = new Hono<AppEnv>();
-company.use("*", requireAuth, requireCompany);
+company.use("*", requireAuth, requireCompany, idempotency);
 company.route("/settings", settings);
 company.route("/accounts", accounts);
 company.route("/journals", journals);

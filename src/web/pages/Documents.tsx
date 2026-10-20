@@ -4,6 +4,7 @@ import { Plus, Trash2, Printer, Download } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { DOC_LABELS, SALES_DOCS, fmtDate, qty as fmtQty, today, toInput, pct } from "../lib/format";
@@ -139,11 +140,13 @@ export function DocumentForm() {
       lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null })),
     };
     const r = await run(async () => {
-      const saved = docId ? await api.put(path(`/documents/${docId}`), body) : await api.post(path("/documents"), body);
+      const saved = docId ? await api.put(path(`/documents/${docId}`), body) : await postOrQueue(path("/documents"), body, { label: `${label.one}${h.reference ? ` ${h.reference}` : ""} (${h.issue_date})`, then: issue ? "/issue" : undefined });
+      if (isQueued(saved)) return saved;
       for (const w of saved.warnings ?? []) toast("info", w);
       if (issue) await api.post(path(`/documents/${saved.id}/issue`));
       return saved;
     });
+    if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); nav(`/app/${id}/${area(docType)}/${docType}`, { replace: true }); return; }
     if (r) { toast("success", issue ? `${label.one} issued` : "Draft saved"); nav(`/app/${id}/${area(docType)}/${docType}/${r.id}`, { replace: true }); }
   };
   const india = settings?.tax_scheme === "in_gst";

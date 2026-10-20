@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   // Worker name must match the Worker connected in Cloudflare Workers Builds.
-  "name": "arthika",
+  "name": "ledgerfox",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
@@ -13,14 +13,17 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "arthika",
-      "database_id": "f246d8db-3320-40ad-a45c-5b0b9d893add",
+      "database_name": "ledgerfox",
+      "database_id": "dc22c743-9ead-46c8-9c34-8609a73ca023",
       "migrations_dir": "migrations"
     }
   ],
+  // Custom Domain: Cloudflare creates the DNS record and TLS certificate on deploy.
+  // Requires niyazio.com to be an active zone in the same Cloudflare account.
+  "routes": [{ "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
   "vars": {
-    "BRAND_NAME": "Arthika",
+    "BRAND_NAME": "LedgerFox",
     "APP_ENV": "production",
     "PBKDF2_ITERATIONS": "50000",
     "ALLOW_REGISTRATION": "true"

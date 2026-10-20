@@ -2,19 +2,35 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router";
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
-  Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb,
+  Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, CloudOff, RefreshCw, AlertTriangle, Trash2,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
-import { cx, Spinner } from "./ui";
+import { Button, cx, Modal, Spinner } from "./ui";
+import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
+/** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
 export function Logo({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#0f766e" />
-      <path d="M9 23 L16 8 L23 23" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11.5 18 H20.5" stroke="#5eead4" strokeWidth="2.6" strokeLinecap="round" />
+      <rect width="32" height="32" rx="8" fill="#1d4ed8" />
+      <path d="M6.5 5.5 13 11.5h6l6.5-6v10.5L16 27 6.5 16z" fill="#fff" />
+      <path d="M8.6 8.9 11.4 11.5 8.6 13.9z M23.4 8.9 20.6 11.5 23.4 13.9z" fill="#93c5fd" />
+      <path d="M6.5 16 16 27l-4.6-9.6z M25.5 16 16 27l4.6-9.6z" fill="#dbeafe" />
+      <circle cx="12.4" cy="15.6" r="1.25" fill="#172554" />
+      <circle cx="19.6" cy="15.6" r="1.25" fill="#172554" />
+      <path d="M14.6 20.6h2.8L16 22.4z" fill="#172554" />
     </svg>
+  );
+}
+
+/** Mark plus brand name. */
+export function Wordmark({ brand = "LedgerFox", iconClass }: { brand?: string; iconClass?: string }) {
+  return (
+    <span className="flex items-center gap-2 font-semibold tracking-tight">
+      <Logo className={iconClass} />
+      {brand}
+    </span>
   );
 }
 
@@ -24,7 +40,7 @@ export function useTheme() {
     const next = !dark;
     setDark(next);
     document.documentElement.classList.toggle("dark", next);
-    try { localStorage.setItem("arthika-theme", next ? "dark" : "light"); } catch { /* storage unavailable */ }
+    try { localStorage.setItem("ledgerfox-theme", next ? "dark" : "light"); } catch { /* storage unavailable */ }
   };
   return { dark, toggle };
 }
@@ -115,26 +131,78 @@ function CompanySwitcher() {
   );
 }
 
+/** Connection state plus records saved on this device that have not reached the server yet. */
+function OfflineStatus({ companyId }: { companyId: string }) {
+  const online = useOnline();
+  const entries = useOutbox(companyId);
+  const [open, setOpen] = useState(false);
+  const failed = entries.filter((e) => e.status === "failed").length;
+  if (online && !entries.length) return null;
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className={cx("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium",
+        failed ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : online ? "bg-brand-50 text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200")}>
+        {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : online ? <RefreshCw className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
+        {!online ? "Offline" : failed ? `${failed} failed to sync` : "Syncing"}{entries.length ? ` · ${entries.length} on device` : ""}
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Saved on this device"
+        footer={<><Button variant="secondary" onClick={() => setOpen(false)}>Close</Button><Button disabled={!online || !entries.length} onClick={() => void flushOutbox()}><RefreshCw className="h-4 w-4" />Sync now</Button></>}>
+        <p className="mb-3 text-sm muted">
+          {online ? "You're online." : "You're offline. Pages you opened before are shown from this device and may be out of date."} New
+          records made without a connection wait here and are sent automatically when you reconnect. Each is sent at most once.
+        </p>
+        {entries.length ? (
+          <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+            {entries.map((e) => (
+              <li key={e.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{e.label}</p>
+                  <p className="text-xs muted">{new Date(e.createdAt).toLocaleString()} · {e.status === "failed" ? "Rejected by the server" : "Waiting to send"}</p>
+                  {e.error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{e.error}</p>}
+                </div>
+                {e.status === "failed" && (
+                  <span className="flex shrink-0 gap-1">
+                    <button className="rounded p-1 hover:bg-[var(--surface-2)]" aria-label="Retry" title="Retry" onClick={() => void retryOutboxEntry(e)}><RefreshCw className="h-4 w-4" /></button>
+                    <button className="rounded p-1 hover:bg-[var(--surface-2)]" aria-label="Discard" title="Discard" onClick={() => { if (confirm(`Discard "${e.label}"? It will not be sent.`)) void removeOutboxEntry(e.id); }}><Trash2 className="h-4 w-4" /></button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-sm muted">Nothing waiting.</p>}
+      </Modal>
+    </>
+  );
+}
+
 function Shell() {
   const { me, logout } = useSession();
-  const { settings } = useCompany();
+  const { settings, id: companyId } = useCompany();
   const { dark, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
+  const pending = useOutbox();
+  const online = useOnline();
+  useEffect(() => { if (online) warmOfflineCache(companyId); }, [companyId, online]);
+  const signOut = async () => {
+    if (pending.length && !confirm(`${pending.length} record(s) made offline have not been sent yet. Signing out deletes them from this device. Sign out anyway?`)) return;
+    await logout();
+    nav("/login");
+  };
   useEffect(() => {
-    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "Arthika"}`;
+    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "LedgerFox"}`;
   }, [settings, me?.brand]);
   return (
     <div className="flex h-full">
       <aside className="hidden w-60 shrink-0 border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:flex-col">
-        <Link to="/app" className="flex items-center gap-2 px-5 py-4 text-base font-semibold"><Logo />{me?.brand ?? "Arthika"}</Link>
+        <Link to="/app" className="px-5 py-4 text-base"><Wordmark brand={me?.brand} /></Link>
         <Sidebar />
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[var(--surface)] shadow-xl">
-            <div className="flex items-center justify-between px-4 py-3"><span className="flex items-center gap-2 font-semibold"><Logo />{me?.brand ?? "Arthika"}</span>
+            <div className="flex items-center justify-between px-4 py-3"><Wordmark brand={me?.brand} />
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded p-1 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div>
             <Sidebar onNavigate={() => setMobileOpen(false)} />
           </aside>
@@ -147,11 +215,12 @@ function Shell() {
             <CompanySwitcher />
           </div>
           <div className="flex items-center gap-1">
+            <OfflineStatus companyId={companyId} />
             <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <span className="hidden max-w-[12rem] truncate px-2 text-sm muted sm:inline">{me?.user?.name}</span>
-            <button onClick={async () => { await logout(); nav("/login"); }} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Sign out" title="Sign out"><LogOut className="h-4 w-4" /></button>
+            <button onClick={signOut} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Sign out" title="Sign out"><LogOut className="h-4 w-4" /></button>
           </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">

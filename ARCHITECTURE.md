@@ -83,6 +83,22 @@ amount within 30 days), 3σ anomaly flags per account, a due-date-based cash pro
 from the computed figures. An optional adapter for a self-hosted model (`LOCAL_LLM_URL`) is reserved in `Env` but
 **not implemented** — no LLM is called anywhere.
 
+## Offline mode
+
+- `public/sw.js` (service worker) precaches the app shell from `precache-manifest.json` (emitted by a Vite plugin at
+  build time) so the app opens without a connection. Updates install in the background and take over once all tabs close.
+- API GETs are network-first; successful JSON responses are stored in Cache Storage and served when the network
+  fails (marked `x-ledgerfox-offline`). Non-JSON responses (exports, attachments) are never stored. Writes are not handled
+  by the service worker.
+- `src/web/lib/offline.ts` keeps an **outbox** in IndexedDB. Creating a contact, document, payment, expense or journal
+  while offline (or when the request fails at the network level) stores it with a random `Idempotency-Key`; it is sent
+  on reconnect, every minute, and at start-up, in creation order. Follow-up steps (post/issue/approve) run after the
+  create with their own key. Server rejections (e.g. a locked period) are shown in the header panel for retry or discard.
+- `src/worker/lib/idempotency.ts` stores the first 2xx response per (company, user, key) in `idempotency_keys` and
+  replays it for repeats, so an uncertain network failure followed by a retry never posts twice.
+- Not offline: edits of existing records, reports not opened before, bank imports, attachments, settings. Records
+  created offline do not appear in lists until synced (they are listed in the "on device" panel).
+
 ## Limits designed around
 
 - 10 ms CPU per request (Free): aggregation is done in SQL; password hashing defaults to 50k PBKDF2 iterations.

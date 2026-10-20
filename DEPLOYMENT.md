@@ -6,8 +6,8 @@ served on your own subdomain through a Workers **Custom Domain** (DNS record + T
 ## What was found in the environment (20 Oct 2026)
 
 - Cloudflare account (connected): 18 existing Workers, including one named `accounting` (its source could not be read
-  through the connector). **It was not modified.** This app deploys as a new Worker named `arthika`.
-- No D1 databases or Hyperdrive configs existed; the `arthika` D1 database was created (free, empty) and migrated.
+  through the connector). **It was not modified.** This app deploys as a new Worker named `ledgerfox`.
+- No D1 databases or Hyperdrive configs existed; the `ledgerfox` D1 database was created (free, empty) and migrated.
 - Vercel account (connected): no projects, no domains.
 - GitHub: this session cannot create repositories; it can only push to repositories you attach.
 - The build container cannot reach the Cloudflare API, so the first deploy must be done through the dashboard
@@ -18,16 +18,17 @@ served on your own subdomain through a Workers **Custom Domain** (DNS record + T
 - The parent domain of your subdomain must be an **active zone in this Cloudflare account** (nameservers pointed at
   Cloudflare; free plan is fine). If the domain's DNS is hosted elsewhere, a Worker Custom Domain is not possible on the
   free plan (CNAME/partial setup requires Business). In that case, either move the domain's nameservers to Cloudflare,
-  or use the free `arthika.<your-account>.workers.dev` URL.
+  or use the free `ledgerfox.<your-account>.workers.dev` URL.
 - The chosen hostname must not already have a CNAME record (Cloudflare refuses Custom Domains on existing CNAMEs).
 
 ## One-time setup
 
 ### 1. D1 database — ✅ done
 
-Created on 20 Oct 2026: `arthika`, ID `f246d8db-3320-40ad-a45c-5b0b9d893add`, primary location APAC.
-The ID is already in `wrangler.jsonc`, and both migrations are applied and recorded in `d1_migrations`.
-(To recreate elsewhere: `npx wrangler d1 create arthika`, put the new ID in `wrangler.jsonc`.)
+Created on 20 Oct 2026: `ledgerfox`, ID `dc22c743-9ead-46c8-9c34-8609a73ca023`, primary location APAC.
+(An earlier empty database named `arthika`, created during development under the old working name, was verified empty and deleted.)
+The ID is already in `wrangler.jsonc`. Migrations 0001 and 0002 are applied and recorded in `d1_migrations`; 0003 (`idempotency_keys`) is applied automatically by `npm run deploy` (`wrangler d1 migrations apply --remote`) on the first deploy.
+(To recreate elsewhere: `npx wrangler d1 create ledgerfox`, put the new ID in `wrangler.jsonc`.)
 
 ### 2. Connect the repository (Workers Builds)
 
@@ -35,7 +36,7 @@ Dashboard → **Workers & Pages → Create application → Import a repository (
 
 | Setting | Value |
 |---|---|
-| Project / Worker name | `arthika` (must equal `name` in `wrangler.jsonc`) |
+| Project / Worker name | `ledgerfox` (must equal `name` in `wrangler.jsonc`) |
 | Production branch | `main` |
 | Build command | `npm run build` |
 | Deploy command | `npm run deploy` (applies pending D1 migrations, then `wrangler deploy`) |
@@ -45,29 +46,26 @@ If the build token lacks D1 permission and the migration step fails, apply migra
 
 ```bash
 npx wrangler login
-npx wrangler d1 migrations apply arthika --remote
+npx wrangler d1 migrations apply ledgerfox --remote
 ```
 
 …and temporarily set the deploy command to `npx wrangler deploy`.
 
-### 3. Attach your subdomain
+### 3. Subdomain `ledgerfox.niyazio.com` — configured in code
 
-Worker `arthika` → **Settings → Domains & Routes → Add → Custom Domain** → enter e.g. `books.example.com` → **Add**.
+`wrangler.jsonc` already declares `ledgerfox.niyazio.com` as a Custom Domain, so the first `wrangler deploy` attaches it.
+Requirements: `niyazio.com` must be an active zone in the same Cloudflare account, and `ledgerfox.niyazio.com` must not
+already have a DNS record (delete any old CNAME/A record for that exact name first). Dashboard alternative:
+Worker `ledgerfox` → **Settings → Domains & Routes → Add → Custom Domain** → `ledgerfox.niyazio.com` → **Add**.
 Cloudflare creates the DNS record and issues the certificate itself; there is no record for you to create by hand.
 Exact DNS targets are not invented here because Cloudflare generates them.
-
-Alternatively add to `wrangler.jsonc` and redeploy:
-
-```jsonc
-"routes": [{ "pattern": "books.example.com", "custom_domain": true }]
-```
 
 ### 4. Verify
 
 ```bash
-curl https://books.example.com/api/health
+curl https://ledgerfox.niyazio.com/api/health
 # {"status":"ok","db":"ok","version":"0.1.0",...}
-BASE_URL=https://books.example.com node scripts/e2e.mjs   # creates a throwaway test account + company
+BASE_URL=https://ledgerfox.niyazio.com node scripts/e2e.mjs   # creates a throwaway test account + company
 ```
 
 Then sign up, save the recovery codes, and consider setting `ALLOW_REGISTRATION` to `"false"` in `wrangler.jsonc`
@@ -95,7 +93,7 @@ as structured JSON with a request ID, which is also returned to the user in the 
 - **Code:** Dashboard → Worker → **Deployments** → choose a previous version → **Rollback**, or `npx wrangler rollback`.
 - **Schema:** migrations are forward-only. Write a new corrective migration rather than editing an applied one.
 - **Data:** restore from a backup file (below) into a new database, or use D1 Time Travel
-  (`npx wrangler d1 time-travel restore arthika --timestamp=…`). Time Travel retention on the Free plan is
+  (`npx wrangler d1 time-travel restore ledgerfox --timestamp=…`). Time Travel retention on the Free plan is
   **unverified** here (historically 7 days); check the D1 docs before relying on it.
 
 ## Backup and restore
@@ -111,7 +109,7 @@ Recommended routine: run `npm run backup` after each monthly close and copy the 
 testing with `restore-test.sh`:
 
 ```bash
-npx wrangler d1 create arthika-restore
-npx wrangler d1 execute arthika-restore --remote --file backups/arthika-<stamp>.sql
+npx wrangler d1 create ledgerfox-restore
+npx wrangler d1 execute ledgerfox-restore --remote --file backups/ledgerfox-<stamp>.sql
 # then point wrangler.jsonc database_id at the restored DB and redeploy
 ```
