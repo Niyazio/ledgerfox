@@ -80,6 +80,7 @@ export interface CompanyInput {
   number_locale?: string;
   business_type?: string | null;
   is_demo?: boolean;
+  upi_id?: string | null;
 }
 
 export function companySetupStatements(db: D1Database, input: CompanyInput, today: string) {
@@ -88,12 +89,12 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
     stmt(
       db,
       `INSERT INTO companies (id, org_id, name, legal_name, country, base_currency, fiscal_year_start_month, tax_id, state_code,
-         address, city, postal_code, phone, email, number_locale, business_type, is_demo)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         address, city, postal_code, phone, email, number_locale, business_type, is_demo, upi_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       companyId, input.org_id, input.name, input.legal_name ?? null, input.country, input.base_currency,
       input.fiscal_year_start_month, input.tax_id ?? null, input.state_code ?? null, input.address ?? null,
       input.city ?? null, input.postal_code ?? null, input.phone ?? null, input.email ?? null,
-      input.number_locale ?? (input.country === "IN" ? "en-IN" : "en-US"), businessType(input.business_type).key, input.is_demo ? 1 : 0,
+      input.number_locale ?? (input.country === "IN" ? "en-IN" : "en-US"), businessType(input.business_type).key, input.is_demo ? 1 : 0, input.upi_id || null,
     ),
   ];
   const biz = businessType(input.business_type);

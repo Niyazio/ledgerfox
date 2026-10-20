@@ -1,0 +1,44 @@
+# Deploys the website (Cloudflare Worker + D1 migrations) on every push to main, after the checks pass.
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers" + D1 Edit) and CLOUDFLARE_ACCOUNT_ID.
+name: Deploy website
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-website
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check secrets
+        id: secrets
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "::warning::CLOUDFLARE_API_TOKEN is not set; skipping deploy (Cloudflare Workers Builds may deploy instead)."; echo "ok=false" >> "$GITHUB_OUTPUT"; else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.secrets.outputs.ok == 'true'
+        run: npm ci
+      - if: steps.secrets.outputs.ok == 'true'
+        run: npm run lint && npm run typecheck && npm test
+      - if: steps.secrets.outputs.ok == 'true'
+        run: npm run build
+      - if: steps.secrets.outputs.ok == 'true'
+        name: Apply database migrations and deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 migrations apply ledgerfox --remote && npx wrangler deploy
+      - if: steps.secrets.outputs.ok == 'true'
+        name: Smoke test
+        run: |
+          sleep 5
+          curl -fsS https://ledgerfox.niyazio.com/api/health | tee /dev/stderr | grep -q '"status":"ok"'

@@ -5,13 +5,14 @@ import { useCompany } from "../lib/company";
 import { useSession } from "../lib/session";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, ConfirmButton, Field, Input, PageHeader, Select, StatusBadge, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, Field, Input, Modal, PageHeader, Select, StatusBadge, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
 import { CURRENCY_OPTIONS } from "../components/pickers";
+import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { INDIA_STATES } from "@shared/tax";
 import { fmtDate, fmtDateTime, pct, today } from "../lib/format";
 
-type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account";
+type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -42,9 +43,94 @@ function CompanyTab() {
         <div className="text-sm muted sm:col-span-2">Country {c.country} · base currency {c.base_currency} · financial year starts month {c.fiscal_year_start_month}. These cannot be changed after creation.</div>
         <div className="rounded-lg bg-[var(--surface-2)] p-3 text-sm sm:col-span-2"><p className="font-medium">Tax capability for {settings!.jurisdiction.name}: <Badge color={settings!.jurisdiction.status === "implemented" ? "green" : "amber"}>{settings!.jurisdiction.status}</Badge></p><p className="mt-1 muted">{settings!.jurisdiction.notes}</p></div>
       </div>
+      <BrandingCard disabled={disabled} />
       {c.is_demo ? <DeleteDemo /> : null}
       {!disabled && <Button className="mt-5" loading={busy} onClick={async () => { if (await run(() => api.patch(path("/settings"), { ...v, legal_name: v.legal_name || null, tax_id: v.tax_id || null, state_code: v.state_code || null, email: v.email || null }))) { toast("success", "Saved"); reload(); } }}>Save</Button>}
     </Card>
+  );
+}
+
+function BrandingCard({ disabled }: { disabled: boolean }) {
+  const { path } = useCompany();
+  const toast = useToast();
+  const current = useApi<BrandingValue>(path("/settings/branding"));
+  const [draft, setDraft] = useState<BrandingValue | null>(null);
+  const value = draft ?? current.data ?? {};
+  const { busy, error, run } = useAction();
+  return (
+    <div className="mt-6 border-t border-[var(--border)] pt-5">
+      <p className="mb-3 font-medium">Logo &amp; payment QR</p>
+      {error && <Alert className="mb-3">{error}</Alert>}
+      <BrandingFields value={value} onChange={(v) => !disabled && setDraft(v)} />
+      {draft && !disabled && <Button className="mt-3" size="sm" loading={busy} onClick={async () => { if (await run(() => api.put(path("/settings/branding"), { logo: draft.logo ?? null, payment_qr: draft.payment_qr ?? null }))) { toast("success", "Logo and QR saved"); setDraft(null); current.reload(); } }}>Save logo &amp; QR</Button>}
+    </div>
+  );
+}
+
+/** Desktop only: encrypted automatic backup of this data file to the owner's LedgerFox Cloud account. */
+function CloudBackupTab() {
+  const toast = useToast();
+  const status = useApi<{ connected: boolean; user?: string; enabled?: boolean; lastBackupAt?: string; lastError?: string }>("/api/desktop/backup/status");
+  const list = useApi<{ backups: { id: string; label: string; size_bytes: number; status: string; created_at: string }[] }>(status.data?.connected ? "/api/desktop/backup/list" : null);
+  const [v, setV] = useState({ login: "", password: "", passphrase: "", confirm: "" });
+  const [restore, setRestore] = useState<{ id: string; passphrase: string } | null>(null);
+  const [restored, setRestored] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
+  const s = status.data;
+  if (!s) return <Card><p className="text-sm muted">{status.error ?? "Loading…"}</p></Card>;
+  if (!s.connected) {
+    return (
+      <Card title="Back up this data file to LedgerFox Cloud">
+        <p className="mb-4 text-sm muted">Once a day while this computer is online, LedgerFox encrypts the data file with your backup passphrase and uploads it to your free LedgerFox Cloud account (ledgerfox.niyazio.com). The passphrase never leaves this computer — without it nobody, including the website operator, can read the backup. Keep it safe: a lost passphrase means the cloud copies cannot be restored. Local daily backups continue as well.</p>
+        {error && <Alert className="mb-3">{error}</Alert>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="LedgerFox Cloud username or email">{(id) => <Input id={id} autoCapitalize="none" value={v.login} onChange={(e) => setV({ ...v, login: e.target.value })} />}</Field>
+          <Field label="Cloud password">{(id) => <Input id={id} type="password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} />}</Field>
+          <Field label="Backup passphrase (min. 8 characters)">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.passphrase} onChange={(e) => setV({ ...v, passphrase: e.target.value })} />}</Field>
+          <Field label="Repeat passphrase">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} />}</Field>
+        </div>
+        <p className="mt-2 text-xs muted">No cloud account yet? Create one free at <a className="underline" href="https://ledgerfox.niyazio.com/register" target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>.</p>
+        <Button className="mt-4" loading={busy} onClick={async () => {
+          if (v.passphrase !== v.confirm) return setError("The passphrases do not match");
+          if (await run(() => api.post("/api/desktop/backup/connect", { login: v.login, password: v.password, passphrase: v.passphrase }))) {
+            toast("success", "Connected. Running the first backup…");
+            status.reload();
+            try { await api.post("/api/desktop/backup/run"); toast("success", "First cloud backup complete"); } catch (e) { toast("error", errorMessage(e)); }
+            status.reload();
+          }
+        }}>Connect and back up</Button>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <Card title="Cloud backup">
+        {error && <Alert className="mb-3">{error}</Alert>}
+        {s.lastError && <Alert kind="warning" className="mb-3">Last attempt failed: {s.lastError}. It retries automatically every hour while online.</Alert>}
+        <p className="text-sm">Connected to LedgerFox Cloud as <b>{s.user}</b>. Last backup: <b>{s.lastBackupAt ? fmtDateTime(s.lastBackupAt) : "never"}</b>.</p>
+        <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(s.enabled)} onChange={async (e) => { await api.post("/api/desktop/backup/enable", { enabled: e.target.checked }); status.reload(); }} />Back up automatically every day</label>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button loading={busy} onClick={async () => { const r = await run(() => api.post<{ size: number }>("/api/desktop/backup/run")); if (r) { toast("success", `Backed up (${Math.round(r.size / 1024)} KB encrypted)`); status.reload(); list.reload(); } }}>Back up now</Button>
+          <ConfirmButton label="Disconnect" title="Disconnect cloud backup?" body="Automatic backups stop. Existing cloud backups stay in your account until replaced." onConfirm={async () => { await api.post("/api/desktop/backup/disconnect"); status.reload(); }} />
+        </div>
+      </Card>
+      <Card title="Backups in the cloud" padded={false}>
+        {restored && <Alert kind="success" className="m-3">Restored to <span className="font-mono">{restored}</span>. Open it with File → Open data file. Your current file was not changed.</Alert>}
+        <TableWrap><table className="table">
+          <thead><tr><th>Backup</th><th>Created</th><th className="num">Size</th><th /></tr></thead>
+          <tbody>{list.data?.backups.filter((b) => b.status === "complete").map((b) => (
+            <tr key={b.id}><td>{b.label}</td><td>{fmtDateTime(b.created_at)}</td><td className="num">{Math.round(b.size_bytes / 1024)} KB</td>
+              <td className="text-right"><Button size="sm" variant="ghost" onClick={() => setRestore({ id: b.id, passphrase: "" })}>Restore…</Button></td></tr>
+          ))}</tbody>
+        </table></TableWrap>
+      </Card>
+      {restore && (
+        <Modal open onClose={() => setRestore(null)} title="Restore a cloud backup" footer={<><Button variant="secondary" onClick={() => setRestore(null)}>Cancel</Button><Button loading={busy} onClick={async () => { const r = await run(() => api.post<{ path: string }>("/api/desktop/backup/restore", restore)); if (r) { setRestored(r.path); setRestore(null); } }}>Restore</Button></>}>
+          <p className="mb-3 text-sm muted">The backup is saved as a new data file next to the current one; nothing is overwritten.</p>
+          <Field label="Backup passphrase">{(id) => <Input id={id} type="password" value={restore.passphrase} onChange={(e) => setRestore({ ...restore, passphrase: e.target.value })} />}</Field>
+        </Modal>
+      )}
+    </div>
   );
 }
 
@@ -329,6 +415,7 @@ function AccountTab() {
 
 export default function Settings() {
   const { settings } = useCompany();
+  const { me } = useSession();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) ?? "company";
   if (!settings) return null;
@@ -339,6 +426,7 @@ export default function Settings() {
         { value: "company", label: "Company" }, { value: "members", label: "Team" }, { value: "tax", label: "Tax codes" }, { value: "dimensions", label: "Branches & dimensions" },
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
+        ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
       ]} />
       {tab === "company" && <CompanyTab />}
       {tab === "members" && <MembersTab />}
@@ -350,6 +438,7 @@ export default function Settings() {
       {tab === "audit" && <AuditTab />}
       {tab === "data" && <DataTab />}
       {tab === "account" && <AccountTab />}
+      {tab === "backup" && <CloudBackupTab />}
     </>
   );
 }

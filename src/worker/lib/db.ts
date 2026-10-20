@@ -1,6 +1,6 @@
 import { fromDbError } from "./errors";
 
-export type Param = string | number | null;
+export type Param = string | number | null | Uint8Array;
 
 export async function all<T = Record<string, unknown>>(db: D1Database, sql: string, ...params: Param[]): Promise<T[]> {
   try {

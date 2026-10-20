@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Field, Input } from "../components/ui";
-import { Wordmark } from "../components/Layout";
+import { ProductCredit, Wordmark } from "../components/Layout";
 
 function AuthCard({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   const { me } = useSession();
@@ -17,6 +17,7 @@ function AuthCard({ title, subtitle, children }: { title: string; subtitle?: Rea
           {subtitle && <p className="mt-1 text-sm muted">{subtitle}</p>}
           <div className="mt-5">{children}</div>
         </div>
+        <ProductCredit className="mt-4 text-center" />
       </div>
     </div>
   );

@@ -12,3 +12,4 @@ release
 *.ledgerfox
 mobile/node_modules
 mobile/android
+mobile/www

@@ -1,7 +1,10 @@
 import { Link, Navigate } from "react-router";
 import { BookOpen, ShieldCheck, FileText, Landmark, Package, BarChart3, Globe2, Lock } from "lucide-react";
 import { AdSense } from "../components/Ads";
-import { Wordmark, useTheme } from "../components/Layout";
+import { lazy, Suspense } from "react";
+import { isNativeApp, isOfflineCopy } from "../lib/api";
+const MobileHome = lazy(() => import("./MobileHome"));
+import { ProductCredit, Wordmark, useTheme } from "../components/Layout";
 import { useSession } from "../lib/session";
 import { Moon, Sun } from "lucide-react";
 
@@ -17,7 +20,10 @@ const FEATURES = [
 export default function Landing() {
   const { me, loading } = useSession();
   const { dark, toggle } = useTheme();
+  // Inside the Android app the start screen chooses cloud, office computer or the offline copy.
+  if (isNativeApp() && !isOfflineCopy()) return <Suspense fallback={null}><MobileHome /></Suspense>;
   if (loading) return null;
+  if (me?.edition === "offline") return <Navigate to="/login" replace />;
   if (me?.user) return <Navigate to="/app" replace />;
   // The desktop app has no marketing page: first launch creates the owner, later launches sign in.
   if (me?.edition === "desktop") return <Navigate to={me.registration === "open" ? "/register" : "/login"} replace />;
@@ -87,7 +93,7 @@ export default function Landing() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/privacy" className="underline">Privacy</Link></footer>
+      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/privacy" className="underline">Privacy</Link><ProductCredit className="mt-2" /></footer>
     </div>
   );
 }

@@ -24,6 +24,18 @@ export function Logo({ className = "h-7 w-7" }: { className?: string }) {
   );
 }
 
+export const SUPPORT_EMAIL = "info@niyazio.com";
+
+/** "A product of Niyazio" credit with the support contact. */
+export function ProductCredit({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-xs muted ${className}`}>
+      A product of <a href="https://niyazio.com" target="_blank" rel="noreferrer" className="font-medium hover:underline">Niyazio</a> · Support:{" "}
+      <a href={`mailto:${SUPPORT_EMAIL}?subject=LedgerFox%20support`} className="hover:underline">{SUPPORT_EMAIL}</a>
+    </p>
+  );
+}
+
 /** Mark plus brand name. */
 export function Wordmark({ brand = "LedgerFox", iconClass }: { brand?: string; iconClass?: string }) {
   return (
@@ -102,6 +114,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </ul>
         </div>
       ))}
+      <ProductCredit className="px-3 pb-4 pt-2" />
     </nav>
   );
 }
@@ -226,6 +239,7 @@ function Shell() {
             <button onClick={signOut} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Sign out" title="Sign out"><LogOut className="h-4 w-4" /></button>
           </div>
         </header>
+        {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>

@@ -41,7 +41,6 @@ settings.patch("/", async (c) => {
   requirePerm(c, "company.manage");
   const company = c.get("company");
   const input = await body(c, companySchema.omit({ country: true, base_currency: true, fiscal_year_start_month: true, is_demo: true, business_type: true }).extend({
-    upi_id: z.string().trim().regex(/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/, "UPI ID looks like name@bank").nullish().or(z.literal("")),
     print_template: z.enum(["modern", "classic", "compact"]).optional(),
     round_off_invoices: z.boolean().optional(),
     invoice_terms: shortText(2000).nullish(),
@@ -263,6 +262,45 @@ settings.get("/audit-log", async (c) => {
     ...(entity ? [company.id, company.org_id, entity, limit, offset] : [company.id, company.org_id, limit, offset]),
   );
   return c.json({ entries: rows });
+});
+
+// ── Branding: logo and the business's own payment QR, shown on printed documents ──
+
+const MAX_IMAGE_BYTES = 300 * 1024;
+
+/** Accept only base64 PNG/JPEG/WebP data URLs whose bytes match the declared type. */
+export function validImageDataUrl(v: string): boolean {
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(v);
+  if (!m) return false;
+  if ((m[2].length * 3) / 4 > MAX_IMAGE_BYTES) return false;
+  let head: string;
+  try { head = atob(m[2].slice(0, 24)); } catch { return false; }
+  const b = Array.from(head, (ch) => ch.charCodeAt(0));
+  if (m[1] === "png") return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  if (m[1] === "jpeg") return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  return head.slice(0, 4) === "RIFF" && head.slice(8, 12) === "WEBP";
+}
+
+settings.get("/branding", async (c) => {
+  const row = await first<{ logo: string | null; payment_qr: string | null }>(c.env.DB, `SELECT logo, payment_qr FROM company_branding WHERE company_id = ?`, c.get("company").id);
+  return c.json({ logo: row?.logo ?? null, payment_qr: row?.payment_qr ?? null });
+});
+
+settings.put("/branding", async (c) => {
+  requirePerm(c, "company.manage");
+  const company = c.get("company");
+  const input = await body(c, z.object({ logo: z.string().max(450_000).nullish(), payment_qr: z.string().max(450_000).nullish() }));
+  for (const [k, v] of Object.entries(input)) {
+    if (v && !validImageDataUrl(v)) throw badRequest(`${k === "logo" ? "Logo" : "Payment QR"} must be a PNG, JPEG or WebP image up to 300 KB`);
+  }
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO company_branding (company_id, logo, payment_qr) VALUES (?, ?, ?)
+      ON CONFLICT (company_id) DO UPDATE SET logo = CASE WHEN ? THEN excluded.logo ELSE logo END,
+        payment_qr = CASE WHEN ? THEN excluded.payment_qr ELSE payment_qr END, updated_at = ?`,
+      company.id, input.logo ?? null, input.payment_qr ?? null, input.logo === undefined ? 0 : 1, input.payment_qr === undefined ? 0 : 1, nowIso()),
+    audit(c, "company.branding", "company", company.id, { logo: input.logo === undefined ? "unchanged" : input.logo ? "set" : "removed", payment_qr: input.payment_qr === undefined ? "unchanged" : input.payment_qr ? "set" : "removed" }),
+  ]);
+  return c.json({ ok: true });
 });
 
 export default settings;

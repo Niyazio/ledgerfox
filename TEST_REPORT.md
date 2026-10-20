@@ -6,13 +6,15 @@ Run date: 20 Oct 2026 · Node 22.22 · all commands run in this repository.
 |---|---|
 | `npm run lint` (ESLint, typescript-eslint, react-hooks) | ✅ 0 problems |
 | `npm run typecheck` (`tsc --noEmit`, strict) | ✅ 0 errors |
-| `npm test` (Vitest + Miniflare D1) | ✅ **130 passed**, 0 failed, 0 skipped (9 files, ~30 s) |
-| `npm run test:desktop` (same suite on Node SQLite, desktop engine) | ✅ **130 passed** |
+| `npm test` (Vitest + Miniflare D1) | ✅ **138 passed**, 0 failed, 0 skipped (11 files, ~35 s) |
+| `npm run test:desktop` (same suite on Node SQLite, desktop engine) | ✅ **138 passed** |
 | Browser e2e against the headless desktop server (`server-build/ledgerfox-server.mjs`) | ✅ passed, incl. offline round trip |
 | Packaged Linux desktop app (`electron-builder --linux`, Electron 44) launched under Xvfb | ✅ data file + migrations + daily backup created; owner registration → company → dashboard driven through the real window; Wi-Fi access window shows QR and the LAN address answers |
 | Windows/macOS installers | ⚠️ not built here (Windows needs Wine on Linux; macOS needs a Mac) — built by `.github/workflows/desktop.yml` on GitHub's runners, not yet run |
 | Internet link (Cloudflare Quick Tunnel) | ⚠️ not reachable from this sandbox (DNS blocked); the server-side handling is covered by `test/desktop-server.test.ts` |
 | Browser run of new screens on the desktop server (admin/admin → password change → restaurant demo → invoice A4/classic/thermal previews → payroll → payslip → demo delete) | ✅ screens rendered; found and fixed: invalid demo GSTIN, allocations blocking demo deletion |
+| Phone offline copy (Chromium emulating the app on a separate origin: pair → save → sign in → dashboard/trial balance → write refused; 0 requests to the computer afterwards) | ✅ passed; found and fixed: browsers drop Set-Cookie on in-page responses |
+| Logo/QR upload in Settings → invoice preview shows logo, Scan-to-pay image and verification QR | ✅ |
 | Android APK | ⚠️ not built here (no Android SDK); built by the GitHub workflow |
 | `npm run build` (Vite) | ✅ initial JS 266 KB (83 KB gzip), pages lazy-loaded; precache manifest emitted |
 | `npx wrangler d1 migrations apply ledgerfox --local` | ✅ all three migrations applied by wrangler |

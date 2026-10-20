@@ -11,6 +11,7 @@ import { basename, dirname, join } from "node:path";
 import QRCode from "qrcode";
 import { startServer, type RunningServer } from "../server/http";
 import { ensureCloudflared, startTunnel, type Tunnel } from "./tunnel";
+import { checkForUpdatesNow, setupAutoUpdate } from "./updates";
 
 const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
@@ -197,6 +198,30 @@ async function showAccess() {
   accessWin.show();
 }
 
+/** QR code with a one-time link: the LedgerFox Android app scans it and saves a view-only copy of this data file. */
+async function showPhoneCopy() {
+  if (!server) return;
+  if (!config.lan && !tunnel) {
+    const r = await dialog.showMessageBox({ type: "question", buttons: ["Turn on phone access", "Cancel"], message: "The phone needs to reach this computer", detail: "Turn on Access → Phones on the same Wi-Fi first (both devices on the same network)." });
+    if (r.response !== 0) return;
+    await setLan(true);
+  }
+  const token = server.createPairToken();
+  const targets = [...lanUrls(), ...(tunnel ? [tunnel.url] : [])].map((u) => `${u}/api/pair/${token}`);
+  const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
+  const blocks = await Promise.all(targets.map(async (t) => `<div class="card"><img src="${await QRCode.toDataURL(t, { margin: 1, width: 220 })}" alt=""><code>${esc(t)}</code></div>`));
+  const html = `<!doctype html><meta charset="utf-8"><title>Copy data to phone</title>
+  <style>body{font:14px system-ui,sans-serif;margin:20px;color:#0f172a}h1{font-size:18px}.card{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px 0;text-align:center}
+  code{display:block;margin-top:6px;font-size:12px;word-break:break-all}p{color:#475569}</style>
+  <h1>Copy data to phone (view-only)</h1>
+  <p>Open the <b>LedgerFox Android app</b> → <b>Scan QR code</b>. The phone saves a view-only copy of this data file and can open it without internet. Signing in on the phone uses the same usernames and passwords.</p>
+  ${blocks.join("")}
+  <p>The code works once and expires in 10 minutes. Login sessions and recovery codes are not copied. Anyone holding the phone can read the copy after signing in, so protect the phone with a screen lock.</p>`;
+  const w = new BrowserWindow({ width: 520, height: 720, title: "Copy data to phone", parent: win ?? undefined, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
+  w.setMenuBarVisibility(false);
+  await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
 function buildMenu() {
   const isMac = process.platform === "darwin";
   const template: MenuItemConstructorOptions[] = [
@@ -228,6 +253,7 @@ function buildMenu() {
         tunnel
           ? { label: "Stop internet link", click: async () => { await stopTunnel(); buildMenu(); } }
           : { label: "Start internet link (temporary)…", enabled: Boolean(server), click: () => void startInternetLink() },
+        { label: "Copy data to phone (view-only)…", enabled: Boolean(server), click: () => void showPhoneCopy() },
         { type: "separator" },
         { label: "Show phone access details", click: () => void showAccess() },
       ],
@@ -237,7 +263,11 @@ function buildMenu() {
     {
       role: "help",
       submenu: [
-        { label: "About LedgerFox", click: () => void dialog.showMessageBox({ type: "info", message: `LedgerFox ${app.getVersion()}`, detail: "Free, open-source double-entry accounting (MIT licence). Your data stays in the file you chose unless you turn on phone or internet access." }) },
+        { label: "About LedgerFox", click: () => void dialog.showMessageBox({ type: "info", message: `LedgerFox ${app.getVersion()}`, detail: "A product of Niyazio (niyazio.com). Support: info@niyazio.com\n\nFree, open-source double-entry accounting (MIT licence). Your data stays in the file you chose unless you turn on phone, internet or cloud backup." }) },
+        { label: "Check for updates…", click: () => void checkForUpdatesNow() },
+        { label: "Support: info@niyazio.com", click: () => void shell.openExternal("mailto:info@niyazio.com?subject=LedgerFox%20support") },
+        { label: "Niyazio website", click: () => void shell.openExternal("https://niyazio.com") },
+        { type: "separator" },
         { label: `Data file: ${config.dataFile ?? "none"}`, enabled: false },
         { label: `Version ${app.getVersion()}`, enabled: false },
       ],
@@ -288,6 +318,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!file) { app.quit(); return; }
     try {
       await boot(file);
+      setupAutoUpdate();
     } catch (e) {
       dialog.showErrorBox("Could not open the data file", `${file}\n\n${(e as Error).message}`);
       config.dataFile = undefined;

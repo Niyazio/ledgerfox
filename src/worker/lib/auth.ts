@@ -17,6 +17,16 @@ function isSecure(c: Context<AppEnv>): boolean {
   return new URL(c.req.url).protocol === "https:";
 }
 
+/**
+ * The phone's offline copy runs this API inside the page, where browsers drop Set-Cookie on script-made responses;
+ * there (and only there) the session token travels in a private header instead of a cookie.
+ */
+const offline = (c: Context<AppEnv>) => c.env.APP_ENV === "offline";
+const SESSION_HEADER = "x-ledgerfox-session";
+function sessionToken(c: Context<AppEnv>): string | undefined {
+  return offline(c) ? c.req.header(SESSION_HEADER) : getCookie(c, cookieName(c));
+}
+
 export async function createSession(c: Context<AppEnv>, userId: string): Promise<string> {
   const token = randomToken(32);
   const id = await sha256Hex(token);
@@ -26,6 +36,7 @@ export async function createSession(c: Context<AppEnv>, userId: string): Promise
     `INSERT INTO sessions (id, user_id, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
     id, userId, expires, clientIp(c), (c.req.header("user-agent") ?? "").slice(0, 200),
   );
+  if (offline(c)) { c.header(SESSION_HEADER, token); return token; }
   setCookie(c, cookieName(c), token, {
     httpOnly: true,
     secure: isSecure(c),
@@ -37,13 +48,14 @@ export async function createSession(c: Context<AppEnv>, userId: string): Promise
 }
 
 export async function destroySession(c: Context<AppEnv>) {
-  const token = getCookie(c, cookieName(c));
+  const token = sessionToken(c);
   if (token) await run(c.env.DB, `DELETE FROM sessions WHERE id = ?`, await sha256Hex(token));
+  if (offline(c)) { c.header(SESSION_HEADER, ""); return; }
   deleteCookie(c, cookieName(c), { path: "/", secure: isSecure(c) });
 }
 
 export async function loadSessionUser(c: Context<AppEnv>): Promise<SessionUser | null> {
-  const token = getCookie(c, cookieName(c));
+  const token = sessionToken(c);
   if (!token || token.length > 200) return null;
   const sid = await sha256Hex(token);
   const row = await first<{ id: string; email: string; name: string; username: string | null; must_change_password: number; expires_at: string; is_disabled: number }>(

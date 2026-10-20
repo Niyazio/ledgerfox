@@ -6,7 +6,7 @@
  * - Cached reads are handled by the service worker (public/sw.js); this module warms and clears that cache.
  */
 import { useEffect, useState } from "react";
-import { api, ApiError, errorMessage } from "./api";
+import { api, ApiError, errorMessage, isNativeApp } from "./api";
 
 export interface OutboxEntry {
   /** Also the Idempotency-Key of the create request. */
@@ -160,7 +160,7 @@ export function warmOfflineCache(companyId: string) {
 export function startOfflineSync() {
   window.addEventListener("online", () => void flushOutbox());
   setInterval(() => void flushOutbox(), 60_000);
-  if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  if ("serviceWorker" in navigator && import.meta.env.PROD && !isNativeApp()) {
     navigator.serviceWorker.register(`/sw.js?v=${__BUILD_ID__}`).catch(() => undefined);
   }
 }

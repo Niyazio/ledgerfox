@@ -95,6 +95,34 @@ describe("desktop server", () => {
     expect(ips).toContain("203.0.113.9");
   });
 
+  it("phone copy: one-time code returns the data file without sessions or secrets", async () => {
+    const t = srv.createPairToken();
+    const res = await fetch(`${base}/api/pair/${t}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.slice(0, 15))).toBe("SQLite format 3");
+    const { DatabaseSync } = await import("node:sqlite");
+    const { writeFileSync } = await import("node:fs");
+    const f = join(dir, "phone.db");
+    writeFileSync(f, bytes);
+    const copy = new DatabaseSync(f);
+    expect((copy.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n).toBe(0);
+    expect((copy.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n).toBeGreaterThan(0);
+    copy.close();
+    expect((await fetch(`${base}/api/pair/${t}`)).status).toBe(404);
+    expect((await fetch(`${base}/api/pair/aaaaaaaaaaaaaaaaaaaaaaaa`)).status).toBe(404);
+  });
+
+  it("cloud backup controls are for an owner/admin on this computer only", async () => {
+    expect((await fetch(`${base}/api/desktop/backup/status`)).status).toBe(403);
+    expect((await fetch(`${base}/api/desktop/backup/status`, { headers: { cookie, "cf-connecting-ip": "203.0.113.9" } })).status).toBe(403);
+    const ok = await fetch(`${base}/api/desktop/backup/status`, { headers: { cookie } });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ connected: false });
+    expect((await fetch(`${base}/api/desktop/backup/run`, { method: "POST", headers: { cookie } })).status).toBe(403);
+  });
+
   it("data survives a restart (it is in the file, not in memory)", async () => {
     const file = join(dir, "data", "Test.ledgerfox");
     await srv.close();

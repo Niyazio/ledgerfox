@@ -21,6 +21,7 @@ import files from "./routes/files";
 import exportdata from "./routes/exportdata";
 import payroll from "./routes/payroll";
 import { verifyPublic, verifyToken } from "./routes/verify";
+import backups from "./routes/backups";
 import { VERSION } from "./version";
 
 
@@ -84,6 +85,7 @@ app.route("/api/auth", authRoutes);
 app.route("/api/orgs", orgRoutes);
 app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
+app.route("/api/backups", backups);
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);

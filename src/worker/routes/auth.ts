@@ -106,7 +106,7 @@ auth.post("/logout", async (c) => {
 
 auth.get("/me", async (c) => {
   const user = await loadSessionUser(c);
-  const edition = c.env.APP_ENV === "desktop" ? "desktop" : "cloud";
+  const edition = c.env.APP_ENV === "desktop" ? "desktop" : c.env.APP_ENV === "offline" ? "offline" : "cloud";
   if (!user) {
     const closed = c.env.ALLOW_REGISTRATION === "false" || (c.env.ALLOW_REGISTRATION === "first" && Boolean(await first(c.env.DB, `SELECT 1 FROM users LIMIT 1`)));
     const defaultLogin = edition === "desktop" && isLocalRequest(c) && Boolean(await first(c.env.DB, `SELECT 1 FROM users WHERE username = ? AND must_change_password = 1`, DEFAULT_ADMIN.username));

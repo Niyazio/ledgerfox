@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { Apple, Monitor, Laptop, Smartphone, Download as DownloadIcon, ShieldAlert } from "lucide-react";
 import { useApi } from "../lib/hooks";
 import { AdSense } from "../components/Ads";
-import { Wordmark } from "../components/Layout";
+import { ProductCredit, Wordmark } from "../components/Layout";
 
 interface Downloads {
   available: boolean;
@@ -69,6 +69,7 @@ export default function Download() {
             <li>On first launch, choose where to save your data (for example <code>C:\LedgerFox</code>). Back it up by copying that file; LedgerFox also keeps daily copies.</li>
           </ul>
         </section>
+        <ProductCredit className="mt-8 text-center" />
       </main>
     </div>
   );

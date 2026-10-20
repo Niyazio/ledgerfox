@@ -19,7 +19,7 @@ writeFileSync(manifest, m);
 const gradle = "android/app/build.gradle";
 let g = readFileSync(gradle, "utf8");
 const code = Number(process.env.VERSION_CODE || 1);
-const name = process.env.VERSION_NAME || "0.2.0";
+const name = (process.env.VERSION_NAME || JSON.parse(readFileSync("package.json", "utf8")).version).replace(/^v/, "");
 g = g.replace(/versionCode \d+/, `versionCode ${code}`).replace(/versionName "[^"]*"/, `versionName "${name}"`);
 writeFileSync(gradle, g);
 console.log(`Android project prepared (version ${name}, code ${code}).`);

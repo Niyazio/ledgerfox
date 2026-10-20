@@ -9,6 +9,7 @@ import { INDIA_STATES } from "@shared/tax";
 import { CURRENCY_OPTIONS } from "../components/pickers";
 import { BUSINESS_TYPES } from "@shared/industries";
 import { createDemoCompany } from "../lib/demo";
+import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { errorMessage } from "../lib/api";
 
 const COUNTRIES: [string, string, string, number][] = [
@@ -19,14 +20,15 @@ const COUNTRIES: [string, string, string, number][] = [
 ];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any) => void; busy: boolean; withOrg?: boolean }) {
-  const [v, setV] = useState({ org: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
+export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, branding: BrandingValue) => void; busy: boolean; withOrg?: boolean }) {
+  const [branding, setBranding] = useState<BrandingValue>({});
+  const [v, setV] = useState({ org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const company = { name: v.name, legal_name: v.legal_name || null, country: v.country, base_currency: v.base_currency, fiscal_year_start_month: Number(v.fiscal_year_start_month),
-      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type };
-    onSubmit(withOrg ? { name: v.org || v.name, company } : company);
+      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type, upi_id: v.upi_id.trim() || null };
+    onSubmit(withOrg ? { name: v.org || v.name, company } : company, branding);
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -75,9 +77,15 @@ export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any) =>
       <Field label="Postal code">{(id) => <Input id={id} value={v.postal_code} onChange={(e) => set("postal_code", e.target.value)} />}</Field>
       <Field label="Phone">{(id) => <Input id={id} value={v.phone} onChange={(e) => set("phone", e.target.value)} />}</Field>
       <Field label="Email">{(id) => <Input id={id} type="email" value={v.email} onChange={(e) => set("email", e.target.value)} />}</Field>
+      {v.country === "IN" && <Field label="UPI ID" hint="For the “Scan to pay” QR on invoices, e.g. business@okhdfcbank.">{(id) => <Input id={id} value={v.upi_id} placeholder="business@bank" autoCapitalize="none" onChange={(e) => set("upi_id", e.target.value)} />}</Field>}
+      <div className="sm:col-span-2"><BrandingFields value={branding} onChange={setBranding} /></div>
       <div className="sm:col-span-2"><Button type="submit" loading={busy}>Create company</Button></div>
     </form>
   );
+}
+
+async function saveBranding(companyId: string, b: BrandingValue) {
+  if (b.logo || b.payment_qr) await api.put(`/api/c/${companyId}/settings/branding`, { logo: b.logo ?? null, payment_qr: b.payment_qr ?? null });
 }
 
 /** One click: a sample company of the chosen type with invoices, bills, receipts, expenses and a posted payroll. */
@@ -136,8 +144,8 @@ export function AppHome() {
       <p className="mb-6 mt-1 text-sm muted">We'll create a chart of accounts, tax codes, numbering and the current financial year. Everything can be adjusted later.</p>
       {error && <Alert className="mb-4">{error}</Alert>}
       <div className="mb-6"><DemoLoader orgId={null} /></div>
-      <Card><CompanyForm withOrg busy={busy} onSubmit={async (v) => {
-        const r = await run(() => api.post<{ company_id: string }>("/api/orgs", v));
+      <Card><CompanyForm withOrg busy={busy} onSubmit={async (v, branding) => {
+        const r = await run(async () => { const c = await api.post<{ company_id: string }>("/api/orgs", v); await saveBranding(c.company_id, branding); return c; });
         if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
       }} /></Card>
     </div>
@@ -160,8 +168,8 @@ export function NewCompany() {
         <Field label="Organisation" className="mb-4">{(id) => <Select id={id} value={org} onChange={(e) => setOrg(e.target.value)}>{me.organisations.map((o) => <option key={o.org_id} value={o.org_id}>{o.org_name}</option>)}</Select>}</Field>
       )}
       <div className="mb-6"><DemoLoader orgId={org} /></div>
-      <Card><CompanyForm busy={busy} onSubmit={async (v) => {
-        const r = await run(() => api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v));
+      <Card><CompanyForm busy={busy} onSubmit={async (v, branding) => {
+        const r = await run(async () => { const c = await api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v); await saveBranding(c.company_id, branding); return c; });
         if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
       }} /></Card>
     </div>

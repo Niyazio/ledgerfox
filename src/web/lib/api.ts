@@ -4,6 +4,14 @@ export class ApiError extends Error {
   }
 }
 
+/** In the Android app's offline copy, requests are answered by the on-phone engine instead of the network. */
+let transport: ((path: string, init: RequestInit) => Promise<Response>) | null = null;
+export function setTransport(t: typeof transport) { transport = t; }
+export const isOfflineCopy = () => transport !== null;
+
+/** True inside the Android app (Capacitor WebView). */
+export const isNativeApp = () => Boolean((globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+
 async function request<T>(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<T> {
   const headers: Record<string, string> = { "x-requested-with": "ledgerfox", ...extraHeaders };
   let payload: BodyInit | undefined;
@@ -16,7 +24,7 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
   }
   let res: Response;
   try {
-    res = await fetch(path, { method, headers, body: payload, credentials: "same-origin" });
+    res = transport ? await transport(path, { method, headers, body: payload }) : await fetch(path, { method, headers, body: payload, credentials: "same-origin" });
   } catch {
     throw new ApiError(0, "NETWORK", "Network error — check your connection and try again.");
   }

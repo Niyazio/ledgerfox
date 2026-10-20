@@ -32,6 +32,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run desktop:tools
+      - run: npx tsc -p tsconfig.desktop.json --noEmit
       - run: npm run test:desktop
       - run: npm run build:desktop
       - run: npx electron-builder ${{ matrix.target }} --publish never
@@ -44,6 +46,9 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
+            release/*.zip
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error
   android:
     runs-on: ubuntu-latest
@@ -55,10 +60,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
+      - name: Build the web app that ships inside the APK
+        working-directory: .
+        run: npm ci && npm run build && rm -rf mobile/www && cp -r dist mobile/www
       - run: npm install --no-audit --no-fund
       - name: Create the Android project
         env:

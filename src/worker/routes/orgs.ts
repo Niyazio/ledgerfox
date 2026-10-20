@@ -31,6 +31,7 @@ export const companySchema = z.object({
   email: z.string().trim().email().max(254).nullish().or(z.literal("")),
   business_type: z.string().max(40).nullish(),
   is_demo: z.boolean().optional(),
+  upi_id: z.string().trim().regex(/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/, "UPI ID looks like name@bank").nullish().or(z.literal("")),
 });
 
 export function validateCompanyInput(input: z.infer<typeof companySchema>) {

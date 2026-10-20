@@ -1,9 +1,9 @@
 {
   "name": "ledgerfox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "LedgerFox \u2014 free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
+  "description": "LedgerFox — free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
   "license": "MIT",
   "scripts": {
     "dev": "npm run build && wrangler dev",
@@ -21,23 +21,26 @@
     "test:e2e": "node scripts/e2e.mjs",
     "backup": "bash scripts/backup.sh",
     "build:desktop": "vite build && node scripts/build-desktop.mjs",
-    "desktop": "npm run build:desktop && electron .",
-    "dist:win": "npm run build:desktop && electron-builder --win",
-    "dist:mac": "npm run build:desktop && electron-builder --mac",
-    "dist:linux": "npm run build:desktop && electron-builder --linux",
-    "server": "npm run build:desktop && node server-build/ledgerfox-server.mjs"
+    "desktop": "npm run build:desktop && npx electron .",
+    "dist:win": "npm run build:desktop && npx electron-builder --win",
+    "dist:mac": "npm run build:desktop && npx electron-builder --mac",
+    "dist:linux": "npm run build:desktop && npx electron-builder --linux",
+    "server": "npm run build:desktop && node server-build/ledgerfox-server.mjs",
+    "desktop:tools": "npm install --no-save --no-audit --no-fund electron@44.9.2 electron-builder@26.15.3"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
+    "electron-updater": "^6.8.9",
     "hono": "^4.13.13",
     "lucide-react": "^1.60.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router": "^7.18.4",
+    "sql.js": "^1.13.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -48,9 +51,8 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^6.1.2",
-    "electron": "^44.9.2",
-    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",

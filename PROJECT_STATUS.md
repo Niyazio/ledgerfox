@@ -42,6 +42,11 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Print preview: A4 modern/classic, A5, thermal 80/58 mm; amount in words; UPI pay QR; QR verification page | ✅ Done | Browser printing (no direct ESC/POS driver) |
 | AdSense on public pages + ads.txt + privacy policy | ✅ Done | Ads appear only after Google approves the site; EEA/UK visitors need Google's consent message enabled in AdSense |
 | Android app (APK) | ✅ Built by CI | Not on Google Play; temporary signing key until secrets are added |
+| Logo + payment QR + UPI ID at company creation, on all printed documents | ✅ Done | |
+| Desktop auto-update | ✅ Windows/Linux automatic; macOS notifies (unsigned apps cannot self-update) | |
+| Android app: full app inside, update check, view-only offline copy from the desktop by QR | ✅ Done | Copy is a snapshot; scan again to refresh |
+| Encrypted automatic cloud backup of desktop data | ✅ Done | Keeps newest 5 per user |
+| Website deploy workflow (GitHub Actions) | ✅ Added | Needs CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets |
 | Multi-branch access control, 7 roles, daybook, product barcodes (phase 2 brief) | ⏳ Next | On a separate branch, for review before merging |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 

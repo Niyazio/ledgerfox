@@ -71,6 +71,19 @@ BASE_URL=https://ledgerfox.niyazio.com node scripts/e2e.mjs   # creates a throwa
 Then sign up, save the recovery codes, and consider setting `ALLOW_REGISTRATION` to `"false"` in `wrangler.jsonc`
 once your team has accounts (invitations keep working).
 
+## Automatic website deploys from GitHub (recommended)
+
+`.github/workflows/deploy.yml` deploys on every push to `main` after lint, typecheck and tests pass, applies D1
+migrations, and smoke-tests `/api/health`. Add two repository secrets once (GitHub → Settings → Secrets and
+variables → Actions):
+
+- `CLOUDFLARE_API_TOKEN` — Cloudflare dashboard → My Profile → API Tokens → Create Token → template **Edit Cloudflare
+  Workers**, and add permission **Account · D1 · Edit**; limit it to your account and the niyazio.com zone.
+- `CLOUDFLARE_ACCOUNT_ID` — shown on the Workers & Pages overview page.
+
+Without them the workflow skips with a warning (Cloudflare Workers Builds can still deploy). Note: "Retry build" in
+Cloudflare re-runs the *same old commit*; it does not pick up newer pushes.
+
 ## Desktop installers on the website
 
 1. In GitHub: **Actions → Desktop installers → Run workflow** is a test build; to publish, create a tag/release

@@ -82,6 +82,25 @@
 - **Android app:** a launcher that only opens http(s) addresses after confirming `/api/health` is LedgerFox;
   cleartext is enabled for office-network addresses (same caveat as Wi-Fi access).
 
+## Features added in v0.3
+
+- **Phone copy:** one-time 144-bit codes, single use, 10-minute expiry, served only by the desktop app; the copy
+  excludes sessions, recovery codes, reset tokens, rate limits, invitations and backup keys. On the phone it is stored
+  in the app's private storage (IndexedDB) and opened by the same API code running in the app, read-only. Password
+  hashes remain in the copy (needed to sign in offline); protect phones with a screen lock.
+- **Offline session header:** only when the API runs inside the phone app (`APP_ENV=offline`) is the session token
+  carried in `x-ledgerfox-session` (browsers drop Set-Cookie on script-made responses). The header is ignored by the
+  cloud and desktop servers.
+- **Cloud backup:** client-side AES-256-GCM encryption with a scrypt-derived key; the passphrase never leaves the
+  computer (only the derived key is stored in `<data file>.cloud.json`, owner-only permissions). The desktop uses a
+  revocable, hashed, backup-scoped key (`lfb_…`) that cannot read accounting data or mint more keys; sessions are
+  not stored. Backups are per user; another user gets 404. Local backup controls accept only an owner/admin signed in
+  on the computer itself.
+- **Branding images:** PNG/JPEG/WebP data URLs only, magic bytes checked against the declared type, ≤ 300 KB, stored
+  in `company_branding` (not loaded on ordinary requests); shown via `img-src data:`.
+- **Auto-update:** electron-updater downloads from the project's GitHub Releases over HTTPS and checks the published
+  SHA-512; installers are unsigned, so publisher identity is not verified by the OS.
+
 ## Reporting
 
 Report vulnerabilities privately to the repository owner. Do not open public issues for security problems.

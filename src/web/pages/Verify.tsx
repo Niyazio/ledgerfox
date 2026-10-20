@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router";
 import { BadgeCheck, ShieldX } from "lucide-react";
 import { useApi } from "../lib/hooks";
-import { Wordmark } from "../components/Layout";
+import { ProductCredit, Wordmark } from "../components/Layout";
 import { Spinner } from "../components/ui";
 import { fmtDate, money } from "../lib/format";
 
@@ -46,6 +46,7 @@ export default function Verify() {
             </>
           )}
         </div>
+        <ProductCredit className="mt-4 text-center" />
       </div>
     </div>
   );

@@ -29,6 +29,11 @@ const server = await startServer({
 console.log(`LedgerFox is running. Data file: ${dataFile}`);
 console.log(`  This computer: http://127.0.0.1:${server.port}`);
 if (lan) for (const list of Object.values(networkInterfaces())) for (const a of list ?? []) if (a.family === "IPv4" && !a.internal) console.log(`  Same network:  http://${a.address}:${server.port}`);
+if (process.argv.includes("--pair")) {
+  // One-time code for the LedgerFox Android app to download a view-only copy (valid 10 minutes).
+  const t = server.createPairToken();
+  console.log(`  Phone copy:    http://127.0.0.1:${server.port}/api/pair/${t}`);
+}
 const stop = async () => { await server.close(); process.exit(0); };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);

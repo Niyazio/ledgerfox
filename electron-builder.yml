@@ -1,6 +1,7 @@
 # Desktop installers. Unsigned builds (no paid certificates): see DESKTOP.md for the one-time "open anyway" steps.
 appId: com.niyazio.ledgerfox
 productName: LedgerFox
+electronVersion: 44.9.2
 copyright: "Copyright © LedgerFox contributors. MIT licence."
 directories:
   output: release
@@ -43,4 +44,8 @@ linux:
   target: [AppImage]
   category: Office
   artifactName: LedgerFox-linux-${arch}.${ext}
-publish: null
+# Update metadata (latest.yml) for in-app auto-update from GitHub Releases.
+publish:
+  provider: github
+  owner: Niyazio
+  repo: ledgerfox

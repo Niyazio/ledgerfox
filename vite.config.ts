@@ -19,7 +19,7 @@ function precacheManifest(): Plugin {
 }
 
 export default defineConfig({
-  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID), __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? "0.0.0") },
   root: "src/web",
   publicDir: fileURLToPath(new URL("./public", import.meta.url)),
   plugins: [react(), tailwindcss(), precacheManifest()],

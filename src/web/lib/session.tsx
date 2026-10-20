@@ -8,7 +8,7 @@ export interface Me {
   companies: { id: string; name: string; org_id: string; base_currency: string; country: string; business_type?: string; is_demo?: number }[];
   brand: string;
   /** "desktop" when running from a data file on a PC/Mac. */
-  edition?: "cloud" | "desktop";
+  edition?: "cloud" | "desktop" | "offline";
   registration?: "open" | "closed";
   /** Desktop only, on the computer itself: the default admin / admin sign-in has not been changed yet. */
   default_login?: boolean;

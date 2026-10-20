@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import QRCode from "qrcode";
 import { ArrowLeft, Printer, Share2 } from "lucide-react";
@@ -22,6 +22,9 @@ export const FORMATS = {
 } as const;
 export type Format = keyof typeof FORMATS;
 type Kind = "document" | "payment" | "payslip";
+
+/** Logo and the business's own payment QR image, loaded once per preview. */
+const BrandingCtx = createContext<{ logo: string | null; payment_qr: string | null }>({ logo: null, payment_qr: null });
 
 function useQr(text: string | null, size = 220) {
   const [src, setSrc] = useState<string | null>(null);
@@ -74,14 +77,18 @@ function Qr({ src, label, size = 96 }: { src: string | null; label: string; size
 
 function CompanyBlock({ thermal, center }: { thermal?: boolean; center?: boolean }) {
   const { settings } = useCompany();
+  const { logo } = useContext(BrandingCtx);
   const co = settings!.company;
   const india = co.country === "IN";
   return (
-    <div className={center ? "text-center" : ""}>
+    <div className={`${center ? "text-center" : ""} ${logo && !center ? "flex items-start gap-4" : ""}`}>
+      {logo && <img src={logo} alt="" className={thermal ? "mx-auto mb-1 max-h-12 max-w-[60%] object-contain grayscale" : center ? "mx-auto mb-2 max-h-16 max-w-[40%] object-contain" : "max-h-20 max-w-[140px] object-contain"} />}
+      <div>
       <p className={thermal ? "text-[13px] font-bold" : "text-xl font-bold tracking-tight"}>{co.legal_name || co.name}</p>
       <p className="whitespace-pre-line text-slate-600">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code && india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : null].filter(Boolean).join(thermal ? ", " : "\n")}</p>
       {co.tax_id && <p>{india ? "GSTIN" : "Tax ID"}: <b className="font-mono">{co.tax_id}</b></p>}
       {(co.phone || co.email) && <p className="text-slate-600">{[co.phone, co.email].filter(Boolean).join(" · ")}</p>}
+      </div>
     </div>
   );
 }
@@ -102,7 +109,11 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   const upiText = d && sales && d.doc_type === "invoice" && co.upi_id && cur === "INR" && outstanding > 0
     ? `upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.legal_name || co.name)}&am=${(outstanding / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Invoice ${d.number ?? ""}`)}`
     : null;
-  const upi = useQr(showQr ? upiText : null);
+  const generatedUpi = useQr(showQr ? upiText : null);
+  const { payment_qr } = useContext(BrandingCtx);
+  // The business's own QR image (fixed, no amount) takes precedence; otherwise a UPI QR with the balance due.
+  const upi = showQr && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
+  const payLabel = payment_qr && upi === payment_qr ? `Scan to pay${co.upi_id ? ` · ${co.upi_id}` : ""}` : null;
   if (error) return <Alert>{error}</Alert>;
   if (!d) return <Spinner />;
   const df = co.date_format;
@@ -137,7 +148,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         {d.round_off !== 0 && <Row k="Round off" v={money(d.round_off, cur)} />}
         <p className="mt-1 flex justify-between border-y border-dashed border-slate-500 py-1 text-[13px] font-bold"><span>TOTAL</span><span>{money(d.total, cur)}</span></p>
         <p className="mt-1 text-[10px]">{words}</p>
-        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label="Scan to pay (UPI)" size={110} /><Qr src={verify} label="Scan to verify" size={90} /></div>
+        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? "Scan to pay (UPI)"} size={110} /><Qr src={verify} label="Scan to verify" size={90} /></div>
         {watermark && <p className="mt-2 text-center font-bold">*** {watermark} ***</p>}
         <p className="mt-2 text-center">Thank you! Visit again.</p>
       </Sheet>
@@ -211,7 +222,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
             <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Amount in words</p><p className="font-medium">{words}</p></div>
             {d.notes && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes</p><p className="whitespace-pre-line">{d.notes}</p></div>}
             {d.terms && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Terms &amp; conditions</p><p className="whitespace-pre-line text-slate-600">{d.terms}</p></div>}
-            <div className="flex gap-4 pt-1"><Qr src={upi} label={`Scan to pay ${money(outstanding, cur)} by UPI`} size={104} /><Qr src={verify} label="Scan to verify this document" size={92} /></div>
+            <div className="flex gap-4 pt-1"><Qr src={upi} label={payLabel ? `${payLabel} · ${money(outstanding, cur)} due` : `Scan to pay ${money(outstanding, cur)} by UPI`} size={104} /><Qr src={verify} label="Scan to verify this document" size={92} /></div>
           </div>
           <div className="w-72">
             <dl className={`space-y-1 ${classic ? "border-2 border-slate-800 p-3" : "rounded-lg bg-slate-50 p-4"}`}>
@@ -374,7 +385,8 @@ const Td = ({ children, r, c }: { children: ReactNode; r?: boolean; c?: boolean 
 function PrintInner() {
   const { kind, id } = useParams() as { kind: Kind; id: string };
   const [params, setParams] = useSearchParams();
-  const { settings } = useCompany();
+  const { settings, path } = useCompany();
+  const branding = useApi<{ logo: string | null; payment_qr: string | null }>(path("/settings/branding"));
   const def = (settings?.company.print_template as Format | undefined) ?? "modern";
   const format = (params.get("format") as Format | null) ?? (kind === "payment" ? "a5" : def in FORMATS ? def : "modern");
   const [showQr, setShowQr] = useState(true);
@@ -397,11 +409,13 @@ function PrintInner() {
         <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / Save PDF</button>
       </div>
       <p className="no-print px-4 py-2 text-center text-xs muted">Preview. Choose “Save as PDF” in the print dialog for a PDF. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
+      <BrandingCtx.Provider value={branding.data ?? { logo: null, payment_qr: null }}>
       <div className="px-2 print:px-0">
         {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} />}
         {kind === "payment" && <PaymentPrint id={id} format={format} showQr={showQr} />}
         {kind === "payslip" && <PayslipPrint id={id} format={format} showQr={showQr} />}
       </div>
+      </BrandingCtx.Provider>
     </div>
   );
 }

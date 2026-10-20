@@ -57,6 +57,31 @@ Cloudflare's official GitHub releases. You get an `https://<random>.trycloudflar
   for free with a small relay on the existing Cloudflare Workers account, or with named Cloudflare Tunnels on each
   client's own Cloudflare account; see PROJECT_STATUS.md.
 
+## Automatic updates
+
+- **Windows and Linux:** LedgerFox checks GitHub Releases at start-up and every 6 hours, downloads new versions in the
+  background and asks to restart. Help → Check for updates… checks immediately.
+- **macOS:** macOS only lets signed apps replace themselves (Apple Developer ID, US$99/year), so LedgerFox shows a
+  "new version available" message with a link to the download page instead.
+- Updates never touch your data file.
+
+## Cloud backup (automatic, encrypted, free)
+
+Settings → **Cloud backup** (owner/admin, on the computer itself): sign in with a free LedgerFox Cloud account once
+and choose a backup passphrase. Every day while the computer is online, LedgerFox compresses and encrypts the data
+file (AES-256-GCM, key derived from your passphrase with scrypt) and uploads it to your cloud account. The website
+only stores unreadable bytes; the newest 5 backups are kept. If the computer is offline it retries hourly, and the
+local daily backups continue regardless. **Keep the passphrase safe** — without it the cloud copies cannot be
+restored. Restore writes the backup as a new data file next to the current one.
+
+## Copy data to a phone (view-only, works offline)
+
+On the computer: **Access → Copy data to phone (view-only)…** shows a one-time QR code (valid 10 minutes). In the
+LedgerFox Android app tap **Scan QR code**: the phone saves a copy of the data file and opens the full LedgerFox
+screens from it, with no internet needed. Sign in with your usual username and password. The copy is view-only
+(changes are refused with a message); scan a new code to refresh it. Login sessions, recovery codes and backup keys
+are removed from the copy.
+
 ## Android app
 
 `LedgerFox-android.apk` (from the download page) opens LedgerFox Cloud or your office computer. On the computer turn on
