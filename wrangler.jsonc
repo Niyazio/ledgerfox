@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "arthika",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "f246d8db-3320-40ad-a45c-5b0b9d893add",
       "migrations_dir": "migrations"
     }
   ],

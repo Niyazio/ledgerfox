@@ -7,7 +7,7 @@ served on your own subdomain through a Workers **Custom Domain** (DNS record + T
 
 - Cloudflare account (connected): 18 existing Workers, including one named `accounting` (its source could not be read
   through the connector). **It was not modified.** This app deploys as a new Worker named `arthika`.
-- No D1 databases and no Hyperdrive configs exist yet.
+- No D1 databases or Hyperdrive configs existed; the `arthika` D1 database was created (free, empty) and migrated.
 - Vercel account (connected): no projects, no domains.
 - GitHub: this session cannot create repositories; it can only push to repositories you attach.
 - The build container cannot reach the Cloudflare API, so the first deploy must be done through the dashboard
@@ -23,12 +23,11 @@ served on your own subdomain through a Workers **Custom Domain** (DNS record + T
 
 ## One-time setup
 
-### 1. Create the D1 database
+### 1. D1 database — ✅ done
 
-Dashboard → **Storage & Databases → D1 → Create** → name `arthika` (location hint: Asia-Pacific for India).
-Or locally: `npx wrangler d1 create arthika`.
-
-Copy the **Database ID** into `wrangler.jsonc` (`d1_databases[0].database_id`) and commit.
+Created on 20 Oct 2026: `arthika`, ID `f246d8db-3320-40ad-a45c-5b0b9d893add`, primary location APAC.
+The ID is already in `wrangler.jsonc`, and both migrations are applied and recorded in `d1_migrations`.
+(To recreate elsewhere: `npx wrangler d1 create arthika`, put the new ID in `wrangler.jsonc`.)
 
 ### 2. Connect the repository (Workers Builds)
 
@@ -103,7 +102,7 @@ as structured JSON with a request ID, which is also returned to the user in the 
 
 | What | Status |
 |---|---|
-| Backup script `scripts/backup.sh` (`wrangler d1 export --remote`) | Written; **not yet run against production** (no production DB exists yet) |
+| Backup script `scripts/backup.sh` (`wrangler d1 export --remote`) | Written; **not yet run against production** (the production DB holds no business data yet) |
 | Restore verification `scripts/restore-test.sh` | **Tested** on 20 Oct 2026 against a local export: restored into a fresh database, 0 unbalanced entries, every company's ledger nets to 0 |
 | Per-company JSON export (Settings → Data export) | Implemented and tested (owner/admin only) |
 

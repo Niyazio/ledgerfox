@@ -59,7 +59,7 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 
 ## Next highest-priority tasks
 
-1. Production deploy + custom domain + first real backup (needs your GitHub repo and Cloudflare dashboard steps).
+1. Production deploy + custom domain + first real backup (database is ready; needs your GitHub repo and the Cloudflare dashboard steps).
 2. GSTR-1 / GSTR-3B summary exports in the portal's JSON/Excel layouts (data is already captured per line).
 3. TOTP multi-factor authentication.
 4. Unrealised FX revaluation and cross-currency payment allocation.

@@ -4,7 +4,8 @@ Engine: Cloudflare D1 (SQLite). Migrations: `migrations/0001_core.sql`, `migrati
 (applied with `wrangler d1 migrations apply arthika`). Both have been applied successfully with wrangler to a local D1
 and are applied by the test harness to every test database.
 
-**Migration status (remote):** not yet applied — the production D1 database has not been created (see DEPLOYMENT.md).
+**Migration status (remote):** ✅ both migrations applied on 20 Oct 2026 to the production D1 database `arthika`
+(`f246d8db-3320-40ad-a45c-5b0b9d893add`, APAC) and recorded in `d1_migrations`; 24 triggers verified present.
 
 ## Conventions
 
