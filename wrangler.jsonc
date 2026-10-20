@@ -26,6 +26,7 @@
     "BRAND_NAME": "LedgerFox",
     "APP_ENV": "production",
     "PBKDF2_ITERATIONS": "50000",
-    "ALLOW_REGISTRATION": "true"
+    "ALLOW_REGISTRATION": "true",
+    "GITHUB_REPO": "Niyazio/ledgerfox"
   }
 }
