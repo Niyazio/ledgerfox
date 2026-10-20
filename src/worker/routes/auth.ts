@@ -13,8 +13,9 @@ const password = z.string().min(10, "Use at least 10 characters").max(200);
 const email = z.string().trim().toLowerCase().email().max(254);
 
 function iterations(env: AppEnv["Bindings"]) {
-  const n = parseInt(env.PBKDF2_ITERATIONS ?? "100000", 10);
-  return Number.isFinite(n) && n >= 1000 ? n : 100000;
+  // Default sized for the Workers Free plan's 10 ms CPU budget; see SECURITY.md.
+  const n = parseInt(env.PBKDF2_ITERATIONS ?? "50000", 10);
+  return Number.isFinite(n) && n >= 1000 ? Math.min(n, 100000) : 50000;
 }
 
 async function makeRecoveryCodes(db: D1Database, userId: string) {
@@ -60,6 +61,11 @@ auth.post("/login", async (c) => {
     throw unauthorized("Invalid email or password");
   }
   if (user.is_disabled || !(await verifyPassword(input.password, user))) throw unauthorized("Invalid email or password");
+  // Transparently upgrade hashes when the configured work factor increases.
+  if (user.password_iters < iterations(c.env)) {
+    const h = await hashPassword(input.password, iterations(c.env));
+    await run(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, updated_at = ? WHERE id = ?`, h.hash, h.salt, h.iterations, nowIso(), user.id);
+  }
   await createSession(c, user.id);
   return c.json({ user: { id: user.id, email: user.email, name: user.name } });
 });

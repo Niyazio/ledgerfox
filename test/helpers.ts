@@ -57,7 +57,7 @@ export class Client {
       if (m) this.cookie = m[2] ? `${m[1]}=${m[2]}` : "";
     }
     const text = await res.text();
-    let json: any = null;
+    let json: any;
     try { json = text ? JSON.parse(text) : null; } catch { json = text; }
     return { status: res.status, json, headers: res.headers };
   }

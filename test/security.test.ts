@@ -204,3 +204,17 @@ describe("input validation and attachments", () => {
     expect((await bClient.get(`/api/c/${bCompany}/attachments/${up.json.id}`)).status).toBe(404);
   });
 });
+
+describe("password hash upgrade", () => {
+  it("re-hashes with a higher work factor on successful login", async () => {
+    const { email } = await register(A.env, "Upgrade Me");
+    const before = await A.env.DB.prepare(`SELECT password_iters FROM users WHERE email = ?`).bind(email).first<{ password_iters: number }>();
+    const env2 = { ...A.env, PBKDF2_ITERATIONS: "2000" };
+    const c = new Client(env2);
+    expect((await c.post("/api/auth/login", { email, password: "correct horse battery" })).status).toBe(200);
+    const after = await A.env.DB.prepare(`SELECT password_iters FROM users WHERE email = ?`).bind(email).first<{ password_iters: number }>();
+    expect(before!.password_iters).toBe(1000);
+    expect(after!.password_iters).toBe(2000);
+    expect((await new Client(env2).post("/api/auth/login", { email, password: "correct horse battery" })).status).toBe(200);
+  });
+});

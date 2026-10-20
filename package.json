@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Arthika — free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
+  "description": "Arthika \u2014 free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "npm run build && wrangler dev",
@@ -16,7 +16,9 @@
     "db:migrate:local": "wrangler d1 migrations apply arthika --local",
     "db:migrate:remote": "wrangler d1 migrations apply arthika --remote",
     "deploy": "wrangler d1 migrations apply arthika --remote && wrangler deploy",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "test:e2e": "node scripts/e2e.mjs",
+    "backup": "bash scripts/backup.sh"
   },
   "engines": {
     "node": ">=20"
@@ -41,6 +43,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "miniflare": "^4.20260730.0",
+    "playwright-core": "^1.60.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.0",

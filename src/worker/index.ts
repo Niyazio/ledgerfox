@@ -18,8 +18,8 @@ import assets from "./routes/assets";
 import reports from "./routes/reports";
 import files from "./routes/files";
 import exportdata from "./routes/exportdata";
+import { VERSION } from "./version";
 
-export const VERSION = "0.1.0";
 
 const app = new Hono<AppEnv>();
 

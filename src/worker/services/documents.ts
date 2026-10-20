@@ -16,7 +16,7 @@ import { newId } from "../lib/crypto";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { audit } from "../lib/auth";
 import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, type LineInput } from "./ledger";
-import { companyPosition, defaultWarehouse, issueCost, planIssues, stockMoveStmt } from "./inventory";
+import { companyPosition, defaultWarehouse, planIssues, stockMoveStmt } from "./inventory";
 import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike, type TaxMode } from "@shared/tax";
 import { convertToBase, roundToWhole, RATE_SCALE_NUM, divRound } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";

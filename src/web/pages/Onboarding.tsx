@@ -1,0 +1,126 @@
+import { useState, type FormEvent } from "react";
+import { Navigate, useNavigate, Link } from "react-router";
+import { api } from "../lib/api";
+import { useAction } from "../lib/hooks";
+import { useSession } from "../lib/session";
+import { Alert, Button, Card, Field, Input, Select, Spinner } from "../components/ui";
+import { Logo } from "../components/Layout";
+import { INDIA_STATES } from "@shared/tax";
+import { CURRENCY_OPTIONS } from "../components/pickers";
+
+const COUNTRIES: [string, string, string, number][] = [
+  ["IN", "India", "INR", 4], ["AE", "United Arab Emirates", "AED", 1], ["SA", "Saudi Arabia", "SAR", 1], ["US", "United States", "USD", 1],
+  ["GB", "United Kingdom", "GBP", 4], ["SG", "Singapore", "SGD", 1], ["AU", "Australia", "AUD", 7], ["CA", "Canada", "CAD", 1],
+  ["NP", "Nepal", "NPR", 7], ["LK", "Sri Lanka", "LKR", 4], ["BD", "Bangladesh", "BDT", 7], ["MY", "Malaysia", "MYR", 1],
+  ["KE", "Kenya", "KES", 7], ["ZA", "South Africa", "ZAR", 3], ["DE", "Germany", "EUR", 1], ["QA", "Qatar", "QAR", 1],
+];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any) => void; busy: boolean; withOrg?: boolean }) {
+  const [v, setV] = useState({ org: "", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
+  const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const company = { name: v.name, legal_name: v.legal_name || null, country: v.country, base_currency: v.base_currency, fiscal_year_start_month: Number(v.fiscal_year_start_month),
+      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null };
+    onSubmit(withOrg ? { name: v.org || v.name, company } : company);
+  };
+  return (
+    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      {withOrg && <Field label="Organisation name" hint="Groups your companies and team. You can add more companies later." className="sm:col-span-2">{(id) => <Input id={id} value={v.org} placeholder="e.g. Sharma Group" onChange={(e) => set("org", e.target.value)} />}</Field>}
+      <Field label="Company name" required>{(id) => <Input id={id} required value={v.name} onChange={(e) => set("name", e.target.value)} />}</Field>
+      <Field label="Legal name">{(id) => <Input id={id} value={v.legal_name} onChange={(e) => set("legal_name", e.target.value)} />}</Field>
+      <Field label="Country" required hint="Determines the default tax setup and chart of accounts.">{(id) => (
+        <Select id={id} value={v.country} onChange={(e) => { const c = COUNTRIES.find((x) => x[0] === e.target.value)!; setV((p) => ({ ...p, country: c[0], base_currency: c[2], fiscal_year_start_month: c[3], state_code: "", tax_id: "" })); }}>
+          {COUNTRIES.map((c) => <option key={c[0]} value={c[0]}>{c[1]}</option>)}
+        </Select>
+      )}</Field>
+      <Field label="Base currency" required hint="Cannot be changed later.">{(id) => (
+        <Select id={id} value={v.base_currency} onChange={(e) => set("base_currency", e.target.value)}>{CURRENCY_OPTIONS.map((c) => <option key={c}>{c}</option>)}</Select>
+      )}</Field>
+      <Field label="Financial year starts in" required>{(id) => (
+        <Select id={id} value={v.fiscal_year_start_month} onChange={(e) => set("fiscal_year_start_month", e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</Select>
+      )}</Field>
+      {v.country === "IN" ? (
+        <>
+          <Field label="State (place of business)" hint="Decides CGST+SGST vs IGST on invoices.">{(id) => (
+            <Select id={id} value={v.state_code} onChange={(e) => set("state_code", e.target.value)}>
+              <option value="">Select state…</option>
+              {Object.entries(INDIA_STATES).filter(([k]) => Number(k) < 90).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}
+            </Select>
+          )}</Field>
+          <Field label="GSTIN" hint="Optional. Validated including the check digit.">{(id) => <Input id={id} value={v.tax_id} maxLength={15} className="font-mono uppercase" onChange={(e) => { set("tax_id", e.target.value); if (e.target.value.length >= 2 && !v.state_code) set("state_code", e.target.value.slice(0, 2)); }} />}</Field>
+        </>
+      ) : (
+        <Field label="Tax registration number">{(id) => <Input id={id} value={v.tax_id} onChange={(e) => set("tax_id", e.target.value)} />}</Field>
+      )}
+      <Field label="Address" className="sm:col-span-2">{(id) => <Input id={id} value={v.address} onChange={(e) => set("address", e.target.value)} />}</Field>
+      <Field label="City">{(id) => <Input id={id} value={v.city} onChange={(e) => set("city", e.target.value)} />}</Field>
+      <Field label="Postal code">{(id) => <Input id={id} value={v.postal_code} onChange={(e) => set("postal_code", e.target.value)} />}</Field>
+      <Field label="Phone">{(id) => <Input id={id} value={v.phone} onChange={(e) => set("phone", e.target.value)} />}</Field>
+      <Field label="Email">{(id) => <Input id={id} type="email" value={v.email} onChange={(e) => set("email", e.target.value)} />}</Field>
+      <div className="sm:col-span-2"><Button type="submit" loading={busy}>Create company</Button></div>
+    </form>
+  );
+}
+
+/** /app — pick a company, or create the first organisation + company. */
+export function AppHome() {
+  const { me, loading, refresh } = useSession();
+  const nav = useNavigate();
+  const { busy, error, run } = useAction();
+  if (loading) return <Spinner />;
+  if (!me?.user) return <Navigate to="/login?next=/app" replace />;
+  if (me.companies.length === 1) return <Navigate to={`/app/${me.companies[0].id}/dashboard`} replace />;
+  if (me.companies.length > 1) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-10">
+        <div className="mb-6 flex items-center gap-2 text-lg font-semibold"><Logo />{me.brand}</div>
+        <h1 className="mb-4 text-2xl font-semibold">Choose a company</h1>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {me.companies.map((c) => (
+            <Link key={c.id} to={`/app/${c.id}/dashboard`} className="card p-4 hover:border-brand-500">
+              <p className="font-medium">{c.name}</p><p className="text-xs muted">{c.country} · {c.base_currency}</p>
+            </Link>
+          ))}
+        </div>
+        <Link to="/app/new-company" className="mt-4 inline-block text-sm text-brand-700 hover:underline dark:text-brand-300">+ Add another company</Link>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-10">
+      <div className="mb-6 flex items-center gap-2 text-lg font-semibold"><Logo />{me.brand}</div>
+      <h1 className="text-2xl font-semibold">Set up your first company</h1>
+      <p className="mb-6 mt-1 text-sm muted">We'll create a chart of accounts, tax codes, numbering and the current financial year. Everything can be adjusted later.</p>
+      {error && <Alert className="mb-4">{error}</Alert>}
+      <Card><CompanyForm withOrg busy={busy} onSubmit={async (v) => {
+        const r = await run(() => api.post<{ company_id: string }>("/api/orgs", v));
+        if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
+      }} /></Card>
+    </div>
+  );
+}
+
+export function NewCompany() {
+  const { me, refresh } = useSession();
+  const nav = useNavigate();
+  const { busy, error, run } = useAction();
+  const [org, setOrg] = useState(me?.organisations[0]?.org_id ?? "");
+  if (!me?.user) return <Navigate to="/login" replace />;
+  if (!me.organisations.length) return <Navigate to="/app" replace />;
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-10">
+      <Link to="/app" className="text-sm muted hover:underline">← Back</Link>
+      <h1 className="mb-6 mt-2 text-2xl font-semibold">Add a company</h1>
+      {error && <Alert className="mb-4">{error}</Alert>}
+      {me.organisations.length > 1 && (
+        <Field label="Organisation" className="mb-4">{(id) => <Select id={id} value={org} onChange={(e) => setOrg(e.target.value)}>{me.organisations.map((o) => <option key={o.org_id} value={o.org_id}>{o.org_name}</option>)}</Select>}</Field>
+      )}
+      <Card><CompanyForm busy={busy} onSubmit={async (v) => {
+        const r = await run(() => api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v));
+        if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
+      }} /></Card>
+    </div>
+  );
+}

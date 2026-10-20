@@ -22,7 +22,7 @@
   "vars": {
     "BRAND_NAME": "Arthika",
     "APP_ENV": "production",
-    "PBKDF2_ITERATIONS": "100000",
+    "PBKDF2_ITERATIONS": "50000",
     "ALLOW_REGISTRATION": "true"
   }
 }

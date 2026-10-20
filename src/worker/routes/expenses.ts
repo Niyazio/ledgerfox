@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../env";
 import { all, batch, bumpSequence, first, seqNumberExpr, stmt, nowIso, todayIso } from "../lib/db";
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
-import { body, isoDate, shortText, optId, minor, rate, pageParams, reqText } from "../lib/validate";
+import { body, isoDate, optId, minor, rate, pageParams, reqText } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, requirePerm } from "../lib/auth";
 import { can } from "@shared/permissions";
