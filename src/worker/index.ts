@@ -49,6 +49,22 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
+/** Where the download page sends people. Installers (~100 MB) live on GitHub Releases: free, and too big for Workers assets. */
+app.get("/api/downloads", (c) => {
+  const repo = c.env.GITHUB_REPO && /^[\w.-]+\/[\w.-]+$/.test(c.env.GITHUB_REPO) ? c.env.GITHUB_REPO : null;
+  const latest = repo ? `https://github.com/${repo}/releases/latest/download/` : null;
+  return c.json({
+    available: Boolean(repo),
+    releases_page: repo ? `https://github.com/${repo}/releases/latest` : null,
+    files: latest ? {
+      windows: `${latest}LedgerFox-Setup-x64.exe`,
+      mac_arm64: `${latest}LedgerFox-mac-arm64.dmg`,
+      mac_x64: `${latest}LedgerFox-mac-x64.dmg`,
+      linux: `${latest}LedgerFox-linux-x86_64.AppImage`,
+    } : null,
+  });
+});
+
 app.get("/api/health", async (c) => {
   let db = "ok";
   try {

@@ -35,6 +35,7 @@ const ReportIndex = lazy(() => named(import("./pages/Reports"), "ReportIndex"));
 const ReportRouter = lazy(() => named(import("./pages/Reports"), "ReportRouter"));
 const Statement = lazy(() => named(import("./pages/Reports"), "Statement"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Download = lazy(() => import("./pages/Download"));
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
@@ -59,6 +60,7 @@ function App() {
     <Suspense fallback={<Spinner />}>
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/download" element={<Download />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot" element={<Forgot />} />

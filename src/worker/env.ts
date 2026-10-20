@@ -7,6 +7,8 @@ export interface Env {
   APP_ENV?: string;
   PBKDF2_ITERATIONS?: string;
   ALLOW_REGISTRATION?: string;
+  /** "owner/repo" whose GitHub Releases host the desktop installers (download page). */
+  GITHUB_REPO?: string;
   /** Optional OpenAI-compatible endpoint for a self-hosted open-source model (e.g. Ollama). Disabled when unset. */
   LOCAL_LLM_URL?: string;
   LOCAL_LLM_MODEL?: string;

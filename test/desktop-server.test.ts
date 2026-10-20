@@ -77,3 +77,16 @@ describe("desktop server", () => {
     expect(n.n).toBe(1);
   });
 });
+
+describe("download links", () => {
+  it("are hidden until a GitHub repo is configured, then point at the latest release assets", async () => {
+    const { default: app } = await import("../src/worker/index");
+    const none = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never })).json() as { available: boolean };
+    expect(none.available).toBe(false);
+    const set = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never, GITHUB_REPO: "acme/ledgerfox" })).json() as { files: Record<string, string> };
+    expect(set.files.windows).toBe("https://github.com/acme/ledgerfox/releases/latest/download/LedgerFox-Setup-x64.exe");
+    expect(set.files.mac_arm64).toBe("https://github.com/acme/ledgerfox/releases/latest/download/LedgerFox-mac-arm64.dmg");
+    const bad = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never, GITHUB_REPO: "evil.com/x/y" })).json() as { available: boolean };
+    expect(bad.available).toBe(false);
+  });
+});

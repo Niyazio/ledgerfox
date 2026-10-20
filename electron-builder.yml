@@ -30,7 +30,7 @@ nsis:
   perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  artifactName: LedgerFox-Setup-${version}-${arch}.${ext}
+  artifactName: LedgerFox-Setup-${arch}.${ext}
 mac:
   target:
     - target: dmg
@@ -38,9 +38,9 @@ mac:
   category: public.app-category.finance
   # Ad-hoc signature only (Apple Developer ID costs money); required for Apple Silicon to launch at all.
   identity: "-"
-  artifactName: LedgerFox-${version}-${arch}.${ext}
+  artifactName: LedgerFox-mac-${arch}.${ext}
 linux:
   target: [AppImage]
   category: Office
-  artifactName: LedgerFox-${version}-${arch}.${ext}
+  artifactName: LedgerFox-linux-${arch}.${ext}
 publish: null

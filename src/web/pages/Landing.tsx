@@ -27,6 +27,7 @@ export default function Landing() {
         <span className="text-lg"><Wordmark brand={brand} iconClass="h-8 w-8" /></span>
         <nav className="flex items-center gap-2">
           <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Toggle theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+          <Link to="/download" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] sm:inline-block">Download</Link>
           <Link to="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Sign in</Link>
           <Link to="/register" className="rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800">Create account</Link>
         </nav>
@@ -44,7 +45,7 @@ export default function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/register" className="rounded-lg bg-brand-700 px-5 py-2.5 font-medium text-white hover:bg-brand-800">Get started</Link>
-              <Link to="/login" className="rounded-lg border border-[var(--border)] px-5 py-2.5 font-medium hover:bg-[var(--surface-2)]">Sign in</Link>
+              <Link to="/download" className="rounded-lg border border-[var(--border)] px-5 py-2.5 font-medium hover:bg-[var(--surface-2)]">Download for Windows / Mac</Link>
             </div>
           </div>
         </section>

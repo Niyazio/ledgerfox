@@ -71,6 +71,15 @@ BASE_URL=https://ledgerfox.niyazio.com node scripts/e2e.mjs   # creates a throwa
 Then sign up, save the recovery codes, and consider setting `ALLOW_REGISTRATION` to `"false"` in `wrangler.jsonc`
 once your team has accounts (invitations keep working).
 
+## Desktop installers on the website
+
+1. In GitHub: **Actions → Desktop installers → Run workflow** is a test build; to publish, create a tag/release
+   `v0.1.0` (e.g. **Releases → Draft a new release → tag v0.1.0 → Publish**, or `git tag v0.1.0 && git push --tags`).
+   The workflow builds Windows (.exe), macOS (.dmg ×2) and Linux on GitHub's free runners and attaches them to the release.
+2. Set `GITHUB_REPO` in `wrangler.jsonc` and deploy. `https://ledgerfox.niyazio.com/download` then offers the files,
+   picking Windows or Mac automatically. File names are stable (`LedgerFox-Setup-x64.exe`, `LedgerFox-mac-arm64.dmg`,
+   `LedgerFox-mac-x64.dmg`), so every new release updates the links with no website change.
+
 ## Every deploy
 
 Push to `main`: Workers Builds runs `npm run build` and `npm run deploy`. CI (`.github/workflows/ci.yml`, free
@@ -80,7 +89,9 @@ Manual deploy from a machine: `npm ci && npm run build && npm run deploy`.
 
 ## Environment variables
 
-Non-secret `vars` live in `wrangler.jsonc`: `BRAND_NAME`, `APP_ENV`, `PBKDF2_ITERATIONS`, `ALLOW_REGISTRATION`.
+Non-secret `vars` live in `wrangler.jsonc`: `BRAND_NAME`, `APP_ENV`, `PBKDF2_ITERATIONS`, `ALLOW_REGISTRATION`, and
+`GITHUB_REPO` (`owner/repo`; makes the `/download` page link to the latest GitHub Release installers — the repository
+must be public so visitors can download without a GitHub login).
 **No secrets are needed.** Do not put credentials in `wrangler.jsonc`; use `wrangler secret put` if any are added later.
 
 ## Observability
