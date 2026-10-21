@@ -127,8 +127,36 @@ function Timesheets() {
   );
 }
 
+function downloadText(name: string, text: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/** EPF ECR and ESIC files for a posted payroll (India). */
+function StatutoryFiles({ runId }: { runId: string }) {
+  const { path } = useCompany();
+  const f = useApi<{ period: string; ecr: { text: string; rows: any[]; problems: string[]; summary: Record<string, number> }; esi: { rows: any[]; problems: string[]; header: string[] } }>(path(`/payroll/runs/${runId}/statutory`));
+  if (!f.data) return null;
+  const { ecr, esi, period } = f.data;
+  const problems = [...ecr.problems, ...esi.problems];
+  const s = ecr.summary;
+  const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+  return (
+    <Card title="Statutory files">
+      {problems.length > 0 && <Alert kind="warning" className="mb-3"><ul className="ml-4 list-disc">{problems.map((p) => <li key={p}>{p}</li>)}</ul><p className="mt-1">Fix these on the employee and download again.</p></Alert>}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" disabled={!ecr.rows.length} onClick={() => downloadText(`ECR-${period}.txt`, ecr.text)}>EPF ECR ({ecr.rows.length})</Button>
+        <Button size="sm" variant="secondary" disabled={!esi.rows.length} onClick={() => downloadCsv(`ESIC-${period}.csv`, esi.header, esi.rows.map((r) => [r.ip_number, r.name, r.days, r.wages, r.reason, r.last_working_day]))}>ESIC contribution ({esi.rows.length})</Button>
+      </div>
+      {ecr.rows.length > 0 && <p className="mt-3 text-sm">EPF challan: A/c 1 {inr(s.ac1)} · A/c 2 {inr(s.ac2)} · A/c 10 {inr(s.ac10)} · A/c 21 {inr(s.ac21)} · <b>Total {inr(s.total)}</b></p>}
+      {esi.rows.length > 0 && <p className="mt-1 text-sm">ESIC: employee {inr(esi.rows.reduce((t, r) => t + r.employee_share, 0))} + employer {inr(esi.rows.reduce((t, r) => t + r.employer_share, 0))}</p>}
+      <p className="mt-2 text-xs muted">Upload the ECR at unifiedportal-emp.epfindia.gov.in; paste the ESIC rows into the portal's monthly contribution template. The portals check every figure; compare the first upload with your own calculation.</p>
+    </Card>
+  );
+}
+
 function RunView({ runId, onBack }: { runId: string; onBack: () => void }) {
-  const { path, money, can, id } = useCompany();
+  const { path, money, can, id, settings } = useCompany();
   const toast = useToast();
   const data = useApi<{ run: any; payslips: any[] }>(path(`/payroll/runs/${runId}`));
   const [pay, setPay] = useState<{ account_id: string; date: string } | null>(null);
@@ -154,6 +182,7 @@ function RunView({ runId, onBack }: { runId: string; onBack: () => void }) {
         {r.journal_entry_id && <Link className="self-center text-sm text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${r.journal_entry_id}`}>Salary journal</Link>}
         {r.payment_entry_id && <Link className="self-center text-sm text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${r.payment_entry_id}`}>Payment journal</Link>}
       </div>
+      {!draft && settings?.company.country === "IN" && <StatutoryFiles runId={runId} />}
       <Card padded={false} title="Payslips">
         <TableWrap><table className="table">
           <thead><tr><th>Employee</th><th className="num">Paid days</th><th className="num">Gross</th><th className="num">PF</th><th className="num">ESI</th><th className="num">PT</th><th className="num">TDS</th><th className="num">Other</th><th className="num">Net pay</th><th /></tr></thead>
@@ -251,6 +280,33 @@ function Report() {
   );
 }
 
+/** Form 24Q (TDS on salary) deductee rows for a quarter, for the NSDL Return Preparation Utility. */
+function Tds24q() {
+  const { path } = useCompany();
+  const toast = useToast();
+  const now = new Date();
+  const currentFy = now.getUTCMonth() < 3 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+  const [v, setV] = useState({ fy: String(currentFy), quarter: "1" });
+  const download = async () => {
+    try {
+      const r = await api.get<{ rows: any[]; header: string[]; problems: string[] }>(path(`/payroll/tds-24q?fy=${v.fy}&quarter=${v.quarter}`));
+      if (!r.rows.length) return toast("info", "No TDS was deducted in that quarter");
+      downloadCsv(`24Q-FY${v.fy}-Q${v.quarter}.csv`, r.header, r.rows.map((x) => [x.employee_ref, x.pan, x.name, x.section, x.payment_date, x.amount_paid, x.tds, x.deduction_date]));
+      if (r.problems.length) toast("error", r.problems.join("; "));
+    } catch (e) { toast("error", errorMessage(e)); }
+  };
+  return (
+    <Card title="TDS on salary — Form 24Q" className="mt-4">
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Financial year">{(fid) => <Select id={fid} value={v.fy} onChange={(e) => setV({ ...v, fy: e.target.value })}>{[0, 1, 2].map((k) => { const y = currentFy - k; return <option key={y} value={y}>{y}-{String(y + 1).slice(2)}</option>; })}</Select>}</Field>
+        <Field label="Quarter">{(fid) => <Select id={fid} value={v.quarter} onChange={(e) => setV({ ...v, quarter: e.target.value })}><option value="1">Q1 Apr–Jun</option><option value="2">Q2 Jul–Sep</option><option value="3">Q3 Oct–Dec</option><option value="4">Q4 Jan–Mar</option></Select>}</Field>
+        <Button variant="secondary" onClick={download}>Download deductee rows</Button>
+      </div>
+      <p className="mt-2 text-xs muted">Copy the rows into the deductee sheet of NSDL's free Return Preparation Utility, add the challan details, then validate with the FVU. LedgerFox does not file the return.</p>
+    </Card>
+  );
+}
+
 export default function Payroll() {
   const [tab, setTab] = useState<Tab>("runs");
   return (
@@ -260,7 +316,7 @@ export default function Payroll() {
       {tab === "runs" && <Runs />}
       {tab === "employees" && <Employees />}
       {tab === "timesheets" && <Timesheets />}
-      {tab === "report" && <Report />}
+      {tab === "report" && <><Report /><Tds24q /></>}
     </>
   );
 }
