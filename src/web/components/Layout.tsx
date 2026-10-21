@@ -101,6 +101,7 @@ const NAV: NavGroup[] = [
     { to: "reports/daily", label: "Daily report", icon: <CalendarRange className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/profit-loss", label: "Profit & loss", icon: <TrendingUp className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/balance-sheet", label: "Balance sheet", icon: <Scale className="h-4 w-4" />, perm: "reports.read" },
+    { to: "reports/gst-returns", label: "GST returns", icon: <Landmark className="h-4 w-4" />, perm: "reports.export" },
     { to: "reports", label: "All reports", icon: <BarChart3 className="h-4 w-4" />, perm: "reports.read" },
     { to: "insights", label: "Insights", icon: <Lightbulb className="h-4 w-4" />, perm: "reports.read" },
     { to: "settings?tab=audit", label: "Audit log", icon: <ShieldCheck className="h-4 w-4" />, perm: "audit.read" },

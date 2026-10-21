@@ -10,6 +10,7 @@ import { audit, requirePerm, resolveBranch } from "../lib/auth";
 import { formatMoney, currencyExponent } from "@shared/currencies";
 import { fiscalYearFor } from "../services/setup";
 import * as R from "../services/reports";
+import { companyGstins, gstr1, gstr1Sheets, gstr3b } from "../services/gstr";
 import { cashForecast, explainProfitAndLoss, unusualTransactions } from "../services/insights";
 
 const reports = new Hono<AppEnv>();
@@ -65,6 +66,34 @@ reports.get("/profit-loss", async (c) => {
     { income: prev.total_income, expense: prev.total_expense, lines: flat(prev) }, fmt,
   );
   return c.json({ ...cur, previous: { from: prevFrom, to: prevTo, net_profit: prev.net_profit, total_income: prev.total_income, total_expense: prev.total_expense }, explanation });
+});
+
+function gstOptions(c: Context<AppEnv>) {
+  consolidatedOnly(c);
+  const company = c.get("company");
+  if (company.country !== "IN") throw badRequest("GST returns apply to Indian companies only");
+  const period = c.req.query("period") ?? todayIso().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw badRequest("period must be YYYY-MM");
+  return { period, gstin: c.req.query("gstin") || null };
+}
+
+async function checkedGstin(c: Context<AppEnv>, opts: { period: string; gstin: string | null }) {
+  const company = c.get("company");
+  const list = await companyGstins(c.env.DB, company);
+  if (!list.length) throw badRequest("Add your GSTIN in Settings → Company (or on a branch) first");
+  if (opts.gstin && !list.includes(opts.gstin)) throw badRequest("That GSTIN is not one of this company's");
+  return { ...opts, gstin: opts.gstin ?? list[0] };
+}
+
+reports.get("/gstr1", async (c) => {
+  const opts = await checkedGstin(c, gstOptions(c));
+  const g = await gstr1(c.env.DB, c.get("company"), opts);
+  return c.json(c.req.query("format") === "sheets" ? { period: g.period, gstin: g.gstin, sheets: gstr1Sheets(g), warnings: g.warnings } : g);
+});
+
+reports.get("/gstr3b", async (c) => {
+  const opts = await checkedGstin(c, gstOptions(c));
+  return c.json(await gstr3b(c.env.DB, c.get("company"), opts));
 });
 
 reports.get("/daily", async (c) => {

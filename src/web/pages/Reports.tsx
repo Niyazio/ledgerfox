@@ -25,6 +25,7 @@ const REPORTS = [
   { key: "purchases-by-supplier", title: "Purchases by supplier", group: "Customers & suppliers", desc: "Billed amounts less debit notes, in base currency." },
   { key: "expenses", title: "Expense report", group: "Operations", desc: "Expenses by category from the ledger, plus claim status." },
   { key: "inventory-valuation", title: "Inventory valuation", group: "Operations", desc: "Stock quantity and value per item, reconciled to the ledger." },
+  { key: "gst-returns", title: "GSTR-1 / GSTR-3B", group: "Tax", desc: "Monthly returns prepared from your books: B2B, B2C, credit notes, HSN summary, documents issued, ITC. JSON for the GST offline tool and CSV sheets." },
   { key: "gst-summary", title: "Tax / GST summary", group: "Tax", desc: "Output and input tax by rate, and net payable from the ledger." },
   { key: "budgets", title: "Budget vs actual", group: "Planning", desc: "Compare budgets with posted results." },
 ];

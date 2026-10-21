@@ -29,6 +29,7 @@ const PaymentView = lazy(() => named(import("./pages/Payments"), "PaymentView"))
 const Expenses = lazy(() => import("./pages/Expenses"));
 const Daybook = lazy(() => import("./pages/Daybook"));
 const Labels = lazy(() => import("./pages/Labels"));
+const GstReturns = lazy(() => import("./pages/GstReturns"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Assets = lazy(() => import("./pages/Assets"));
@@ -107,6 +108,7 @@ function App() {
         <Route path="assets" element={<Assets />} />
         <Route path="reports" element={<ReportIndex />} />
         <Route path="reports/statement/:contactId" element={<Statement />} />
+        <Route path="reports/gst-returns" element={<GstReturns />} />
         <Route path="reports/:reportKey" element={<ReportRouter />} />
         <Route path="insights" element={<Insights />} />
         <Route path="settings" element={<Settings />} />
