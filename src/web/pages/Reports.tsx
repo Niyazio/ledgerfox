@@ -2,8 +2,9 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { Download, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useCompany } from "../lib/company";
+import { DateRangeFilter } from "../components/DateRange";
 import { useApi } from "../lib/hooks";
-import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap } from "../components/ui";
+import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap , Stat } from "../components/ui";
 import { AccountSelect, DimensionSelect } from "../components/pickers";
 import { downloadCsv } from "../lib/csv";
 import { DOC_LABELS, fmtDate, fyStart, qty, today, toInput } from "../lib/format";
@@ -12,6 +13,7 @@ import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
 
 const REPORTS = [
+  { key: "daily", title: "Daily report", group: "Daily tracking", desc: "Day by day: opening balance, income, expenses, money received and paid, closing balance. Any date range; download CSV or PDF." },
   { key: "profit-loss", title: "Profit & loss", group: "Financial statements", desc: "Income, cost of sales, expenses and net profit with comparison to the previous period." },
   { key: "balance-sheet", title: "Balance sheet", group: "Financial statements", desc: "Assets, liabilities and equity at a date, with computed retained earnings." },
   { key: "cash-flow", title: "Cash flow statement", group: "Financial statements", desc: "Indirect method; reconciles to the change in cash & bank balances." },
@@ -58,12 +60,9 @@ function useRange(kind: "range" | "asof" = "range") {
   const to = params.get("to") ?? today();
   const asOf = params.get("as_of") ?? today();
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); n.set(k, v); setParams(n, { replace: true }); };
-  const controls = kind === "range" ? (
-    <>
-      <Field label="From">{(id) => <Input id={id} type="date" value={from} onChange={(e) => set("from", e.target.value)} />}</Field>
-      <Field label="To">{(id) => <Input id={id} type="date" value={to} onChange={(e) => set("to", e.target.value)} />}</Field>
-    </>
-  ) : <Field label="As of">{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => set("as_of", e.target.value)} />}</Field>;
+  const controls = kind === "range"
+    ? <DateRangeFilter from={from} to={to} allowAll={false} onChange={(f, t) => { const n = new URLSearchParams(params); n.set("from", f || fyStart(settings?.company.fiscal_year_start_month ?? 4)); n.set("to", t || today()); setParams(n, { replace: true }); }} />
+    : <Field label="As of">{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => set("as_of", e.target.value)} />}</Field>;
   return { from, to, asOf, controls, params, set };
 }
 
@@ -100,6 +99,56 @@ function Loading({ r }: { r: { loading: boolean; error: string | null; data: unk
   if (r.error) return <Alert>{r.error}</Alert>;
   if (r.loading && !r.data) return <Spinner />;
   return null;
+}
+
+export function DailyReport() {
+  const { path, money, settings, branchQuery, branches, branch } = useCompany();
+  const [params, setParams] = useSearchParams();
+  const from = params.get("from") ?? today();
+  const to = params.get("to") ?? from;
+  const r = useApi<any>(path(`/reports/daily?from=${from}&to=${to}${branchQuery}`));
+  const d = r.data;
+  const df = settings?.company.date_format;
+  const cols: [string, string][] = [["opening", "Opening balance"], ["income", "Income"], ["expenses", "Expenses"], ["received", "Received from customers"], ["paid", "Paid to suppliers"], ["sales_invoiced", "Sales invoiced"], ["purchases_billed", "Purchases billed"], ["cash_in", "Total money in"], ["cash_out", "Total money out"], ["closing", "Closing balance"]];
+  const branchName = branch ? branches.find((b) => b.id === branch)?.name : "All branches";
+  const [activeOnly, setActiveOnly] = useState(true);
+  const moving = (row: any) => cols.some(([k]) => k !== "opening" && k !== "closing" && row[k]);
+  const shown = d ? d.rows.filter((row: any) => !activeOnly || moving(row)) : [];
+  const csv = () => d && downloadCsv(`daily-report-${from}-to-${to}.csv`, ["Date", ...cols.map(([, l]) => l)],
+    [...d.rows.map((row: any) => [row.date, ...cols.map(([k]) => toInput(row[k], settings!.company.base_currency))]),
+     ["Total", ...cols.map(([k]) => (k === "opening" ? toInput(d.totals.opening, settings!.company.base_currency) : k === "closing" ? toInput(d.totals.closing, settings!.company.base_currency) : toInput(d.totals[k], settings!.company.base_currency)))]]);
+  return (
+    <Shell title="Daily report" subtitle={`${fmtDate(from, df)} to ${fmtDate(to, df)} · ${branchName}`} onCsv={d ? csv : undefined}
+      controls={<>
+        <DateRangeFilter from={from} to={to} allowAll={false} onChange={(f, t) => { const n = new URLSearchParams(params); n.set("from", f || today()); n.set("to", t || f || today()); setParams(n, { replace: true }); }} />
+        <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} />Only days with activity</label>
+      </>}>
+      <Loading r={r} />
+      {d && <>
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="Opening balance (cash + bank)" value={money(d.totals.opening)} />
+          <Stat label="Income" value={money(d.totals.income)} />
+          <Stat label="Expenses" value={money(d.totals.expenses)} />
+          <Stat label={d.totals.profit >= 0 ? "Profit" : "Loss"} value={money(d.totals.profit)} />
+          <Stat label="Received from customers" value={money(d.totals.received)} />
+          <Stat label="Paid to suppliers" value={money(d.totals.paid)} />
+          <Stat label="Total money in / out" value={`${money(d.totals.cash_in)} / ${money(d.totals.cash_out)}`} />
+          <Stat label="Closing balance (cash + bank)" value={money(d.totals.closing)} />
+        </div>
+        <TableWrap><table className="table text-sm">
+          <thead><tr><th>Date</th>{cols.map(([k, l]) => <th key={k} className="num">{l}</th>)}</tr></thead>
+          <tbody>
+            {!shown.length && <tr><td colSpan={cols.length + 1} className="text-center muted">No transactions in this period.</td></tr>}
+            {shown.map((row: any) => (
+              <tr key={row.date}><td className="whitespace-nowrap">{fmtDate(row.date, df)}</td>{cols.map(([k]) => <td key={k} className={`num ${k === "opening" || k === "closing" ? "font-medium" : ""}`}>{row[k] ? money(row[k]) : <span className="muted">–</span>}</td>)}</tr>
+            ))}
+          </tbody>
+          <tfoot><tr className="font-semibold"><td>Total</td>{cols.map(([k]) => <td key={k} className="num">{money(k === "opening" ? d.totals.opening : k === "closing" ? d.totals.closing : d.totals[k])}</td>)}</tr></tfoot>
+        </table></TableWrap>
+        <p className="mt-3 text-xs muted">{d.notes}</p>
+      </>}
+    </Shell>
+  );
 }
 
 export function TrialBalance() {
@@ -490,6 +539,7 @@ export function Budgets() {
 export function ReportRouter() {
   const { reportKey } = useParams();
   switch (reportKey) {
+    case "daily": return <DailyReport />;
     case "trial-balance": return <TrialBalance />;
     case "profit-loss": return <ProfitLoss />;
     case "balance-sheet": return <BalanceSheet />;

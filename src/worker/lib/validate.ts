@@ -81,3 +81,14 @@ export function dateParam(c: Context, name: string, fallback: string): string {
   if (!r.success) throw badRequest(`${name} must be YYYY-MM-DD`);
   return v;
 }
+
+/** Optional `from` / `to` list filters (YYYY-MM-DD) as SQL on the given date column. */
+export function dateRange(c: Context, column: string): { sql: string[]; params: string[] } {
+  const sql: string[] = [];
+  const params: string[] = [];
+  const from = c.req.query("from"), to = c.req.query("to");
+  if (from) { sql.push(`${column} >= ?`); params.push(dateParam(c, "from", from)); }
+  if (to) { sql.push(`${column} <= ?`); params.push(dateParam(c, "to", to)); }
+  if (from && to && from > to) throw badRequest("The from date is after the to date");
+  return { sql, params };
+}

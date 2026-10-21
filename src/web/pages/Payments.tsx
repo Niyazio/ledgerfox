@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
+import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
+import { downloadCsv } from "../lib/csv";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
 import { isQueued, postOrQueue, randomKey } from "../lib/offline";
@@ -16,13 +18,29 @@ export function PaymentList() {
   const { direction = "in" } = useParams();
   const { path, money, id, settings, can, branchQuery } = useCompany();
   const [offset, setOffset] = useState(0);
-  const { data, loading, error } = useApi<{ payments: any[]; total: number }>(path(`/payments?direction=${direction}&limit=50&offset=${offset}${branchQuery}`));
+  const dates = useDateParams();
+  const filters = `/payments?direction=${direction}${branchQuery}${dates.query}`;
+  const { data, loading, error } = useApi<{ payments: any[]; total: number; summary?: { count: number; amount: number } }>(path(`${filters}&limit=50&offset=${offset}`));
   const title = direction === "in" ? "Receipts" : "Payments";
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows = await fetchAllRows<any>(path(filters), "payments");
+      downloadCsv(`${title.toLowerCase()}${dates.from ? `-${dates.from}` : ""}${dates.to ? `-to-${dates.to}` : ""}.csv`, ["Date", "Number", direction === "in" ? "Customer" : "Supplier", "Account", "Method", "Reference", "Status", "Currency", "Amount", "Unapplied"],
+        rows.map((p) => [p.payment_date, p.number, p.contact_name, p.account_name, p.method ?? "", p.reference ?? "", p.status, p.currency, toInput(p.amount, p.currency), p.status === "posted" ? toInput(p.amount - p.allocated, p.currency) : ""]));
+    } finally { setExporting(false); }
+  };
   return (
     <>
       <PageHeader title={title} subtitle={direction === "in" ? "Money received from customers" : "Money paid to suppliers"}
-        actions={can(direction === "in" ? "sales.post" : "purchase.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>} />
+        actions={<>
+          {data && <Button variant="secondary" loading={exporting} onClick={exportCsv}><Download className="h-4 w-4" />Download CSV</Button>}
+          {can(direction === "in" ? "sales.post" : "purchase.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>}
+        </>} />
       <Card padded={false}>
+        <div className="border-b border-[var(--border)] p-3"><DateRangeFilter from={dates.from} to={dates.to} onChange={(f, t) => { dates.set(f, t); setOffset(0); }} /></div>
+        {data?.summary && <SummaryBar items={[[title, String(data.summary.count)], [direction === "in" ? "Total received" : "Total paid", money(data.summary.amount)]]} />}
         {error && <Alert className="m-3">{error}</Alert>}
         {loading && !data ? <Spinner /> : data && !data.payments.length ? <EmptyState title={`No ${title.toLowerCase()} yet`} /> : data && (
           <TableWrap><table className="table">

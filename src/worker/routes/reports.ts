@@ -67,6 +67,16 @@ reports.get("/profit-loss", async (c) => {
   return c.json({ ...cur, previous: { from: prevFrom, to: prevTo, net_profit: prev.net_profit, total_income: prev.total_income, total_expense: prev.total_expense }, explanation });
 });
 
+reports.get("/daily", async (c) => {
+  const company = c.get("company");
+  const today = todayIso();
+  const from = dateParam(c, "from", today);
+  const to = dateParam(c, "to", from);
+  if (from > to) throw badRequest("The from date is after the to date");
+  if ((Date.parse(to) - Date.parse(from)) / 86400_000 > 366) throw badRequest("Choose at most one year");
+  return c.json(await R.dailyReport(c.env.DB, company, from, to, reportBranch(c)));
+});
+
 reports.get("/balance-sheet", async (c) => {
   const asOf = dateParam(c, "as_of", todayIso());
   return c.json(await R.balanceSheet(c.env.DB, c.get("company"), asOf, { branch_id: reportBranch(c) }));

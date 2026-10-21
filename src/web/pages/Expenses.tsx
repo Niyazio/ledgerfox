@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
-import { Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
+import { Link } from "react-router";
+import { Download, Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
+import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { useApi, useAction, useDebounced } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Tabs, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
+import { downloadCsv } from "../lib/csv";
 
 function Attachments({ entityId, canEdit }: { entityId: string; canEdit: boolean }) {
   const { path } = useCompany();
@@ -126,13 +128,24 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
 
 export default function Expenses() {
   const { path, money, settings, can, branchQuery } = useCompany();
-  const [params, setParams] = useSearchParams();
+  const dates = useDateParams();
+  const { params, setParams } = dates;
   const toast = useToast();
   const [tab, setTab] = useState<"list" | "templates">("list");
   const status = params.get("status") ?? "";
   const [offset, setOffset] = useState(0);
   const [editing, setEditing] = useState<any>(null);
-  const { data, loading, error, reload } = useApi<{ expenses: any[]; total: number }>(path(`/expenses?limit=50&offset=${offset}&status=${status}${branchQuery}`));
+  const filters = `/expenses?status=${status}${branchQuery}${dates.query}`;
+  const { data, loading, error, reload } = useApi<{ expenses: any[]; total: number; summary?: { count: number; amount: number } }>(path(`${filters}&limit=50&offset=${offset}`));
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows = await fetchAllRows<any>(path(filters), "expenses");
+      downloadCsv(`expenses${dates.from ? `-${dates.from}` : ""}${dates.to ? `-to-${dates.to}` : ""}.csv`, ["Date", "Number", "Description", "Category", "Paid from", "Supplier", "Status", "Currency", "Total", "Created by"],
+        rows.map((e) => [e.expense_date, e.number ?? "", e.description, e.category_name, e.paid_from_name, e.contact_name ?? "", e.status, e.currency, toInput(e.total, e.currency), e.created_by_name ?? ""]));
+    } finally { setExporting(false); }
+  };
   const templates = useApi<{ templates: any[] }>(tab === "templates" ? path("/expenses/templates") : null);
   useEffect(() => {
     const open = params.get("open");
@@ -142,15 +155,20 @@ export default function Expenses() {
   return (
     <>
       <PageHeader title="Expenses" subtitle="Record spending, attach receipts and route claims for approval before they post."
-        actions={can("expense.create") && <Button onClick={() => setEditing("new")}><Plus className="h-4 w-4" />New expense</Button>} />
+        actions={<>
+          {tab === "list" && data && <Button variant="secondary" loading={exporting} onClick={exportCsv}><Download className="h-4 w-4" />Download CSV</Button>}
+          {can("expense.create") && <Button onClick={() => setEditing("new")}><Plus className="h-4 w-4" />New expense</Button>}
+        </>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "list", label: "Expenses" }, { value: "templates", label: "Recurring templates" }]} />
       {tab === "list" ? (
         <Card padded={false}>
-          <div className="border-b border-[var(--border)] p-3">
-            <Select className="max-w-[14rem]" value={status} onChange={(e) => { setParams(e.target.value ? { status: e.target.value } : {}); setOffset(0); }} aria-label="Status filter">
+          <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
+            <DateRangeFilter from={dates.from} to={dates.to} onChange={(f, t) => { dates.set(f, t); setOffset(0); }} />
+            <Select className="max-w-[14rem]" value={status} onChange={(e) => { const n = new URLSearchParams(params); if (e.target.value) n.set("status", e.target.value); else n.delete("status"); setParams(n, { replace: true }); setOffset(0); }} aria-label="Status filter">
               <option value="">All</option><option value="draft">Draft</option><option value="submitted">Awaiting approval</option><option value="rejected">Rejected</option><option value="posted">Posted</option>
             </Select>
           </div>
+          {data?.summary && <SummaryBar items={[["Expenses", String(data.summary.count)], ["Posted total", money(data.summary.amount)]]} />}
           {error && <Alert className="m-3">{error}</Alert>}
           {loading && !data ? <Spinner /> : data && !data.expenses.length ? <EmptyState title="No expenses" /> : data && (
             <TableWrap><table className="table">
