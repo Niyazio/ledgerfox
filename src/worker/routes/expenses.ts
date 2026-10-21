@@ -6,8 +6,7 @@ import { all, batch, bumpSequence, first, seqNumberExpr, stmt, nowIso, todayIso 
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, optId, minor, rate, pageParams, reqText } from "../lib/validate";
 import { newId } from "../lib/crypto";
-import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
-import { can } from "@shared/permissions";
+import { assertBranchVisible, audit, changes, branchFilter, hasPerm, requireAnyPerm, requirePerm, resolveBranch } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
 import { computeLine, resolveTaxMode, schemeForCountry, type TaxCodeLike } from "@shared/tax";
 import { convertToBase } from "@shared/money";
@@ -31,6 +30,7 @@ const schema = z.object({
   department_id: optId,
   project_id: optId,
   cost_centre_id: optId,
+  branch_id: optId,
 });
 
 async function compute(c: Context<AppEnv>, input: z.infer<typeof schema>) {
@@ -64,6 +64,19 @@ async function compute(c: Context<AppEnv>, input: z.infer<typeof schema>) {
   return { amount, currency, fx, tax: t, mode, total: t.line_total };
 }
 
+async function visible(c: Context<AppEnv>, id: string) {
+  const e = await first<{ status: string; created_by: string; branch_id: string | null }>(c.env.DB, `SELECT status, created_by, branch_id FROM expenses WHERE id = ? AND company_id = ?`, id, c.get("company").id);
+  if (!e) throw notFound("Expense");
+  assertBranchVisible(c, e.branch_id);
+  return e;
+}
+
+async function checkedBranch(c: Context<AppEnv>, requested: string | null | undefined) {
+  const b = resolveBranch(c, requested);
+  if (b && !(await first(c.env.DB, `SELECT 1 FROM branches WHERE id = ? AND company_id = ? AND is_active = 1`, b, c.get("company").id))) throw badRequest("Branch not found or inactive");
+  return b;
+}
+
 expenses.get("/", async (c) => {
   const company = c.get("company");
   const { limit, offset } = pageParams(c);
@@ -71,6 +84,8 @@ expenses.get("/", async (c) => {
   const where = ["e.company_id = ?"];
   const params: (string | number)[] = [company.id];
   if (status) { where.push("e.status = ?"); params.push(status); }
+  const bf = branchFilter(c, "e.branch_id");
+  if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
   const rows = await all(c.env.DB,
     `SELECT e.*, a.name AS category_name, pa.name AS paid_from_name, ct.name AS contact_name, u.name AS created_by_name,
        (SELECT COUNT(*) FROM attachments at WHERE at.entity_type = 'expense' AND at.entity_id = e.id) AS attachment_count
@@ -101,6 +116,7 @@ expenses.get("/:id", async (c) => {
      LEFT JOIN users su ON su.id = e.submitted_by LEFT JOIN users au ON au.id = e.approved_by
      WHERE e.id = ? AND e.company_id = ?`, c.req.param("id"), company.id);
   if (!e) throw notFound("Expense");
+  assertBranchVisible(c, (e as { branch_id: string | null }).branch_id);
   const attachments = await all(c.env.DB, `SELECT id, filename, mime_type, size_bytes, created_at FROM attachments WHERE company_id = ? AND entity_type = 'expense' AND entity_id = ?`, company.id, c.req.param("id"));
   return c.json({ expense: e, attachments });
 });
@@ -110,14 +126,15 @@ expenses.post("/", async (c) => {
   const input = await body(c, schema);
   const company = c.get("company");
   const r = await compute(c, input);
+  const branchId = await checkedBranch(c, input.branch_id);
   const id = newId();
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `INSERT INTO expenses (id, company_id, expense_date, contact_id, category_account_id, paid_from_account_id, description, currency, fx_rate_scaled,
-         amount, tax_code_id, tax_mode, tax_amount, total, status, department_id, project_id, cost_centre_id, created_by)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?,?)`,
+         amount, tax_code_id, tax_mode, tax_amount, total, status, department_id, project_id, cost_centre_id, branch_id, created_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,?,?,?,?)`,
       id, company.id, input.expense_date, input.contact_id ?? null, input.category_account_id, input.paid_from_account_id, input.description, r.currency, r.fx,
-      r.amount, input.tax_code_id ?? null, r.mode, r.tax.tax, r.total, input.department_id ?? null, input.project_id ?? null, input.cost_centre_id ?? null, c.get("user").id),
+      r.amount, input.tax_code_id ?? null, r.mode, r.tax.tax, r.total, input.department_id ?? null, input.project_id ?? null, input.cost_centre_id ?? null, branchId, c.get("user").id),
     audit(c, "expense.create", "expense", id, { total: r.total }),
   ]);
   return c.json({ id, total: r.total, tax: r.tax.tax }, 201);
@@ -128,18 +145,19 @@ expenses.put("/:id", async (c) => {
   const input = await body(c, schema);
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string; created_by: string }>(c.env.DB, `SELECT status, created_by FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Expense");
+  const e = await visible(c, id);
   if (!["draft", "rejected"].includes(e.status)) throw conflict("NOT_EDITABLE", "Only draft or rejected expenses can be edited");
   const r = await compute(c, input);
+  const branchId = await checkedBranch(c, input.branch_id);
+  const before = await first<Record<string, unknown>>(c.env.DB, `SELECT expense_date, description, category_account_id, paid_from_account_id, total, branch_id FROM expenses WHERE id = ?`, id);
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `UPDATE expenses SET expense_date = ?, contact_id = ?, category_account_id = ?, paid_from_account_id = ?, description = ?, currency = ?, fx_rate_scaled = ?,
-         amount = ?, tax_code_id = ?, tax_mode = ?, tax_amount = ?, total = ?, status = 'draft', rejection_reason = NULL, department_id = ?, project_id = ?, cost_centre_id = ?
+         amount = ?, tax_code_id = ?, tax_mode = ?, tax_amount = ?, total = ?, status = 'draft', rejection_reason = NULL, department_id = ?, project_id = ?, cost_centre_id = ?, branch_id = ?
        WHERE id = ? AND company_id = ?`,
       input.expense_date, input.contact_id ?? null, input.category_account_id, input.paid_from_account_id, input.description, r.currency, r.fx,
-      r.amount, input.tax_code_id ?? null, r.mode, r.tax.tax, r.total, input.department_id ?? null, input.project_id ?? null, input.cost_centre_id ?? null, id, company.id),
-    audit(c, "expense.update", "expense", id, { total: r.total }),
+      r.amount, input.tax_code_id ?? null, r.mode, r.tax.tax, r.total, input.department_id ?? null, input.project_id ?? null, input.cost_centre_id ?? null, branchId, id, company.id),
+    audit(c, "expense.update", "expense", id, { total: r.total, changes: changes(before ?? {}, { expense_date: input.expense_date, description: input.description, category_account_id: input.category_account_id, paid_from_account_id: input.paid_from_account_id, total: r.total, branch_id: branchId }) }),
   ]);
   return c.json({ ok: true });
 });
@@ -148,8 +166,7 @@ expenses.delete("/:id", async (c) => {
   requirePerm(c, "expense.create");
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Expense");
+  const e = await visible(c, id);
   if (e.status === "posted") throw conflict("POSTED_IMMUTABLE", "Posted expenses cannot be deleted; reverse the journal instead");
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM attachments WHERE company_id = ? AND entity_type = 'expense' AND entity_id = ?`, company.id, id),
@@ -163,8 +180,7 @@ expenses.post("/:id/submit", async (c) => {
   requirePerm(c, "expense.create");
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Expense");
+  const e = await visible(c, id);
   if (e.status !== "draft") throw conflict("INVALID_STATUS", "Only drafts can be submitted");
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE expenses SET status = 'submitted', submitted_by = ? WHERE id = ? AND company_id = ? AND status = 'draft'`, c.get("user").id, id, company.id),
@@ -178,8 +194,7 @@ expenses.post("/:id/reject", async (c) => {
   const input = await body(c, z.object({ reason: reqText(300) }));
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Expense");
+  const e = await visible(c, id);
   if (e.status !== "submitted") throw conflict("INVALID_STATUS", "Only submitted expenses can be rejected");
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE expenses SET status = 'rejected', rejection_reason = ? WHERE id = ? AND company_id = ?`, input.reason, id, company.id),
@@ -194,19 +209,18 @@ expenses.post("/:id/reject", async (c) => {
  */
 expenses.post("/:id/approve", async (c) => {
   requirePerm(c, "expense.approve");
-  requirePerm(c, "expense.approve");
   const company = c.get("company");
   const user = c.get("user");
   const id = c.req.param("id");
   const e = await first<{ status: string; submitted_by: string | null; created_by: string; expense_date: string; contact_id: string | null; category_account_id: string;
     paid_from_account_id: string; description: string; currency: string; fx_rate_scaled: number; amount: number; tax_code_id: string | null; tax_mode: string;
-    tax_amount: number; total: number; department_id: string | null; project_id: string | null; cost_centre_id: string | null }>(
+    tax_amount: number; total: number; department_id: string | null; project_id: string | null; cost_centre_id: string | null; branch_id: string | null }>(
     c.env.DB, `SELECT * FROM expenses WHERE id = ? AND company_id = ?`, id, company.id,
   );
   if (!e) throw notFound("Expense");
+  assertBranchVisible(c, e.branch_id);
   if (!["draft", "submitted"].includes(e.status)) throw conflict("INVALID_STATUS", `Expense is ${e.status}`);
-  const role = c.get("role");
-  if ((e.submitted_by ?? e.created_by) === user.id && !can(role, "org.manage")) {
+  if ((e.submitted_by ?? e.created_by) === user.id && !hasPerm(c, "org.manage")) {
     throw forbidden("You cannot approve your own expense claim");
   }
   await assertOpenPeriod(c.env.DB, company.id, e.expense_date);
@@ -229,7 +243,7 @@ expenses.post("/:id/approve", async (c) => {
   lines.push({ account_id: e.paid_from_account_id, credit: dr, contact_id: e.contact_id, currency: e.currency, fx_rate_scaled: e.fx_rate_scaled, amount_fc: e.total, description: e.description });
   const built = buildJournal(c.env.DB, {
     company_id: company.id, entry_date: e.expense_date, kind: "system", memo: `Expense: ${e.description}`,
-    source_type: "expense", source_id: id, created_by: user.id, post: true, lines,
+    source_type: "expense", source_id: id, branch_id: e.branch_id, created_by: user.id, post: true, lines,
   });
   await batch(c.env.DB, [
     ...built.stmts,

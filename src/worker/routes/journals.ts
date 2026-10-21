@@ -5,7 +5,7 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { conflict, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, rate, pageParams } from "../lib/validate";
-import { assertBranchVisible, audit, branchFilter, requireAnyPerm, requirePerm, resolveBranch } from "../lib/auth";
+import { assertBranchVisible, audit, changes, branchFilter, requireAnyPerm, requirePerm, resolveBranch } from "../lib/auth";
 import { buildJournal, buildReversal, postDraft, lineStmt, assertBalanced, normaliseLines, systemAccount, type LineInput } from "../services/ledger";
 import { currencyExponent, isCurrency } from "@shared/currencies";
 import { convertToBase } from "@shared/money";
@@ -159,12 +159,13 @@ journals.put("/:id", async (c) => {
   const lines = normaliseLines(toLedgerLines(input.lines, company.base_currency));
   await checkLineRefs(c.env.DB, company.id, lines);
   const total = lines.reduce((s, l) => s + (l.debit ?? 0), 0);
+  const before = await first<Record<string, unknown>>(c.env.DB, `SELECT entry_date, memo, reference, total FROM journal_entries WHERE id = ?`, id);
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM journal_lines WHERE entry_id = ? AND company_id = ?`, id, company.id),
     stmt(c.env.DB, `UPDATE journal_entries SET entry_date = ?, memo = ?, reference = ?, kind = ?, branch_id = ?, total = ? WHERE id = ? AND company_id = ? AND status = 'draft'`,
       input.entry_date, input.memo ?? null, input.reference ?? null, input.kind, resolveBranch(c, input.branch_id ?? e.branch_id), total, id, company.id),
     ...lines.map((l, i) => lineStmt(c.env.DB, company.id, id, i + 1, l)),
-    audit(c, "journal.update", "journal", id, { total }),
+    audit(c, "journal.update", "journal", id, { total, changes: changes(before ?? {}, { entry_date: input.entry_date, memo: input.memo ?? null, reference: input.reference ?? null, total }) }),
   ]);
   return c.json({ ok: true });
 });

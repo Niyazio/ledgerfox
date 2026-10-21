@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Copy, Download, Lock, Unlock } from "lucide-react";
+import { Download, Lock, Unlock } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useSession } from "../lib/session";
 import { useApi, useAction } from "../lib/hooks";

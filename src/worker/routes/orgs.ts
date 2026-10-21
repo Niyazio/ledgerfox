@@ -153,7 +153,7 @@ orgs.get("/:orgId", async (c) => {
 
 orgs.patch("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
-  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, z.object({ name: reqText(160) }));
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE organisations SET name = ? WHERE id = ?`, input.name, orgId),
@@ -264,7 +264,9 @@ orgs.get("/:orgId/roles", async (c) => {
 orgs.put("/:orgId/roles/:role", async (c) => {
   const orgId = c.req.param("orgId");
   await requireOrgPerm(c, orgId, "roles.manage");
-  const target = assignableRole.parse(c.req.param("role"));
+  const parsed = assignableRole.safeParse(c.req.param("role"));
+  if (!parsed.success) throw badRequest("The Owner role always has every permission and cannot be customised");
+  const target = parsed.data;
   const input = await body(c, z.object({ permissions: z.array(z.string()).max(200) }));
   const wanted = new Set(input.permissions.filter((p) => ALL_PERMISSIONS.includes(p as Permission) && p !== "roles.manage"));
   const defaults = new Set<string>(defaultPermissions(target));
@@ -281,7 +283,9 @@ orgs.put("/:orgId/roles/:role", async (c) => {
 orgs.delete("/:orgId/roles/:role", async (c) => {
   const orgId = c.req.param("orgId");
   await requireOrgPerm(c, orgId, "roles.manage");
-  const target = assignableRole.parse(c.req.param("role"));
+  const parsed = assignableRole.safeParse(c.req.param("role"));
+  if (!parsed.success) throw badRequest("The Owner role always has every permission and cannot be customised");
+  const target = parsed.data;
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM role_permissions WHERE org_id = ? AND role = ?`, orgId, target),
     audit(c, "role.reset", "role", target, undefined, { orgId, companyId: null }),
@@ -291,7 +295,7 @@ orgs.delete("/:orgId/roles/:role", async (c) => {
 
 orgs.delete("/:orgId/invitations/:id", async (c) => {
   const orgId = c.req.param("orgId");
-  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  await requireOrgPerm(c, orgId, "org.manage");
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE invitations SET revoked_at = ? WHERE id = ? AND org_id = ? AND accepted_at IS NULL`, nowIso(), c.req.param("id"), orgId),
     audit(c, "member.invite_revoke", "invitation", c.req.param("id"), undefined, { orgId, companyId: null }),

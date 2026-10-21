@@ -185,6 +185,13 @@ export async function rateLimit(db: D1Database, key: string, limit: number, wind
   return (row?.count ?? 1) <= limit;
 }
 
+/** Previous → new values of the fields that changed, for the audit trail. */
+export function changes(before: Record<string, unknown>, after: Record<string, unknown>) {
+  const out: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [k, v] of Object.entries(after)) if ((before[k] ?? null) !== (v ?? null)) out[k] = { from: before[k] ?? null, to: v ?? null };
+  return out;
+}
+
 export function audit(
   c: Context<AppEnv>,
   action: string,

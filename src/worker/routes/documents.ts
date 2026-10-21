@@ -4,7 +4,7 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams } from "../lib/validate";
-import { audit, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
+import { audit, changes, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
 import { docFamily, type Permission } from "@shared/permissions";
 import type { Context } from "hono";
 import { currencyExponent } from "@shared/currencies";
@@ -181,8 +181,10 @@ documents.put("/:id", async (c) => {
   if (existing.doc_type !== input.doc_type) throw badRequest("Document type cannot change");
   const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
   checkDiscounts(c, input.doc_type, draft.lines);
+  const before = await first<Record<string, unknown>>(c.env.DB, `SELECT contact_id, issue_date, due_date, reference, currency, total, branch_id FROM documents WHERE id = ?`, id);
   const prepared = await prepareDraft(c, draft, id);
-  await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.update`, "document", id, { total: prepared.totals.total })]);
+  const after = { contact_id: input.contact_id, issue_date: input.issue_date, due_date: input.due_date ?? null, reference: input.reference ?? null, currency: draft.currency, total: prepared.totals.total, branch_id: draft.branch_id ?? null };
+  await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.update`, "document", id, { total: prepared.totals.total, changes: changes(before ?? {}, after) })]);
   return c.json({ id, totals: prepared.totals });
 });
 

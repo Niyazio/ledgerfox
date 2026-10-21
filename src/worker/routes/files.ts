@@ -3,7 +3,7 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { newId, sha256Hex } from "../lib/crypto";
-import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm } from "../lib/auth";
 
 const files = new Hono<AppEnv>();
 files.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "sales.view", "purchase.view", "expense.create", "expense.approve", "journal.view"); await next(); });
