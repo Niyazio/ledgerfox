@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Field, Input } from "../components/ui";
@@ -28,13 +28,23 @@ export function Login() {
   const [params] = useSearchParams();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
-  const { busy, error, run } = useAction();
+  // Second step for accounts with two-factor sign-in.
+  const [step2, setStep2] = useState<null | "totp" | "recovery">(null);
+  const [code, setCode] = useState("");
+  const { busy, error, setError, run } = useAction();
   // A temporary password is replaced right here, without a redirect in between.
   if (me?.user?.must_change_password) return <ChangePasswordFirst />;
   if (me?.user) return <Navigate to={params.get("next") ?? "/app"} replace />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const ok = await run(() => api.post("/api/auth/login", { login, password }));
+    const extra = step2 === "totp" ? { totp: code } : step2 === "recovery" ? { recovery_code: code } : {};
+    const ok = await run(async () => {
+      try { return await api.post("/api/auth/login", { login, password, ...extra }); }
+      catch (err) {
+        if (err instanceof ApiError && err.code === "TOTP_REQUIRED") { setStep2("totp"); setCode(""); return undefined; }
+        throw err;
+      }
+    });
     if (ok) await refresh(); // the <Navigate> above then redirects once
   };
   return (
@@ -44,9 +54,16 @@ export function Login() {
         {me?.first_run && (
           <Alert kind="info">First time? Sign in with username <b>{me.first_run.username}</b> and the one-time password <b className="font-mono select-all">{me.first_run.password}</b>. It is shown only on this computer, and you will choose your own password straight away.</Alert>
         )}
+        {step2 ? <>
+          <p className="text-sm">{step2 === "totp" ? "Enter the 6-digit code from your authenticator app." : "Enter one of your recovery codes (each works once)."}</p>
+          <Field label={step2 === "totp" ? "Authentication code" : "Recovery code"}>{(id) => <Input id={id} autoFocus autoComplete="one-time-code" inputMode={step2 === "totp" ? "numeric" : "text"} maxLength={step2 === "totp" ? 6 : 20} className="font-mono tracking-widest" required value={code} onChange={(e) => setCode(e.target.value)} />}</Field>
+          <Button type="submit" loading={busy} className="w-full">Verify</Button>
+          <p className="text-center text-sm"><button type="button" className="muted hover:underline" onClick={() => { setStep2(step2 === "totp" ? "recovery" : "totp"); setCode(""); setError(null); }}>{step2 === "totp" ? "Lost your phone? Use a recovery code" : "Use the app code instead"}</button></p>
+        </> : <>
         <Field label="Username or email">{(id) => <Input id={id} autoComplete="username" autoCapitalize="none" spellCheck={false} required value={login} onChange={(e) => setLogin(e.target.value)} />}</Field>
         <Field label="Password">{(id) => <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
         <Button type="submit" loading={busy} className="w-full">Sign in</Button>
+        </>}
         <p className="text-center text-sm"><Link to="/forgot" className="muted hover:underline">Forgot password?</Link></p>
       </form>
     </AuthCard>

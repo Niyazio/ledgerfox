@@ -35,6 +35,7 @@ export interface SessionUser {
   name: string;
   username: string | null;
   must_change_password: boolean;
+  totp_enabled?: boolean;
   session_id: string;
 }
 

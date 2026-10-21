@@ -13,6 +13,7 @@ import { INDIA_STATES } from "@shared/tax";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
+import { TwoFactorCard } from "../components/TwoFactor";
 
 type Tab = "billing" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
@@ -343,6 +344,7 @@ function AccountTab() {
           <Button onClick={async () => { try { await api.post("/api/auth/change-password", pw); setPw({ current_password: "", new_password: "" }); toast("success", "Password changed"); } catch (e) { toast("error", errorMessage(e)); } }}>Update password</Button>
         </div>
       </Card>
+      <TwoFactorCard />
       <Card title="Recovery codes">
         <p className="mb-3 text-sm muted">Generating new codes invalidates the old ones.</p>
         {codes ? <div className="grid grid-cols-2 gap-2 rounded-lg bg-[var(--surface-2)] p-3 font-mono text-sm">{codes.map((c) => <span key={c}>{c}</span>)}</div> : (
