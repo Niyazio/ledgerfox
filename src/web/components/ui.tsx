@@ -163,14 +163,23 @@ export function EmptyState({ icon, title, body, action }: { icon?: ReactNode; ti
 
 export function Modal({ open, onClose, title, children, footer, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  // Callers pass a new onClose on every render; keep the latest in a ref so focus is set only when the dialog opens,
+  // not after every keystroke (which used to move the cursor to the close button).
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close.current(); };
     document.addEventListener("keydown", onKey);
-    setTimeout(() => ref.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus(), 0);
-    return () => { document.removeEventListener("keydown", onKey); prev?.focus(); };
-  }, [open, onClose]);
+    const t = setTimeout(() => {
+      if (ref.current?.contains(document.activeElement)) return; // a field already has focus (e.g. autoFocus)
+      (body.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled])")
+        ?? ref.current?.querySelector<HTMLElement>("button"))?.focus();
+    }, 0);
+    return () => { clearTimeout(t); document.removeEventListener("keydown", onKey); prev?.focus(); };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -179,7 +188,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
           <h2 className="font-semibold">{title}</h2>
           <button onClick={onClose} className="rounded p-1 hover:bg-[var(--surface-2)]" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
-        <div className="overflow-y-auto p-4">{children}</div>
+        <div ref={body} className="overflow-y-auto p-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</div>}
       </div>
     </div>
