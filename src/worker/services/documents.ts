@@ -58,6 +58,7 @@ export interface DraftInput {
   related_doc_id?: string | null;
   branch_id?: string | null;
   warehouse_id?: string | null;
+  variant?: "proforma" | "delivery_challan" | null;
   lines: DraftLine[];
 }
 
@@ -149,11 +150,11 @@ export async function prepareDraft(c: Context<AppEnv>, input: DraftInput, existi
   } else {
     stmts.push(stmt(db,
       `INSERT INTO documents (id, company_id, doc_type, contact_id, issue_date, due_date, status, currency, fx_rate_scaled, place_of_supply, tax_mode,
-         reference, subtotal, discount_total, tax_total, round_off, total, total_base, notes, terms, related_doc_id, branch_id, warehouse_id, created_by)
-       VALUES (?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         reference, subtotal, discount_total, tax_total, round_off, total, total_base, notes, terms, related_doc_id, branch_id, warehouse_id, created_by, variant)
+       VALUES (?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, input.doc_type, input.contact_id, input.issue_date, due, currency, fx, pos ?? null, mode, input.reference ?? null,
       totals.subtotal, totals.discount_total, totals.tax_total, roundOff, total, totalBase, input.notes ?? null, input.terms ?? null,
-      input.related_doc_id ?? null, input.branch_id ?? null, input.warehouse_id ?? null, c.get("user").id));
+      input.related_doc_id ?? null, input.branch_id ?? null, input.warehouse_id ?? null, c.get("user").id, input.variant ?? null));
   }
   input.lines.forEach((l, i) => {
     const t = totals.lines[i];
@@ -202,9 +203,12 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
 
   // Branches with their own prefix number their documents separately, e.g. BLR-INV-0001.
   const branch = doc.branch_id ? await first<{ invoice_prefix: string | null }>(db, `SELECT invoice_prefix FROM branches WHERE id = ? AND company_id = ?`, doc.branch_id, company.id) : null;
-  const seqKey = branch?.invoice_prefix ? `${doc.doc_type}@${doc.branch_id}` : doc.doc_type;
+  // Proforma invoices and delivery challans have their own number series (PRF-, DC-).
+  const series = (doc as { variant?: string | null }).variant ?? doc.doc_type;
+  const seqKey = branch?.invoice_prefix ? `${series}@${doc.branch_id}` : series;
+  const prefix = series === "proforma" ? "PRF-" : series === "delivery_challan" ? "DC-" : `${doc.doc_type.toUpperCase().slice(0, 3)}-`;
   const numberStmts = [
-    ...bumpSequence(db, company.id, seqKey, `${branch?.invoice_prefix ? `${branch.invoice_prefix}-` : ""}${doc.doc_type.toUpperCase().slice(0, 3)}-`),
+    ...bumpSequence(db, company.id, seqKey, `${branch?.invoice_prefix ? `${branch.invoice_prefix}-` : ""}${prefix}`),
   ];
 
   if (!POSTING_TYPES.includes(doc.doc_type)) {

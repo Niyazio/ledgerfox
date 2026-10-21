@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer, Download } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
-import { api, errorMessage } from "../lib/api";
+import { api, ApiError, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
@@ -322,7 +322,7 @@ export function DocumentView() {
   const d = data.document;
   const lines = data.lines as any[];
   const co = settings!.company;
-  const label = DOC_LABELS[d.doc_type];
+  const label = DOC_LABELS[d.variant ?? d.doc_type];
   const df = co.date_format;
   const cur = d.currency;
   const outstanding = d.total - d.amount_settled;
@@ -341,7 +341,7 @@ export function DocumentView() {
           <HistoryButton type="document" id={d.id} />
           {sales && d.status !== "draft" && d.status !== "void" && (
             <ShareButton entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
-              doc={{ kind: d.doc_type, number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: d.due_date ? fmtDate(d.due_date, df) : null, total: money(d.total, cur), balance: d.doc_type === "invoice" && outstanding > 0 ? money(outstanding, cur) : null }} />
+              doc={{ kind: d.variant === "proforma" ? "quote" : d.doc_type, number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: d.due_date ? fmtDate(d.due_date, df) : null, total: money(d.total, cur), balance: d.doc_type === "invoice" && outstanding > 0 ? money(outstanding, cur) : null }} />
           )}
           {d.doc_type === "invoice" && d.status === "posted" && outstanding > 0 && d.due_date && d.due_date < today() && (
             <ShareButton reminder entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
@@ -352,7 +352,14 @@ export function DocumentView() {
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}`}><Printer className="h-4 w-4" />Print preview</LinkButton>
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}?format=thermal80`}><Printer className="h-4 w-4" />Thermal bill</LinkButton>
           {d.status === "draft" && can(`${fam}.create`) && <LinkButton variant="secondary" to={`/app/${id}/${area(docType)}/${docType}/${d.id}/edit`}>Edit</LinkButton>}
-          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? `${fam}.post` : `${fam}.create`) && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/issue`)), "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
+          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? `${fam}.post` : `${fam}.create`) && <Button onClick={() => act(async () => {
+            try { await api.post(path(`/documents/${d.id}/issue`)); }
+            catch (e) {
+              // Over the customer's credit limit: managers may confirm and issue anyway (recorded in the history).
+              if (e instanceof ApiError && e.code === "CREDIT_LIMIT" && can("sales.credit_override") && confirm(`${e.message}`)) await api.post(path(`/documents/${d.id}/issue`), { override_credit_limit: true });
+              else throw e;
+            }
+          }, "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
           {d.status === "draft" && can(`${fam}.create`) && <ConfirmButton label="Delete" title="Delete draft?" body="Drafts can be deleted; issued documents must be voided." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/documents/${d.id}`)); nav(`/app/${id}/${area(docType)}/${docType}`); }} />}
           {d.status === "posted" && settles && outstanding > 0 && can(`${fam}.post`) && <LinkButton to={`/app/${id}/payments/${sales ? "in" : "out"}/new?contact=${d.contact_id}&doc=${d.id}`}>Record {sales ? "receipt" : "payment"}</LinkButton>}
           {d.status === "posted" && isNote && outstanding > 0 && can(`${fam}.post`) && <Button variant="secondary" onClick={() => setApplying(true)}>Apply to {sales ? "invoice" : "bill"}</Button>}

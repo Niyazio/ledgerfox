@@ -24,16 +24,17 @@ export const mailtoUrl = (to: string | null | undefined, subject: string, body: 
   `mailto:${encodeURIComponent(to ?? "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
 export interface ShareDoc {
-  kind: "invoice" | "quote" | "sales_order" | "credit_note" | "receipt";
+  kind: "invoice" | "quote" | "sales_order" | "credit_note" | "receipt" | "statement";
   number: string; party: string; company: string; date: string; dueDate?: string | null;
   total: string; balance?: string | null; overdueDays?: number; link?: string | null; upiId?: string | null;
 }
 
 /** Message text for sending or reminding; plain text so it reads well in WhatsApp, SMS and email. */
 export function shareMessage(d: ShareDoc, reminder = false): string {
-  const name = { invoice: "Invoice", quote: "Quotation", sales_order: "Sales order", credit_note: "Credit note", receipt: "Payment receipt" }[d.kind];
+  const name = { invoice: "Invoice", quote: "Quotation", sales_order: "Sales order", credit_note: "Credit note", receipt: "Payment receipt", statement: "Statement" }[d.kind];
   const lines = [`Dear ${d.party},`, ""];
-  if (d.kind === "receipt") lines.push(`Thank you. We have received ${d.total} (receipt ${d.number}, ${d.date}).`);
+  if (d.kind === "statement") lines.push(`Your account statement for ${d.date}: closing balance ${d.total}${d.balance ? ` (${d.balance})` : ""}.`, "Please let us know if anything does not match your records.");
+  else if (d.kind === "receipt") lines.push(`Thank you. We have received ${d.total} (receipt ${d.number}, ${d.date}).`);
   else if (reminder) lines.push(`This is a friendly reminder that ${name.toLowerCase()} ${d.number} dated ${d.date} has ${d.balance} outstanding${d.dueDate ? `, due on ${d.dueDate}` : ""}${d.overdueDays ? ` (${d.overdueDays} days overdue)` : ""}.`);
   else {
     lines.push(`Please find ${name.toLowerCase()} ${d.number} dated ${d.date} for ${d.total}.`);

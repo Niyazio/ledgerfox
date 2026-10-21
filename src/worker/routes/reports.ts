@@ -96,6 +96,16 @@ reports.get("/gstr3b", async (c) => {
   return c.json(await gstr3b(c.env.DB, c.get("company"), opts));
 });
 
+reports.get("/cash-book", async (c) => {
+  const company = c.get("company");
+  const today = todayIso();
+  const from = dateParam(c, "from", `${today.slice(0, 7)}-01`);
+  const to = dateParam(c, "to", today);
+  if (from > to) throw badRequest("The from date is after the to date");
+  const kind = (["cash", "bank", "all"] as const).find((k) => k === c.req.query("kind")) ?? "cash";
+  return c.json(await R.cashBook(c.env.DB, company, { from, to, kind, accountId: c.req.query("account_id") || null, branchId: reportBranch(c) }));
+});
+
 reports.get("/daily", async (c) => {
   const company = c.get("company");
   const today = todayIso();

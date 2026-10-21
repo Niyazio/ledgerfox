@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
-  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
@@ -70,7 +70,9 @@ const NAV: NavGroup[] = [
   { label: "Sales & billing", items: [
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/delivery_challan", label: "Delivery challans", icon: <Truck className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/invoice", label: "Invoices / bills", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/credit_note", label: "Sales returns", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" />, perm: "sales.view" },
@@ -98,6 +100,7 @@ const NAV: NavGroup[] = [
     { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
   ] },
   { label: "Reports & control", items: [
+    { to: "reports/cash-book", label: "Cash / bank book", icon: <BookOpen className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/daily", label: "Daily report", icon: <CalendarRange className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/profit-loss", label: "Profit & loss", icon: <TrendingUp className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/balance-sheet", label: "Balance sheet", icon: <Scale className="h-4 w-4" />, perm: "reports.read" },

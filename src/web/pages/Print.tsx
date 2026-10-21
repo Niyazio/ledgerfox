@@ -104,7 +104,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   const lines: any[] = data?.lines ?? [];
   const sales = d ? SALES_DOCS.includes(d.doc_type) : true;
   const outstanding = d ? d.total - d.amount_settled : 0;
-  const summary = d ? `${co.legal_name || co.name}${co.tax_id ? ` (${co.tax_id})` : ""}\n${DOC_LABELS[d.doc_type]?.one} ${d.number ?? "DRAFT"} dated ${d.issue_date}\nTotal ${money(d.total, cur)}` : "";
+  const summary = d ? `${co.legal_name || co.name}${co.tax_id ? ` (${co.tax_id})` : ""}\n${DOC_LABELS[d.variant ?? d.doc_type]?.one} ${d.number ?? "DRAFT"} dated ${d.issue_date}\nTotal ${money(d.total, cur)}` : "";
   const verify = useQr(useVerifyLink("document", id, showQr && Boolean(d && d.status !== "draft"), summary));
   const upiText = d && sales && d.doc_type === "invoice" && co.upi_id && cur === "INR" && outstanding > 0
     ? `upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.legal_name || co.name)}&am=${(outstanding / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Invoice ${d.number ?? ""}`)}`
@@ -118,7 +118,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   if (!d) return <Spinner />;
   const df = co.date_format;
   const taxes = { cgst: sum(lines, "cgst"), sgst: sum(lines, "sgst"), igst: sum(lines, "igst"), other: sum(lines, "other_tax") };
-  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply") : DOC_LABELS[d.doc_type].one;
+  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply") : DOC_LABELS[d.variant ?? d.doc_type].one;
   const words = amountInWords(d.total, cur, currencyExponent(cur));
   const thermal = format.startsWith("thermal");
   const watermark = d.status === "draft" ? "DRAFT" : d.status === "void" ? "VOID" : null;

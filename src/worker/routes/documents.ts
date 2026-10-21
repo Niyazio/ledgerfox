@@ -5,9 +5,9 @@ import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams, dateRange } from "../lib/validate";
 import { audit, changes, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
-import { docFamily, type Permission } from "@shared/permissions";
+import { DOC_VARIANTS, docFamily, type Permission } from "@shared/permissions";
 import type { Context } from "hono";
-import { currencyExponent } from "@shared/currencies";
+import { currencyExponent, formatMoney } from "@shared/currencies";
 import { prepareDraft, issueDocument, voidDocument, loadDoc, POSTING_TYPES, type DocType, type DraftInput } from "../services/documents";
 import { applyCredit } from "../services/payments";
 import { duplicateBillCheck } from "../services/insights";
@@ -33,6 +33,9 @@ function checkDiscounts(c: Context<AppEnv>, docType: string, lines: { discount_b
   if (lines.some((l) => l.discount_bp > limit)) throw new AppError(403, "DISCOUNT_LIMIT", `Discounts above ${limit / 100}% need a manager's approval`);
 }
 const DOC_TYPES = ["quote", "sales_order", "invoice", "credit_note", "purchase_order", "bill", "debit_note"] as const;
+/** Types the API accepts: the stored ones plus the variants (proforma → quote, delivery_challan → sales_order). */
+const API_TYPES = [...DOC_TYPES, "proforma", "delivery_challan"] as const;
+const stored = (t: string) => DOC_VARIANTS[t] ?? { doc_type: t as (typeof DOC_TYPES)[number], variant: null };
 
 const lineSchema = z.object({
   item_id: optId,
@@ -49,7 +52,7 @@ const lineSchema = z.object({
 });
 
 const docSchema = z.object({
-  doc_type: z.enum(DOC_TYPES),
+  doc_type: z.enum(API_TYPES),
   contact_id: z.string().min(1),
   issue_date: isoDate,
   due_date: isoDate.nullish(),
@@ -72,8 +75,10 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
     currency = ct?.currency ?? companyBase;
   }
   const exp = currencyExponent(currency);
+  const st = stored(input.doc_type);
   return {
-    doc_type: input.doc_type,
+    doc_type: st.doc_type,
+    variant: st.variant,
     contact_id: input.contact_id,
     issue_date: input.issue_date,
     due_date: input.due_date ?? null,
@@ -111,9 +116,13 @@ documents.get("/", async (c) => {
   const contactId = c.req.query("contact_id");
   const where = ["d.company_id = ?"];
   const params: (string | number)[] = [company.id];
-  if (type && (DOC_TYPES as readonly string[]).includes(type)) {
+  if (type && (API_TYPES as readonly string[]).includes(type)) {
     requirePerm(c, famPerm(type, "view"));
-    where.push("d.doc_type = ?"); params.push(type);
+    const st = stored(type);
+    where.push("d.doc_type = ?"); params.push(st.doc_type);
+    // Quotations and sales orders lists exclude their proforma / delivery challan variants, and vice versa.
+    if (st.variant) { where.push("d.variant = ?"); params.push(st.variant); }
+    else if (type === "quote" || type === "sales_order") where.push("d.variant IS NULL");
   } else {
     const visible = DOC_TYPES.filter((t) => hasPerm(c, famPerm(t, "view")));
     if (!visible.length) requirePerm(c, "sales.view");
@@ -130,7 +139,7 @@ documents.get("/", async (c) => {
   const dr = dateRange(c, "d.issue_date");
   where.push(...dr.sql); params.push(...dr.params);
   const rows = await all(c.env.DB,
-    `SELECT d.id, d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
+    `SELECT d.id, d.doc_type, d.variant, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
             d.contact_id, ct.name AS contact_name
      FROM documents d JOIN contacts ct ON ct.id = d.contact_id
      WHERE ${where.join(" AND ")} ORDER BY d.issue_date DESC, d.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
@@ -182,6 +191,7 @@ documents.post("/", async (c) => {
   const prepared = await prepareDraft(c, draft);
   await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.create`, "document", prepared.id, { total: prepared.totals.total })]);
   const warnings = input.doc_type === "bill" ? await duplicateBillCheck(c.env.DB, company.id, input.contact_id, input.reference ?? null, prepared.totals.total, prepared.id) : [];
+  if (input.doc_type === "invoice") { const p = await creditLimitProblem(c, input.contact_id, prepared.id, prepared.totals.total); if (p) warnings.push(p); }
   return c.json({ id: prepared.id, totals: prepared.totals, warnings }, 201);
 });
 
@@ -191,7 +201,7 @@ documents.put("/:id", async (c) => {
   const id = c.req.param("id");
   const existing = await access(c, id, "create");
   if (existing.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be edited");
-  if (existing.doc_type !== input.doc_type) throw badRequest("Document type cannot change");
+  if (existing.doc_type !== stored(input.doc_type).doc_type) throw badRequest("Document type cannot change");
   const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
   checkDiscounts(c, input.doc_type, draft.lines);
   const before = await first<Record<string, unknown>>(c.env.DB, `SELECT contact_id, issue_date, due_date, reference, currency, total, branch_id FROM documents WHERE id = ?`, id);
@@ -214,6 +224,24 @@ documents.delete("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Credit limit: the customer's open balance plus this invoice must stay within their limit (in the customer's
+ * currency, or the base currency when none is set). Returns a message when it would be exceeded.
+ */
+async function creditLimitProblem(c: Context<AppEnv>, contactId: string, docId: string | null, amount: number): Promise<string | null> {
+  const company = c.get("company");
+  const ct = await first<{ name: string; credit_limit: number | null; currency: string | null }>(c.env.DB, `SELECT name, credit_limit, currency FROM contacts WHERE id = ? AND company_id = ?`, contactId, company.id);
+  if (!ct?.credit_limit) return null;
+  const cur = ct.currency ?? company.base_currency;
+  const open = await first<{ due: number }>(c.env.DB,
+    `SELECT COALESCE(SUM(CASE WHEN doc_type = 'invoice' THEN total - amount_settled ELSE -(total - amount_settled) END),0) AS due FROM documents
+     WHERE company_id = ? AND contact_id = ? AND status = 'posted' AND doc_type IN ('invoice','credit_note') AND currency = ? AND id IS NOT ?`, company.id, contactId, cur, docId);
+  const after = (open?.due ?? 0) + amount;
+  if (after <= ct.credit_limit) return null;
+  const f = (n: number) => formatMoney(n, cur);
+  return `${ct.name} has a credit limit of ${f(ct.credit_limit)}; open balance ${f(open?.due ?? 0)} plus this invoice makes ${f(after)}.`;
+}
+
 documents.post("/:id/issue", async (c) => {
   const company = c.get("company");
   const id = c.req.param("id");
@@ -224,6 +252,17 @@ documents.post("/:id/issue", async (c) => {
   if (docFamily(d.doc_type) === "purchase" && POSTING_TYPES.includes(d.doc_type) && limit !== null && limit !== undefined && d.total_base > limit && !hasPerm(c, "purchase.approve")) {
     const ok = await first(c.env.DB, `SELECT 1 FROM document_approvals WHERE document_id = ? AND approved_at IS NOT NULL`, id);
     if (!ok) throw new AppError(403, "APPROVAL_REQUIRED", "This purchase is above the approval limit. Request approval first.");
+  }
+  if (d.doc_type === "invoice") {
+    const doc = await first<{ contact_id: string; total: number; currency: string }>(c.env.DB, `SELECT contact_id, total, currency FROM documents WHERE id = ?`, id);
+    const problem = await creditLimitProblem(c, doc!.contact_id, id, doc!.total);
+    if (problem) {
+      const override = (await c.req.json().catch(() => ({}))) as { override_credit_limit?: boolean };
+      if (!override.override_credit_limit || !hasPerm(c, "sales.credit_override")) {
+        throw new AppError(409, "CREDIT_LIMIT", `${problem} ${hasPerm(c, "sales.credit_override") ? "Confirm to issue anyway." : "Ask a manager to approve, or take payment first."}`);
+      }
+      await batch(c.env.DB, [audit(c, "invoice.credit_override", "document", id, { reason: problem })]);
+    }
   }
   const number = await issueDocument(c, id);
   return c.json({ ok: true, number });

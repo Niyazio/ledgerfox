@@ -41,7 +41,7 @@ export const verifyPublic = new Hono<AppEnv>();
 
 const LABELS: Record<string, string> = {
   quote: "Quotation", sales_order: "Sales order", invoice: "Invoice", credit_note: "Credit note",
-  purchase_order: "Purchase order", bill: "Bill", debit_note: "Debit note",
+  purchase_order: "Purchase order", bill: "Bill", debit_note: "Debit note", proforma: "Proforma invoice", delivery_challan: "Delivery challan",
 };
 
 verifyPublic.get("/:token", async (c) => {
@@ -55,11 +55,11 @@ verifyPublic.get("/:token", async (c) => {
   const issuer = { name: co?.legal_name || co?.name, tax_id: co?.tax_id ?? null, country: co?.country };
   if (v.entity_type === "document") {
     const d = await first<Record<string, unknown>>(c.env.DB,
-      `SELECT d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.amount_settled, d.subtotal, d.discount_total, d.tax_total, d.round_off, d.notes, d.terms,
+      `SELECT d.doc_type, d.variant, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.amount_settled, d.subtotal, d.discount_total, d.tax_total, d.round_off, d.notes, d.terms,
               ct.name AS party, ct.billing_address AS party_address, ct.tax_id AS party_tax_id
        FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE d.id = ?`, v.entity_id);
     if (!d) throw notFound("Document");
-    const base = { valid: d.status !== "void" && d.status !== "draft", kind: LABELS[d.doc_type as string] ?? "Document", issuer, number: d.number, date: d.issue_date, status: d.status,
+    const base = { valid: d.status !== "void" && d.status !== "draft", kind: LABELS[(d.variant ?? d.doc_type) as string] ?? "Document", issuer, number: d.number, date: d.issue_date, status: d.status,
       currency: d.currency, amount: d.total, settled: d.amount_settled, party: d.party };
     // Sales documents are what customers receive, so the link also shows the full document and how to pay.
     // Purchase documents only confirm that they exist.

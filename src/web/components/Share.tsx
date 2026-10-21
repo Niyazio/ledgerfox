@@ -11,7 +11,7 @@ import { Button, Modal, Textarea, useToast } from "./ui";
  * private link where the customer can view, print and pay; the desktop edition has no public address, so it sends text only.
  */
 export function ShareButton({ entity, doc, phone, email, reminder = false, label }: {
-  entity: { type: "document" | "payment"; id: string };
+  entity?: { type: "document" | "payment"; id: string };
   doc: Omit<ShareDoc, "link" | "company" | "upiId">;
   phone?: string | null; email?: string | null; reminder?: boolean; label?: string;
 }) {
@@ -24,7 +24,7 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
     setBusy(true);
     try {
       let link: string | null = null;
-      if (me?.edition === "cloud") {
+      if (me?.edition === "cloud" && entity) {
         const r = await api.post<{ token: string }>(path("/verify"), { entity_type: entity.type, entity_id: entity.id });
         link = `${location.origin}/verify/${r.token}`;
       }
@@ -32,7 +32,7 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
       setText(shareMessage({ ...doc, link, company: co.legal_name || co.name, upiId: co.upi_id ?? null }, reminder));
     } catch (e) { toast("error", errorMessage(e)); } finally { setBusy(false); }
   };
-  const subject = `${reminder ? "Payment reminder: " : ""}${doc.kind === "receipt" ? "Receipt" : doc.kind === "quote" ? "Quotation" : doc.kind === "credit_note" ? "Credit note" : "Invoice"} ${doc.number} from ${settings?.company.name ?? ""}`;
+  const subject = `${reminder ? "Payment reminder: " : ""}${doc.kind === "receipt" ? "Receipt" : doc.kind === "statement" ? "Statement" : doc.kind === "quote" ? "Quotation" : doc.kind === "credit_note" ? "Credit note" : "Invoice"} ${doc.number} from ${settings?.company.name ?? ""}`;
   return (
     <>
       <Button variant="secondary" loading={busy} onClick={() => void open()}>{reminder ? <Send className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}{label ?? (reminder ? "Send reminder" : "Share")}</Button>
