@@ -56,9 +56,13 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Phase 2 rollout | ⏳ Awaiting your approval | Branch `feature/multi-branch`. Migrations 0006 and 0007 are not applied to the live database; nothing is deployed |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 
+| GSTR-1 (B2B, B2CL, B2CS, credit notes, nil/exempt, HSN, documents issued) and GSTR-3B preparation; JSON for the GST offline tool and CSV sheets, per GSTIN | ✅ Done | Not filed from LedgerFox; exports (EXP), amendments, reverse charge and GSTR-2B matching not included |
+| Import customers, suppliers and products (with opening stock) from Excel .xlsx or CSV | ✅ Done | Built-in reader; old .xls must be saved as .xlsx |
+| Share invoices, quotes and receipts via WhatsApp / email / copy; payment reminders; customer link with full invoice and UPI pay button + QR | ✅ Done | Free: opens your own WhatsApp/email. Desktop edition sends text without a link |
+
 ## Incomplete, partial or not implemented (honest list)
 
-- **GST compliance:** no GSTR-1/3B export, e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess.
+- **GST compliance:** GSTR-1/3B are prepared for upload but not filed; no e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
 - **Optional local LLM adapter:** reserved in config (`LOCAL_LLM_URL`) but **not implemented**; no AI model is called.
 - **No email** (invitations, invoices, reminders, password resets are all copy-link/manual).
 - **No MFA**; no email verification.

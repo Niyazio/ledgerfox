@@ -14,6 +14,7 @@ import { CURRENCIES } from "@shared/currencies";
 import { downloadCsv } from "../lib/csv";
 import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
+import { ShareButton } from "../components/Share";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
 import { ContactForm } from "./Contacts";
@@ -338,6 +339,14 @@ export function DocumentView() {
       <PageHeader title={`${label.one} ${d.number ?? "(draft)"}`} subtitle={d.contact_name} back={{ to: `/app/${id}/${area(docType)}/${docType}`, label: label.many }}
         actions={<>
           <HistoryButton type="document" id={d.id} />
+          {sales && d.status !== "draft" && d.status !== "void" && (
+            <ShareButton entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
+              doc={{ kind: d.doc_type, number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: d.due_date ? fmtDate(d.due_date, df) : null, total: money(d.total, cur), balance: d.doc_type === "invoice" && outstanding > 0 ? money(outstanding, cur) : null }} />
+          )}
+          {d.doc_type === "invoice" && d.status === "posted" && outstanding > 0 && d.due_date && d.due_date < today() && (
+            <ShareButton reminder entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
+              doc={{ kind: "invoice", number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: fmtDate(d.due_date, df), total: money(d.total, cur), balance: money(outstanding, cur), overdueDays: Math.floor((Date.parse(today()) - Date.parse(d.due_date)) / 86400000) }} />
+          )}
           {d.status === "draft" && fam === "purchase" && needsApproval && !d.approval_requested_at && can("purchase.create") && <Button variant="secondary" onClick={() => act(() => api.post(path(`/documents/${d.id}/request-approval`), {}), "Approval requested")}>Request approval</Button>}
           {d.status === "draft" && fam === "purchase" && d.approval_requested_at && !d.approved_at && can("purchase.approve") && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/approve`), {}), "Approved")}>Approve</Button>}
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}`}><Printer className="h-4 w-4" />Print preview</LinkButton>

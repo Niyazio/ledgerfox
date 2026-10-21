@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Download, Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
+import { ShareButton } from "../components/Share";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { downloadCsv } from "../lib/csv";
 import { useApi, useAction } from "../lib/hooks";
@@ -192,6 +193,8 @@ export function PaymentView() {
       <PageHeader title={`${p.direction === "in" ? "Receipt" : "Payment"} ${p.number}`} subtitle={p.contact_name} back={{ to: `/app/${id}/payments/${p.direction}`, label: p.direction === "in" ? "Receipts" : "Payments" }}
         actions={<>
           <HistoryButton type="payment" id={p.id} />
+          {p.direction === "in" && p.status === "posted" && <ShareButton entity={{ type: "payment", id: p.id }} phone={p.contact_phone} email={p.contact_email}
+            doc={{ kind: "receipt", number: p.number, party: p.contact_name, date: fmtDate(p.payment_date, settings?.company.date_format), total: money(p.amount, p.currency) }} />}
           <LinkButton variant="secondary" to={`/print/${id}/payment/${p.id}`}>Print receipt</LinkButton>
           {p.status === "posted" && p.amount - allocated > 0 && can(p.direction === "in" ? "sales.post" : "purchase.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
           {p.status === "posted" && can(p.direction === "in" ? "sales.void" : "purchase.void") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}
