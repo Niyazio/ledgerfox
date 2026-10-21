@@ -16,7 +16,7 @@ import { newId } from "../lib/crypto";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { audit } from "../lib/auth";
 import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, type LineInput } from "./ledger";
-import { companyPosition, defaultWarehouse, planIssues, stockMoveStmt } from "./inventory";
+import { batchBalances, companyPosition, defaultWarehouse, pickBatches, planIssues, splitValue, stockMoveStmt, type BatchStock } from "./inventory";
 import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike, type TaxMode } from "@shared/tax";
 import { convertToBase, roundToWhole, RATE_SCALE_NUM, divRound } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";
@@ -42,6 +42,8 @@ export interface DraftLine {
   department_id?: string | null;
   project_id?: string | null;
   cost_centre_id?: string | null;
+  batch_no?: string | null;
+  expiry_date?: string | null;
 }
 
 export interface DraftInput {
@@ -160,11 +162,11 @@ export async function prepareDraft(c: Context<AppEnv>, input: DraftInput, existi
     const t = totals.lines[i];
     stmts.push(stmt(db,
       `INSERT INTO document_lines (id, document_id, company_id, line_no, item_id, description, hsn_sac, qty_milli, unit_price, discount_bp, account_id,
-         tax_code_id, taxable, cgst, sgst, igst, other_tax, line_total, department_id, project_id, cost_centre_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         tax_code_id, taxable, cgst, sgst, igst, other_tax, line_total, department_id, project_id, cost_centre_id, batch_no, expiry_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       newId(), id, company.id, i + 1, l.item_id ?? null, l.description, l.hsn_sac ?? null, l.qty_milli, l.unit_price, l.discount_bp,
       l.account_id ?? null, l.tax_code_id ?? null, t.taxable, t.cgst, t.sgst, t.igst, t.other_tax, t.line_total,
-      l.department_id ?? null, l.project_id ?? null, l.cost_centre_id ?? null));
+      l.department_id ?? null, l.project_id ?? null, l.cost_centre_id ?? null, l.batch_no || null, l.expiry_date || null));
   });
   return { id, stmts, totals: { ...totals, round_off: roundOff, total, total_base: totalBase }, mode, currency, fx };
 }
@@ -181,13 +183,14 @@ interface DocLineRow {
   department_id: string | null; project_id: string | null; cost_centre_id: string | null;
   item_kind: string | null; track_inventory: number | null; item_name: string | null;
   income_account_id: string | null; expense_account_id: string | null; purchase_price: number | null;
+  batch_no: string | null; expiry_date: string | null; track_batches: number | null;
 }
 
 export async function loadDoc(db: D1Database, companyId: string, id: string) {
   const doc = await first<DocRow>(db, `SELECT * FROM documents WHERE id = ? AND company_id = ?`, id, companyId);
   if (!doc) throw notFound("Document");
   const lines = await all<DocLineRow>(db,
-    `SELECT l.*, i.kind AS item_kind, i.track_inventory, i.name AS item_name, i.income_account_id, i.expense_account_id, i.purchase_price
+    `SELECT l.*, i.kind AS item_kind, i.track_inventory, i.track_batches, i.name AS item_name, i.income_account_id, i.expense_account_id, i.purchase_price
      FROM document_lines l LEFT JOIN items i ON i.id = l.item_id WHERE l.document_id = ? ORDER BY l.line_no`, id);
   return { doc, lines };
 }
@@ -247,7 +250,26 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
   };
 
   const warehouseId = doc.warehouse_id ?? (lines.some((l) => l.track_inventory) ? await defaultWarehouse(db, company.id) : null);
-  const stockMoves: { item_id: string; qty_milli: number; value: number }[] = [];
+  const stockMoves: { item_id: string; qty_milli: number; value: number; batch_no?: string | null; expiry_date?: string | null }[] = [];
+  // Batch-tracked items: stock in and out per batch (purchases/returns name the batch; sales pick first-expiry-first-out).
+  const batchCache = new Map<string, BatchStock[]>();
+  const batchStock = async (itemId: string) => {
+    if (!batchCache.has(itemId)) batchCache.set(itemId, await batchBalances(db, company.id, itemId, warehouseId!));
+    return batchCache.get(itemId)!;
+  };
+  const pushMove = async (l: DocLineRow, qty: number, value: number) => {
+    if (!l.track_batches) { stockMoves.push({ item_id: l.item_id!, qty_milli: qty, value }); return; }
+    const name = l.item_name ?? l.description;
+    if (qty > 0) {
+      if (!l.batch_no) throw unprocessable("BATCH_REQUIRED", `Enter the batch number for "${name}"`);
+      const known = (await batchStock(l.item_id!)).find((b) => b.batch_no === l.batch_no);
+      stockMoves.push({ item_id: l.item_id!, qty_milli: qty, value, batch_no: l.batch_no, expiry_date: l.expiry_date ?? known?.expiry_date ?? null });
+      return;
+    }
+    const picks = pickBatches(await batchStock(l.item_id!), -qty, doc.issue_date, name, l.batch_no, doc.doc_type === "debit_note");
+    const values = splitValue(value, picks);
+    picks.forEach((p, i) => stockMoves.push({ item_id: l.item_id!, qty_milli: -p.qty_milli, value: values[i], batch_no: p.batch_no, expiry_date: p.expiry_date }));
+  };
   const cogs: { amount: number }[] = [];
 
   // Inventory planning for issues (invoice / debit note) — costed at moving average.
@@ -268,7 +290,7 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
       if (isTracked) {
         if (doc.doc_type === "invoice") {
           const plan = issuePlan[issueIdx++];
-          stockMoves.push({ item_id: l.item_id!, qty_milli: -l.qty_milli, value: -plan.value });
+          await pushMove(l, -l.qty_milli, -plan.value);
           cogs.push({ amount: plan.value });
           add(acc.COGS, plan.value, "debit", { description: `COGS: ${l.description}` });
           add(acc.INVENTORY, plan.value, "credit", { description: `Stock out: ${l.description}` });
@@ -278,7 +300,7 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
           const value = posn.qty_milli > 0
             ? Number(divRound(BigInt(posn.value) * BigInt(l.qty_milli), BigInt(posn.qty_milli)))
             : Number(divRound(BigInt(l.purchase_price ?? 0) * BigInt(l.qty_milli), 1000n));
-          stockMoves.push({ item_id: l.item_id!, qty_milli: l.qty_milli, value });
+          await pushMove(l, l.qty_milli, value);
           add(acc.INVENTORY, value, "debit", { description: `Stock returned: ${l.description}` });
           add(acc.COGS, value, "credit", { description: `COGS reversal: ${l.description}` });
         }
@@ -287,12 +309,12 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
       const account = isTracked ? acc.INVENTORY : (l.account_id ?? l.expense_account_id ?? acc.PURCHASES);
       if (isTracked && doc.doc_type === "debit_note") {
         const plan = issuePlan[issueIdx++];
-        stockMoves.push({ item_id: l.item_id!, qty_milli: -l.qty_milli, value: -plan.value });
+        await pushMove(l, -l.qty_milli, -plan.value);
         add(acc.INVENTORY, plan.value, "credit", dims);
         add(acc.INV_ADJ, taxableBase - plan.value, "credit", { description: `Purchase return price difference: ${l.description}` });
       } else {
         add(account, taxableBase, lineSide, dims);
-        if (isTracked) stockMoves.push({ item_id: l.item_id!, qty_milli: l.qty_milli, value: taxableBase });
+        if (isTracked) await pushMove(l, l.qty_milli, taxableBase);
       }
     }
     add(taxAcc.cgst, toBase(l.cgst), lineSide, { tax_code_id: l.tax_code_id, description: "CGST" });
@@ -336,7 +358,7 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
     stmts.push(stockMoveStmt(db, {
       company_id: company.id, item_id: m.item_id, warehouse_id: warehouseId!, move_date: doc.issue_date, qty_milli: m.qty_milli, value: m.value,
       kind: doc.doc_type === "invoice" ? "sale" : doc.doc_type === "bill" ? "purchase" : doc.doc_type === "credit_note" ? "return_in" : "return_out",
-      source_type: doc.doc_type, source_id: doc.id, journal_entry_id: built.id, created_by: user.id,
+      source_type: doc.doc_type, source_id: doc.id, journal_entry_id: built.id, created_by: user.id, batch_no: m.batch_no, expiry_date: m.expiry_date,
     }));
   }
   // Credit/debit notes linked to an original document are applied against it immediately (up to its balance).
@@ -384,14 +406,15 @@ export async function voidDocument(c: Context<AppEnv>, id: string, date: string,
   }
   if (!doc.journal_entry_id) throw conflict("NO_JOURNAL", "Document has no journal to reverse");
   const rev = await buildReversal(db, company.id, doc.journal_entry_id, date, user.id, `Void ${doc.number}${reason ? ` — ${reason}` : ""}`, { allowSourced: true });
-  const moves = await all<{ item_id: string; warehouse_id: string; qty_milli: number; value: number }>(
-    db, `SELECT item_id, warehouse_id, qty_milli, value FROM stock_moves WHERE company_id = ? AND source_type = ? AND source_id = ?`, company.id, doc.doc_type, id,
+  const moves = await all<{ item_id: string; warehouse_id: string; qty_milli: number; value: number; batch_no: string | null; expiry_date: string | null }>(
+    db, `SELECT item_id, warehouse_id, qty_milli, value, batch_no, expiry_date FROM stock_moves WHERE company_id = ? AND source_type = ? AND source_id = ?`, company.id, doc.doc_type, id,
   );
   const stmts = [...rev.stmts];
   for (const m of moves) {
     stmts.push(stockMoveStmt(db, {
       company_id: company.id, item_id: m.item_id, warehouse_id: m.warehouse_id, move_date: date, qty_milli: -m.qty_milli, value: -m.value,
       kind: m.qty_milli > 0 ? "return_out" : "return_in", source_type: `${doc.doc_type}_void`, source_id: id, journal_entry_id: rev.id, created_by: user.id,
+      batch_no: m.batch_no, expiry_date: m.expiry_date,
     }));
   }
   // Reverse note applications (credit note voided → its allocation against the invoice is reversed).

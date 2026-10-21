@@ -49,6 +49,8 @@ const lineSchema = z.object({
   department_id: optId,
   project_id: optId,
   cost_centre_id: optId,
+  batch_no: z.string().trim().max(40).nullish(),
+  expiry_date: isoDate.nullish().or(z.literal("")),
 });
 
 const docSchema = z.object({
@@ -102,6 +104,7 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
         item_id: l.item_id ?? null, description: l.description, hsn_sac: l.hsn_sac || null, qty_milli: q, unit_price: price, discount_bp: disc,
         account_id: l.account_id ?? null, tax_code_id: l.tax_code_id ?? null, department_id: l.department_id ?? null,
         project_id: l.project_id ?? null, cost_centre_id: l.cost_centre_id ?? null,
+        batch_no: l.batch_no?.toUpperCase() || null, expiry_date: l.expiry_date || null,
       };
     }),
   };

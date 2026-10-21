@@ -3,7 +3,7 @@
  * Issue value = qty × (total value ÷ total qty) rounded half-up; issuing the full remaining
  * quantity takes the full remaining value so no residue is left on the books.
  */
-import { first, stmt } from "../lib/db";
+import { all, first, stmt } from "../lib/db";
 import { newId } from "../lib/crypto";
 import { unprocessable } from "../lib/errors";
 import { divRound } from "@shared/money";
@@ -69,15 +69,67 @@ export function stockMoveStmt(
   m: {
     company_id: string; item_id: string; warehouse_id: string; move_date: string; qty_milli: number; value: number;
     kind: string; source_type?: string | null; source_id?: string | null; journal_entry_id?: string | null; memo?: string | null; created_by: string;
+    batch_no?: string | null; expiry_date?: string | null;
   },
 ) {
   return stmt(
     db,
-    `INSERT INTO stock_moves (id, company_id, item_id, warehouse_id, move_date, qty_milli, value, kind, source_type, source_id, journal_entry_id, memo, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO stock_moves (id, company_id, item_id, warehouse_id, move_date, qty_milli, value, kind, source_type, source_id, journal_entry_id, memo, created_by, batch_no, expiry_date)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     newId(), m.company_id, m.item_id, m.warehouse_id, m.move_date, m.qty_milli, m.value, m.kind,
-    m.source_type ?? null, m.source_id ?? null, m.journal_entry_id ?? null, m.memo ?? null, m.created_by,
+    m.source_type ?? null, m.source_id ?? null, m.journal_entry_id ?? null, m.memo ?? null, m.created_by, m.batch_no ?? null, m.expiry_date ?? null,
   );
+}
+
+// ── Batches and expiry ──
+
+export interface BatchStock { batch_no: string; expiry_date: string | null; qty_milli: number }
+
+/** Batches with stock in a warehouse, earliest expiry first (batches without an expiry last). */
+export async function batchBalances(db: D1Database, companyId: string, itemId: string, warehouseId: string): Promise<BatchStock[]> {
+  return all<BatchStock>(db,
+    `SELECT batch_no, MAX(expiry_date) AS expiry_date, SUM(qty_milli) AS qty_milli FROM stock_moves
+     WHERE company_id = ? AND item_id = ? AND warehouse_id = ? AND batch_no IS NOT NULL
+     GROUP BY batch_no HAVING SUM(qty_milli) > 0 ORDER BY MAX(expiry_date) IS NULL, MAX(expiry_date), batch_no`, companyId, itemId, warehouseId);
+}
+
+/**
+ * Which batches an outgoing quantity comes from. A requested batch is used as is; otherwise first-expiry-first-out.
+ * Expired batches are never picked for a sale (`allowExpired` is for write-offs and transfers). `stock` is updated
+ * in place so several lines of one document share it.
+ */
+export function pickBatches(stock: BatchStock[], qty: number, onDate: string, name: string, requested?: string | null, allowExpired = false): BatchStock[] {
+  const usable = (b: BatchStock) => allowExpired || !b.expiry_date || b.expiry_date >= onDate;
+  const pool = requested ? stock.filter((b) => b.batch_no === requested.toUpperCase()) : stock.filter(usable);
+  if (requested && !pool.length) throw unprocessable("BATCH_NOT_FOUND", `Batch ${requested} of "${name}" has no stock in this warehouse`);
+  if (requested && !usable(pool[0])) throw unprocessable("BATCH_EXPIRED", `Batch ${requested} of "${name}" expired on ${pool[0].expiry_date} and cannot be sold`);
+  const out: BatchStock[] = [];
+  let left = qty;
+  for (const b of pool) {
+    if (left <= 0) break;
+    const take = Math.min(b.qty_milli, left);
+    if (take <= 0) continue;
+    out.push({ batch_no: b.batch_no, expiry_date: b.expiry_date, qty_milli: take });
+    b.qty_milli -= take;
+    left -= take;
+  }
+  if (left > 0) {
+    const expired = stock.filter((b) => !usable(b)).reduce((t, b) => t + b.qty_milli, 0);
+    throw unprocessable("INSUFFICIENT_STOCK", `Not enough ${requested ? `in batch ${requested}` : "unexpired stock"} of "${name}" (short by ${left / 1000}${expired ? `; ${expired / 1000} more is expired` : ""})`);
+  }
+  return out;
+}
+
+/** Splits a value across batch quantities, keeping the exact total (remainder on the last part). */
+export function splitValue(value: number, parts: { qty_milli: number }[]): number[] {
+  const total = parts.reduce((t, p) => t + p.qty_milli, 0);
+  let given = 0;
+  return parts.map((p, i) => {
+    if (i === parts.length - 1) return value - given;
+    const v = total ? Math.round((value * p.qty_milli) / total) : 0;
+    given += v;
+    return v;
+  });
 }
 
 export async function defaultWarehouse(db: D1Database, companyId: string): Promise<string> {

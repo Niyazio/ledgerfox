@@ -32,6 +32,23 @@ function picker(row: Record<string, unknown>) {
   const m = new Map(Object.entries(row).map(([k, v]) => [norm(k), v == null ? "" : String(v).trim()]));
   return (...names: string[]) => { for (const n of names) { const v = m.get(norm(n)); if (v) return v; } return ""; };
 }
+/** Spreadsheet dates: 2027-03-31, 31-03-2027, 31/03/2027, 03/2027 (end of month), or an Excel serial number. */
+export function isoFromAny(v: string): string | null {
+  const s = v.trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return valid(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s);
+  if (m) return valid(+m[3], +m[2], +m[1]);
+  m = /^(\d{1,2})[-/](\d{4})$/.exec(s);
+  if (m) return valid(+m[2], +m[1], new Date(Date.UTC(+m[2], +m[1], 0)).getUTCDate());
+  if (/^\d{5}$/.test(s)) return new Date(Date.UTC(1899, 11, 30) + Number(s) * 86_400_000).toISOString().slice(0, 10);
+  return null;
+}
+function valid(y: number, mo: number, d: number) {
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? dt.toISOString().slice(0, 10) : null;
+}
+
 const yes = (v: string) => /^(y|yes|true|1|track|stock)$/i.test(v);
 const money = (v: string) => v.replace(/[₹,\s]/g, "").replace(/^rs\.?/i, "");
 
@@ -118,7 +135,7 @@ imports.post("/items", async (c) => {
   let nextCode = (codeMax[0]?.n ?? 0) + 1;
   const out: Outcome = { created: 0, skipped: [], errors: [] };
   const stmts: D1PreparedStatement[] = [];
-  const opening: { item_id: string; warehouse_id: string; qty_milli: number; value: number }[] = [];
+  const opening: { item_id: string; warehouse_id: string; qty_milli: number; value: number; batch_no: string | null; expiry_date: string | null }[] = [];
   const canStock = hasPerm(c, "inventory.adjust");
   const newUnits: string[] = [];
   input.rows.forEach((raw, i) => {
@@ -164,7 +181,13 @@ imports.post("/items", async (c) => {
       const unitCost = rate ? minor(rate, exp, "opening rate") : purchase;
       openValue = Number((BigInt(unitCost) * BigInt(openQty) + 500n) / 1000n);
     } catch (e) { return fail((e as Error).message); }
-    const track = kind === "goods" && (yes(p("track stock", "track inventory", "maintain stock", "inventory")) || openQty > 0);
+    const batchNo = p("batch", "batch no", "batch number", "lot", "lot no").toUpperCase().slice(0, 40);
+    const expiryRaw = p("expiry", "expiry date", "exp date", "best before");
+    const expiry = expiryRaw ? isoFromAny(expiryRaw) : null;
+    if (expiryRaw && !expiry) return fail(`Expiry "${expiryRaw}" is not a date (use YYYY-MM-DD, DD-MM-YYYY or MM/YYYY)`);
+    const batches = kind === "goods" && (yes(p("track batches", "batch tracking", "batch wise")) || Boolean(batchNo));
+    const track = kind === "goods" && (yes(p("track stock", "track inventory", "maintain stock", "inventory")) || openQty > 0 || batches);
+    if (batches && openQty > 0 && !batchNo) return fail("Give the batch number of the opening stock");
     if (openQty < 0) return fail("Opening stock cannot be negative");
     if (openQty > 0 && !canStock) return fail("You may not enter opening stock");
     if (openQty > 0 && openValue <= 0) return fail("Give an opening rate or purchase price for the opening stock");
@@ -177,11 +200,11 @@ imports.post("/items", async (c) => {
     const itemCode = code || `P${String(nextCode++).padStart(6, "0")}`;
     taken.name.add(name.toLowerCase()); if (sku) taken.sku.add(sku.toLowerCase()); taken.code.add(itemCode); if (barcode) taken.barcode.add(barcode);
     stmts.push(stmt(c.env.DB,
-      `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id, track_inventory, reorder_level_milli, code, barcode)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id, track_inventory, reorder_level_milli, code, barcode, track_batches)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, kind, name.slice(0, 200), sku || null, unit, hsn || null, p("details", "long description").slice(0, 1000) || null,
-      sale, purchase, taxId, track ? 1 : 0, reorder, itemCode, barcode || null));
-    if (openQty > 0) opening.push({ item_id: id, warehouse_id: wh ?? "", qty_milli: openQty, value: openValue });
+      sale, purchase, taxId, track ? 1 : 0, reorder, itemCode, barcode || null, batches ? 1 : 0));
+    if (openQty > 0) opening.push({ item_id: id, warehouse_id: wh ?? "", qty_milli: openQty, value: openValue, batch_no: batches ? batchNo : null, expiry_date: batches ? expiry : null });
     out.created++;
   });
   if (!input.dry_run && !out.errors.length && stmts.length) {
@@ -198,7 +221,7 @@ imports.post("/items", async (c) => {
       });
       stmts.push(...built.stmts);
       for (const o of opening) {
-        stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: o.item_id, warehouse_id: o.warehouse_id || fallback, move_date: asOf, qty_milli: o.qty_milli, value: o.value, kind: "opening", journal_entry_id: built.id, memo: "Imported opening stock", created_by: c.get("user").id }));
+        stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: o.item_id, warehouse_id: o.warehouse_id || fallback, move_date: asOf, qty_milli: o.qty_milli, value: o.value, kind: "opening", journal_entry_id: built.id, memo: "Imported opening stock", created_by: c.get("user").id, batch_no: o.batch_no, expiry_date: o.expiry_date }));
       }
     }
     await batch(c.env.DB, [...stmts, audit(c, "item.import", "item", null, { created: out.created, skipped: out.skipped.length, opening_items: opening.length })]);
