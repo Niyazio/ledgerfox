@@ -68,11 +68,12 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 
 | Two-factor sign-in (authenticator apps, RFC 6238), recovery codes as the second step, replay protection; owner can require it for everyone | ✅ Done | No SMS/email codes |
 | Batch numbers and expiry dates per item: batch required on purchases, first-expiry-first-out on sales, expired stock refused (except write-off / purchase return), batches kept through voids and transfers, batch and expiry printed on bills, expiry report + dashboard alert, import columns | ✅ Done | Costing stays moving-average per item (not per batch); no serial numbers |
+| GST e-invoice JSON (IRP schema 1.1: B2B invoices and credit notes) and e-way bill JSON (invoices, delivery challans, sales returns), with checks before upload; IRN, ack, signed QR and e-way bill number recorded back and printed (QR on A4 and thermal) | ✅ Done (offline upload) | Not connected to the IRP / EWB APIs (needs a GSP); exports/SEZ, cess and Part-B updates not covered; not yet tried against the live portals |
 | Subscriptions (hosted edition): Free/Starter/Business/Multi-branch plans, 14-day trial, limits and features enforced on the server, Razorpay checkout with signature verification and webhook, subscription tax invoices, vendor admin page | ✅ Built, **off by default** | Needs your Razorpay account and keys (BILLING.md); not tested with a real payment |
 
 ## Incomplete, partial or not implemented (honest list)
 
-- **GST compliance:** GSTR-1/3B are prepared for upload but not filed; no e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
+- **GST compliance:** GSTR-1/3B, e-invoice and e-way bill files are prepared for upload but nothing is filed or generated from LedgerFox (no GSP connection); no TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
 - **Optional local LLM adapter:** reserved in config (`LOCAL_LLM_URL`) but **not implemented**; no AI model is called.
 - **No email** (invitations, invoices, reminders, password resets are all copy-link/manual).
 - **No MFA**; no email verification.

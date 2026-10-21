@@ -114,6 +114,9 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   // The business's own QR image (fixed, no amount) takes precedence; otherwise a UPI QR with the balance due.
   const upi = showQr && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
   const payLabel = payment_qr && upi === payment_qr ? `Scan to pay${co.upi_id ? ` · ${co.upi_id}` : ""}` : null;
+  // GST e-invoice: the IRP's signed QR must be printed on the invoice (not for cancelled IRNs).
+  const gst = data?.gst_refs as { irn: string | null; ack_no: string | null; ack_date: string | null; signed_qr: string | null; irn_cancelled: number; ewb_no: string | null; ewb_date: string | null } | null | undefined;
+  const irnQr = useQr(gst?.irn && !gst.irn_cancelled ? gst.signed_qr : null, 300);
   if (error) return <Alert>{error}</Alert>;
   if (!d) return <Spinner />;
   const df = co.date_format;
@@ -149,6 +152,8 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         {d.round_off !== 0 && <Row k="Round off" v={money(d.round_off, cur)} />}
         <p className="mt-1 flex justify-between border-y border-dashed border-slate-500 py-1 text-[13px] font-bold"><span>TOTAL</span><span>{money(d.total, cur)}</span></p>
         <p className="mt-1 text-[10px]">{words}</p>
+        {gst?.irn && !gst.irn_cancelled && <div className="mt-2 text-center text-[9px]"><p className="break-all">IRN {gst.irn}</p>{gst.ack_no && <p>Ack {gst.ack_no} · {gst.ack_date}</p>}{irnQr && <img src={irnQr} alt="e-invoice QR" className="mx-auto mt-1 h-32 w-32" />}</div>}
+        {gst?.ewb_no && <p className="mt-1 text-center text-[10px]">E-way bill {gst.ewb_no}</p>}
         <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? "Scan to pay (UPI)"} size={110} /><Qr src={verify} label="Scan to verify" size={90} /></div>
         {watermark && <p className="mt-2 text-center font-bold">*** {watermark} ***</p>}
         <p className="mt-2 text-center">Thank you! Visit again.</p>
@@ -179,6 +184,16 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
               </dl>
             </div>
           </header>
+        )}
+        {(gst?.irn || gst?.ewb_no) && (
+          <section className={`flex items-start justify-between gap-4 text-[11px] ${classic ? "border-x-2 border-b-2 border-slate-800 p-3" : "border-b border-slate-200 py-3"}`}>
+            <dl className="space-y-0.5">
+              {gst.irn && <div><dt className="inline text-slate-500">IRN: </dt><dd className="inline break-all font-mono">{gst.irn}{gst.irn_cancelled ? " (cancelled)" : ""}</dd></div>}
+              {gst.ack_no && <div><dt className="inline text-slate-500">Ack No: </dt><dd className="inline font-mono">{gst.ack_no}</dd><dt className="ml-3 inline text-slate-500">Ack Date: </dt><dd className="inline">{gst.ack_date}</dd></div>}
+              {gst.ewb_no && <div><dt className="inline text-slate-500">E-way bill: </dt><dd className="inline font-mono">{gst.ewb_no}</dd>{gst.ewb_date && <><dt className="ml-3 inline text-slate-500">Date: </dt><dd className="inline">{gst.ewb_date}</dd></>}</div>}
+            </dl>
+            {irnQr && <figure className="shrink-0 text-center"><img src={irnQr} alt="e-invoice QR" className="h-28 w-28" /><figcaption className="text-[9px] text-slate-500">e-Invoice QR</figcaption></figure>}
+          </section>
         )}
         <section className={`grid grid-cols-2 gap-6 ${classic ? "border-x-2 border-b-2 border-slate-800 p-3" : "py-5"}`}>
           <div>

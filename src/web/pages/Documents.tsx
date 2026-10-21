@@ -15,6 +15,7 @@ import { downloadCsv } from "../lib/csv";
 import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
 import { ShareButton } from "../components/Share";
+import { GstEDocButtons } from "../components/GstEDocs";
 import { RepeatButton } from "./Recurring";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
@@ -360,6 +361,7 @@ export function DocumentView() {
           )}
           {d.status === "draft" && fam === "purchase" && needsApproval && !d.approval_requested_at && can("purchase.create") && <Button variant="secondary" onClick={() => act(() => api.post(path(`/documents/${d.id}/request-approval`), {}), "Approval requested")}>Request approval</Button>}
           {d.status === "draft" && fam === "purchase" && d.approval_requested_at && !d.approved_at && can("purchase.approve") && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/approve`), {}), "Approved")}>Approve</Button>}
+          {india && sales && <GstEDocButtons doc={d} refs={data.gst_refs} onChanged={reload} />}
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}`}><Printer className="h-4 w-4" />Print preview</LinkButton>
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}?format=thermal80`}><Printer className="h-4 w-4" />Thermal bill</LinkButton>
           {d.status === "draft" && can(`${fam}.create`) && <LinkButton variant="secondary" to={`/app/${id}/${area(docType)}/${docType}/${d.id}/edit`}>Edit</LinkButton>}
@@ -417,6 +419,8 @@ export function DocumentView() {
             {d.due_date && <p className="text-sm"><span className="muted">Due</span> {fmtDate(d.due_date, df)}</p>}
             {d.reference && <p className="text-sm"><span className="muted">Ref</span> {d.reference}</p>}
             {d.related_number && <p className="text-sm"><span className="muted">Against</span> {d.related_number}</p>}
+            {data.gst_refs?.irn && <p className="text-xs"><span className="muted">IRN</span> <span className="font-mono">{data.gst_refs.irn.slice(0, 12)}…</span> {data.gst_refs.irn_cancelled ? <Badge color="red">cancelled</Badge> : <span className="muted">Ack {data.gst_refs.ack_no}</span>}</p>}
+            {data.gst_refs?.ewb_no && <p className="text-xs"><span className="muted">E-way bill</span> <span className="font-mono">{data.gst_refs.ewb_no}</span>{data.gst_refs.ewb_valid_until ? <span className="muted"> · valid until {data.gst_refs.ewb_valid_until.slice(0, 10)}</span> : null}</p>}
           </div>
         </header>
         <section className="grid gap-6 py-6 sm:grid-cols-2">

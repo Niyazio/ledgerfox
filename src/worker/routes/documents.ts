@@ -11,6 +11,7 @@ import { currencyExponent, formatMoney } from "@shared/currencies";
 import { prepareDraft, issueDocument, voidDocument, loadDoc, POSTING_TYPES, type DocType, type DraftInput } from "../services/documents";
 import { applyCredit } from "../services/payments";
 import { duplicateBillCheck } from "../services/insights";
+import { einvoiceJson, ewayJson } from "../services/einvoice";
 
 const documents = new Hono<AppEnv>();
 
@@ -182,7 +183,8 @@ documents.get("/:id", async (c) => {
      FROM allocations a LEFT JOIN payments p ON p.id = a.payment_id LEFT JOIN documents n ON n.id = a.note_id LEFT JOIN documents t ON t.id = a.document_id
      WHERE a.document_id = ? OR a.note_id = ? ORDER BY a.created_at`, id, id);
   const children = await all(c.env.DB, `SELECT id, doc_type, number, status FROM documents WHERE related_doc_id = ? AND company_id = ?`, id, company.id);
-  return c.json({ document: doc, lines, allocations, related: children });
+  const gstRefs = await first(c.env.DB, `SELECT irn, ack_no, ack_date, signed_qr, irn_cancelled, ewb_no, ewb_date, ewb_valid_until, updated_at FROM document_gst_refs WHERE document_id = ? AND company_id = ?`, id, company.id);
+  return c.json({ document: doc, lines, allocations, related: children, gst_refs: gstRefs ?? null });
 });
 
 documents.post("/", async (c) => {
@@ -362,6 +364,59 @@ documents.post("/:id/approve", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE document_approvals SET approved_by = ?, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE document_id = ?`, c.get("user").id, id),
     audit(c, `${d.doc_type}.approved`, "document", id),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ── GST e-invoice / e-way bill: JSON to upload on the government portals, and the numbers they give back ──
+const party = z.object({ addr1: z.string().max(120).nullish(), addr2: z.string().max(120).nullish(), loc: z.string().max(50).nullish(), pin: z.string().max(10).nullish() }).partial();
+const overrides = z.object({ seller: party.optional(), buyer: party.optional() });
+
+documents.post("/:id/gst/einvoice", async (c) => {
+  const id = c.req.param("id");
+  await access(c, id, "view");
+  return c.json(await einvoiceJson(c.env.DB, c.get("company"), id, await body(c, overrides)));
+});
+
+documents.post("/:id/gst/eway", async (c) => {
+  const id = c.req.param("id");
+  await access(c, id, "view");
+  const input = await body(c, overrides.extend({
+    sub_supply_type: z.number().int().refine((n) => [1, 4, 5, 7, 8, 10, 11, 12].includes(n)).nullish(), sub_supply_desc: z.string().max(20).nullish(),
+    trans_mode: z.enum(["1", "2", "3", "4"]).nullish(), distance_km: z.number().int().min(0).max(4000).nullish(),
+    transporter_id: z.string().max(15).nullish(), transporter_name: z.string().max(100).nullish(), trans_doc_no: z.string().max(15).nullish(),
+    trans_doc_date: isoDate.nullish(), vehicle_no: z.string().max(15).nullish(),
+  }));
+  return c.json(await ewayJson(c.env.DB, c.get("company"), id, input));
+});
+
+const blankToNull = (v: unknown) => (typeof v === "string" && !v.trim() ? null : typeof v === "string" ? v.trim() : v);
+documents.put("/:id/gst/refs", async (c) => {
+  const id = c.req.param("id");
+  const d = await access(c, id, "post");
+  if (d.status === "draft") throw badRequest("Issue the document first");
+  const s = (re: RegExp, msg: string, max = 40) => z.preprocess(blankToNull, z.string().max(max).regex(re, msg).nullish());
+  const input = await body(c, z.object({
+    irn: s(/^[0-9a-fA-F]{64}$/, "IRN is 64 letters/digits", 64),
+    ack_no: s(/^\d{1,20}$/, "Ack no. is digits only"),
+    ack_date: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "Ack date as YYYY-MM-DD HH:MM:SS"),
+    signed_qr: s(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/, "Paste the full signed QR code text from the portal", 4000),
+    irn_cancelled: z.boolean().optional(),
+    ewb_no: s(/^\d{12}$/, "e-way bill number is 12 digits"),
+    ewb_date: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "e-way bill date as YYYY-MM-DD"),
+    ewb_valid_until: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "Valid-until as YYYY-MM-DD"),
+  }));
+  const company = c.get("company");
+  const v = { ...input, irn: input.irn?.toLowerCase() ?? null };
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO document_gst_refs (document_id, company_id, irn, ack_no, ack_date, signed_qr, irn_cancelled, ewb_no, ewb_date, ewb_valid_until, updated_by, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT (document_id) DO UPDATE SET irn = excluded.irn, ack_no = excluded.ack_no, ack_date = excluded.ack_date, signed_qr = excluded.signed_qr,
+         irn_cancelled = excluded.irn_cancelled, ewb_no = excluded.ewb_no, ewb_date = excluded.ewb_date, ewb_valid_until = excluded.ewb_valid_until,
+         updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      id, company.id, v.irn, v.ack_no ?? null, v.ack_date ?? null, v.signed_qr ?? null, v.irn_cancelled ? 1 : 0, v.ewb_no ?? null, v.ewb_date ?? null, v.ewb_valid_until ?? null,
+      c.get("user").id, new Date().toISOString()),
+    audit(c, "document.gst_refs", "document", id, { irn: v.irn, ack_no: v.ack_no, irn_cancelled: Boolean(v.irn_cancelled), ewb_no: v.ewb_no }),
   ]);
   return c.json({ ok: true });
 });
