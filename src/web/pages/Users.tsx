@@ -26,16 +26,16 @@ function OneTimePassword({ who, password, onClose }: { who: string; password: st
 }
 
 function BranchAccess({ member, orgId, onClose }: { member: Member; orgId: string; onClose: () => void }) {
-  const { settings } = useCompany();
+  const { settings, branches } = useCompany();
   const companyId = settings!.company.id;
-  const branches = settings!.branches as { id: string; name: string; code: string; is_active: number }[];
-  const [all, setAll] = useState(Boolean(member.all_branches));
+  const limited = settings!.branch_scope?.all === false; // a branch manager can only give their own branches
+  const [all, setAll] = useState(Boolean(member.all_branches) && !limited);
   const [ids, setIds] = useState<string[]>(member.branches.filter((b) => b.company_id === companyId).map((b) => b.branch_id));
   const { busy, error, run } = useAction();
   return (
     <Modal open title={`Branches for ${member.name}`} onClose={onClose}>
       {error && <Alert className="mb-3">{error}</Alert>}
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />All branches (including ones added later)</label>
+      {!limited && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />All branches (including ones added later)</label>}
       {!all && (
         <div className="mt-3 space-y-1">
           {branches.length === 0 && <p className="text-sm muted">This company has no branches yet. Add them under Settings → Dimensions.</p>}
@@ -118,6 +118,7 @@ export function MembersTab() {
   const branchName = (id: string) => settings!.branches.find((b: any) => b.id === id)?.name ?? "?";
   const copy = (t: string) => { navigator.clipboard?.writeText(t); toast("success", "Copied"); };
   const companyId = settings!.company.id;
+  const scope = settings!.branch_scope;
   return (
     <div className="space-y-4">
       <Card title="Users" padded={false}>
@@ -154,13 +155,13 @@ export function MembersTab() {
             <Field label="Name">{(id) => <Input id={id} value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} />}</Field>
             <Field label="Username">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={nu.username} onChange={(e) => setNu({ ...nu, username: e.target.value })} />}</Field>
             <Field label="Role">{(id) => <Select id={id} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>{assignable.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>}</Field>
-            <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/users`, nu)); if (r) { setShown({ who: nu.name || r.username, password: r.temporary_password }); setNu({ name: "", username: "", role: nu.role }); org.reload(); } }}>Add user</Button>
+            <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/users`, { ...nu, ...(scope?.all === false ? { branches: { company_id: companyId, all_branches: false, branch_ids: scope.ids } } : {}) })); if (r) { setShown({ who: nu.name || r.username, password: r.temporary_password }); setNu({ name: "", username: "", role: nu.role }); org.reload(); } }}>Add user</Button>
           </div>
-          <p className="mt-2 text-xs muted">LedgerFox creates a random one-time password for each person (never a shared default). New users can see all branches until you limit them with “Change” in the Branches column.</p>
+          <p className="mt-2 text-xs muted">LedgerFox creates a random one-time password for each person (never a shared default). {scope?.all === false ? "New users work in your branches; adjust with “Change” in the Branches column." : "New users can see all branches until you limit them with “Change” in the Branches column."}</p>
           <p className="mt-2 text-xs muted">{ROLE_LABELS[nu.role as Role]}: {ROLE_DESCRIPTIONS[nu.role as Role]}</p>
         </Card>
       )}
-      {manage && (
+      {manage && scope?.all !== false && (
         <Card title="Invite someone by email">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Email">{(id) => <Input id={id} type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} />}</Field>

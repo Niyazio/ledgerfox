@@ -225,3 +225,61 @@ describe("roles, branches and approvals through the API", () => {
     expect((await billing.get(W.c(`/daybook/history/document/${mysInvoice}`))).status).toBe(404);
   });
 });
+
+describe("one company, four branches, a manager and a billing user in each", () => {
+  it("each branch works separately while the owner sees all branches combined", async () => {
+    const W = await world();
+    const cust = await contact(W, "customer");
+    const names = ["Chennai", "Madurai", "Coimbatore", "Salem"];
+    const branchIds: string[] = [];
+    for (const [i, n] of names.entries()) {
+      const r = await W.owner.post(W.c("/settings/branches"), { name: n, code: `B${i + 1}`, invoice_prefix: `B${i + 1}` });
+      branchIds.push(r.json.id);
+    }
+    const staffOf: { manager: Client; billing: Client }[] = [];
+    for (const [i, b] of branchIds.entries()) {
+      const manager = (await staff(W, `mgr${i + 1}`, "admin", { all_branches: false, branch_ids: [b] })).client;
+      const billing = (await staff(W, `bill${i + 1}`, "billing", { all_branches: false, branch_ids: [b] })).client;
+      staffOf.push({ manager, billing });
+    }
+    // Every billing user raises an invoice of (branch number × 100) in their own branch, from their own login.
+    for (const [i, s] of staffOf.entries()) {
+      const d = await s.billing.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: "2026-05-10", lines: [line("Sale", "1", `${(i + 1) * 100}.00`)] });
+      expect(d.status).toBe(201);
+      const issued = await s.billing.post(W.c(`/documents/${d.json.id}/issue`));
+      expect(issued.json.number).toBe(`B${i + 1}-INV-00001`);
+    }
+    // Each manager and billing user sees only their branch.
+    for (const [i, s] of staffOf.entries()) {
+      for (const cl of [s.manager, s.billing]) {
+        const docs = (await cl.get(W.c("/documents?type=invoice"))).json.documents;
+        expect(docs.map((d: any) => d.branch_id)).toEqual([branchIds[i]]);
+      }
+      const tb = (await s.manager.get(W.c("/reports/profit-loss?from=2026-04-01&to=2027-03-31"))).json;
+      expect(tb.revenue).toBe((i + 1) * 10000);
+      expect((await s.manager.get(W.c(`/reports/profit-loss?from=2026-04-01&to=2027-03-31&branch_id=${branchIds[(i + 1) % 4]}`))).status).toBe(403);
+    }
+    // The owner (main admin) sees all four branches together and each one on its own.
+    const all = (await W.owner.get(W.c("/documents?type=invoice"))).json.documents;
+    expect(all).toHaveLength(4);
+    expect((await W.owner.get(W.c("/reports/profit-loss?from=2026-04-01&to=2027-03-31"))).json.revenue).toBe(100000);
+    expect((await W.owner.get(W.c(`/reports/profit-loss?from=2026-04-01&to=2027-03-31&branch_id=${branchIds[2]}`))).json.revenue).toBe(30000);
+    const day = (await W.owner.get(W.c("/daybook?from=2026-05-10&to=2026-05-10"))).json.entries;
+    expect(day.map((e: any) => e.created_by_name).sort()).toEqual(["bill1", "bill2", "bill3", "bill4"]);
+
+    // A branch manager adds staff only to their own branch and cannot touch other branches' staff.
+    const m1 = staffOf[0].manager;
+    expect((await m1.post(`/api/orgs/${W.orgId}/users`, { name: "New", username: "new.cashier", role: "billing" })).status).toBe(400);
+    expect((await m1.post(`/api/orgs/${W.orgId}/users`, { name: "New", username: "new.cashier", role: "billing", branches: { company_id: W.companyId, all_branches: true, branch_ids: [] } })).status).toBe(403);
+    expect((await m1.post(`/api/orgs/${W.orgId}/users`, { name: "New", username: "new.cashier", role: "billing", branches: { company_id: W.companyId, all_branches: false, branch_ids: [branchIds[1]] } })).status).toBe(403);
+    expect((await m1.post(`/api/orgs/${W.orgId}/users`, { name: "New", username: "new.cashier", role: "billing", branches: { company_id: W.companyId, all_branches: false, branch_ids: [branchIds[0]] } })).status).toBe(201);
+    const members = (await W.owner.get(`/api/orgs/${W.orgId}`)).json.members;
+    const bill2 = members.find((m: any) => m.username === "bill2").id;
+    const bill1 = members.find((m: any) => m.username === "bill1").id;
+    expect((await m1.post(`/api/orgs/${W.orgId}/members/${bill2}/temporary-password`)).status).toBe(403);
+    expect((await m1.del(`/api/orgs/${W.orgId}/members/${bill2}`)).status).toBe(403);
+    expect((await m1.put(`/api/orgs/${W.orgId}/members/${bill1}/branches`, { company_id: W.companyId, all_branches: true, branch_ids: [] })).status).toBe(403);
+    expect((await m1.post(`/api/orgs/${W.orgId}/members/${bill1}/temporary-password`)).status).toBe(200);
+    expect((await m1.post(`/api/orgs/${W.orgId}/invitations`, { email: "x@example.com", role: "billing" })).status).toBe(403);
+  });
+});

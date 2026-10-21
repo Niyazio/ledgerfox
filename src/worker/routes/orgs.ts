@@ -62,11 +62,34 @@ async function requireOrgPerm(c: Context<AppEnv>, orgId: string, perm: Permissio
 const assignableRole = z.enum(["admin", "billing", "purchase", "accountant", "inventory", "auditor", "viewer"]);
 const branchAccess = z.object({ company_id: z.string().min(1), all_branches: z.boolean(), branch_ids: z.array(z.string().min(1)).max(200).default([]) });
 
+/** Branches the signed-in manager is limited to (null = owner or all branches). */
+async function actorBranches(c: Context<AppEnv>, orgId: string): Promise<{ company_id: string; branch_id: string }[] | null> {
+  const me = c.get("user").id;
+  const m = await first<{ role: Role; all_branches: number }>(c.env.DB, `SELECT role, all_branches FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, me);
+  if (!m || m.role === "owner" || m.all_branches) return null;
+  return all(c.env.DB, `SELECT company_id, branch_id FROM member_branches WHERE org_id = ? AND user_id = ?`, orgId, me);
+}
+
+/** A branch-limited manager may only manage members whose branches are all within the manager's own branches. */
+async function assertManages(c: Context<AppEnv>, orgId: string, targetId: string) {
+  const mine = await actorBranches(c, orgId);
+  if (!mine) return;
+  const t = await first<{ all_branches: number }>(c.env.DB, `SELECT all_branches FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
+  const theirs = await all<{ branch_id: string }>(c.env.DB, `SELECT branch_id FROM member_branches WHERE org_id = ? AND user_id = ?`, orgId, targetId);
+  if (!t || t.all_branches || !theirs.length || theirs.some((b) => !mine.some((x) => x.branch_id === b.branch_id))) {
+    throw forbidden("This person works in other branches. Ask the owner.");
+  }
+}
+
 /** Statements replacing a member's branch assignments for one company (validated against that company's branches). */
 async function branchStatements(c: Context<AppEnv>, orgId: string, userId: string, a: z.infer<typeof branchAccess>) {
   const co = await first(c.env.DB, `SELECT 1 FROM companies WHERE id = ? AND org_id = ?`, a.company_id, orgId);
   if (!co) throw notFound("Company");
   const ids = [...new Set(a.branch_ids)];
+  const mine = await actorBranches(c, orgId);
+  if (mine && (a.all_branches || ids.some((b) => !mine.some((x) => x.company_id === a.company_id && x.branch_id === b)))) {
+    throw forbidden("You can only give access to your own branches");
+  }
   if (!a.all_branches) {
     if (!ids.length) throw badRequest("Choose at least one branch, or allow all branches");
     const known = await all<{ id: string }>(c.env.DB, `SELECT id FROM branches WHERE company_id = ? AND id IN (${ids.map(() => "?").join(",")})`, a.company_id, ...ids);
@@ -168,6 +191,8 @@ orgs.post("/:orgId/invitations", async (c) => {
   const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, z.object({ email: z.string().trim().toLowerCase().email(), role: assignableRole }));
   if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
+  // Invited people join with every branch, so only managers of all branches may invite.
+  if (await actorBranches(c, orgId)) throw forbidden("Branch managers add staff with “Add a user” so they can be limited to your branches");
   const already = await first(c.env.DB,
     `SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND u.email = ?`, orgId, input.email);
   if (already) throw new AppError(409, "ALREADY_MEMBER", "This person is already a member");
@@ -200,6 +225,7 @@ orgs.post("/:orgId/users", async (c) => {
   const id = newId();
   const password = temporaryPassword();
   const h = await hashPassword(password, iterations(c.env));
+  if (!input.branches && (await actorBranches(c, orgId))) throw badRequest("Choose which of your branches this person works in");
   const access = input.branches ? await branchStatements(c, orgId, id, input.branches) : [];
   await batch(c.env.DB, [
     stmt(c.env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, must_change_password) VALUES (?,?,?,?,?,?,?,1)`,
@@ -215,6 +241,7 @@ orgs.post("/:orgId/users", async (c) => {
 orgs.post("/:orgId/members/:userId/temporary-password", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
+  await assertManages(c, orgId, targetId);
   const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
   if (!current) throw notFound("Member");
@@ -235,6 +262,7 @@ orgs.post("/:orgId/members/:userId/temporary-password", async (c) => {
 orgs.put("/:orgId/members/:userId/branches", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
+  await assertManages(c, orgId, targetId);
   const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, branchAccess);
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
@@ -306,6 +334,7 @@ orgs.delete("/:orgId/invitations/:id", async (c) => {
 orgs.patch("/:orgId/members/:userId", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
+  await assertManages(c, orgId, targetId);
   const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, z.object({ role: assignableRole }));
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
@@ -322,6 +351,7 @@ orgs.patch("/:orgId/members/:userId", async (c) => {
 orgs.delete("/:orgId/members/:userId", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
+  if (targetId !== c.get("user").id) await assertManages(c, orgId, targetId);
   const { role, perms } = await membership(c, orgId);
   const self = targetId === c.get("user").id;
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
@@ -340,6 +370,7 @@ orgs.delete("/:orgId/members/:userId", async (c) => {
 orgs.post("/:orgId/members/:userId/reset-link", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
+  await assertManages(c, orgId, targetId);
   const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
   if (!current) throw notFound("Member");

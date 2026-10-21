@@ -128,7 +128,7 @@ documents.get("/", async (c) => {
   if (contactId) { where.push("d.contact_id = ?"); params.push(contactId); }
   if (q) { where.push("(d.number LIKE ? OR d.reference LIKE ? OR ct.name LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   const rows = await all(c.env.DB,
-    `SELECT d.id, d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference,
+    `SELECT d.id, d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
             d.contact_id, ct.name AS contact_name
      FROM documents d JOIN contacts ct ON ct.id = d.contact_id
      WHERE ${where.join(" AND ")} ORDER BY d.issue_date DESC, d.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
