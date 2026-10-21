@@ -15,6 +15,7 @@ import { downloadCsv } from "../lib/csv";
 import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
 import { ShareButton } from "../components/Share";
+import { RepeatButton } from "./Recurring";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
 import { ContactForm } from "./Contacts";
@@ -339,6 +340,7 @@ export function DocumentView() {
       <PageHeader title={`${label.one} ${d.number ?? "(draft)"}`} subtitle={d.contact_name} back={{ to: `/app/${id}/${area(docType)}/${docType}`, label: label.many }}
         actions={<>
           <HistoryButton type="document" id={d.id} />
+          {d.doc_type === "invoice" && d.status === "posted" && can("sales.create") && <RepeatButton invoiceId={d.id} number={d.number} issueDate={d.issue_date} />}
           {sales && d.status !== "draft" && d.status !== "void" && (
             <ShareButton entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
               doc={{ kind: d.variant === "proforma" ? "quote" : d.doc_type, number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: d.due_date ? fmtDate(d.due_date, df) : null, total: money(d.total, cur), balance: d.doc_type === "invoice" && outstanding > 0 ? money(outstanding, cur) : null }} />

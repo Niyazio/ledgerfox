@@ -51,3 +51,35 @@ describe("credit limit", () => {
     expect((await bill.post(W.c(`/documents/${third.json.id}/issue`))).status).toBe(200);
   });
 });
+
+describe("recurring invoices", () => {
+  it("keeps the day of month, catches up missed months, issues automatically and never doubles up", async () => {
+    const { nextDate } = await import("../src/worker/routes/recurring");
+    expect(nextDate("2026-01-31", "monthly", 31)).toBe("2026-02-28");
+    expect(nextDate("2026-02-28", "monthly", 31)).toBe("2026-03-31");
+    expect(nextDate("2026-11-30", "quarterly", 30)).toBe("2027-02-28");
+    expect(nextDate("2026-05-01", "weekly", 1)).toBe("2026-05-08");
+    const W = await world();
+    const cust = await contact(W, "customer");
+    const tpl = await W.owner.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: "2026-04-01", lines: [{ description: "Monthly rent", quantity: "1", unit_price: "15000" }] });
+    await W.owner.post(W.c(`/documents/${tpl.json.id}/issue`));
+    const now = new Date();
+    const ym = (back: number) => { const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 5)); return d.toISOString().slice(0, 10); };
+    const s = await W.owner.post(W.c("/recurring"), { template_document_id: tpl.json.id, name: "Shop rent", frequency: "monthly", next_date: ym(2), auto_issue: true });
+    expect(s.status).toBe(201);
+    expect((await W.owner.get(W.c("/recurring"))).json.due).toBe(1);
+    // Two runs at the same time: three months are due (two months ago, last month, this month if the 5th has passed).
+    const [a, b] = await Promise.all([W.owner.post(W.c("/recurring/run")), W.owner.post(W.c("/recurring/run"))]);
+    const made = [...a.json.created, ...b.json.created];
+    const expected = now.getUTCDate() >= 5 ? 3 : 2;
+    expect(made).toHaveLength(expected);
+    expect(new Set(made.map((m: any) => m.date)).size).toBe(expected);
+    expect(made.every((m: any) => /^INV-/.test(m.number))).toBe(true);
+    const invoices = (await W.owner.get(W.c("/documents?type=invoice"))).json.documents;
+    expect(invoices).toHaveLength(1 + expected);
+    expect((await W.owner.post(W.c("/recurring/run"))).json.created).toHaveLength(0);
+    // Pausing stops it.
+    await W.owner.patch(W.c(`/recurring/${s.json.id}`), { is_active: false, next_date: ym(0) });
+    expect((await W.owner.post(W.c("/recurring/run"))).json.created).toHaveLength(0);
+  });
+});

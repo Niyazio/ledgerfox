@@ -10,6 +10,7 @@ CREATE TABLE recurring_invoices (
   name TEXT NOT NULL,
   frequency TEXT NOT NULL CHECK (frequency IN ('weekly','monthly','quarterly','yearly')),
   next_date TEXT NOT NULL,
+  anchor_day INTEGER NOT NULL CHECK (anchor_day BETWEEN 1 AND 31),   -- day of month to keep (31 → last day of shorter months)
   end_date TEXT,
   auto_issue INTEGER NOT NULL DEFAULT 0 CHECK (auto_issue IN (0,1)),
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
