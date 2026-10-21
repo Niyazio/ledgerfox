@@ -12,6 +12,7 @@ export interface Me {
   registration?: "open" | "closed";
   /** Desktop only, on the computer itself: the default admin / admin sign-in has not been changed yet. */
   default_login?: boolean;
+  first_run?: { username: string; password: string } | null;
 }
 
 interface SessionCtx {

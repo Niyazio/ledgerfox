@@ -2,15 +2,36 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
-import { badRequest, conflict, notFound } from "../lib/errors";
+import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams } from "../lib/validate";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
+import { docFamily, type Permission } from "@shared/permissions";
+import type { Context } from "hono";
 import { currencyExponent } from "@shared/currencies";
 import { prepareDraft, issueDocument, voidDocument, loadDoc, POSTING_TYPES, type DocType, type DraftInput } from "../services/documents";
 import { applyCredit } from "../services/payments";
 import { duplicateBillCheck } from "../services/insights";
 
 const documents = new Hono<AppEnv>();
+
+const famPerm = (docType: string, action: "view" | "create" | "post" | "void") => `${docFamily(docType)}.${action}` as Permission;
+
+/** Load a document's access facts; 404 when missing or in a branch the member cannot see; 403 without permission. */
+async function access(c: Context<AppEnv>, id: string, action: "view" | "create" | "post" | "void") {
+  const d = await first<{ doc_type: DocType; status: string; branch_id: string | null; total_base: number }>(c.env.DB,
+    `SELECT doc_type, status, branch_id, total_base FROM documents WHERE id = ? AND company_id = ?`, id, c.get("company").id);
+  if (!d) throw notFound("Document");
+  assertBranchVisible(c, d.branch_id);
+  requirePerm(c, famPerm(d.doc_type, action));
+  return d;
+}
+
+/** Billing discount limit: discounts above it need `sales.discount_any`. */
+function checkDiscounts(c: Context<AppEnv>, docType: string, lines: { discount_bp: number }[]) {
+  const limit = c.get("company").billing_discount_limit_bp;
+  if (docFamily(docType) !== "sales" || limit === null || limit === undefined || hasPerm(c, "sales.discount_any")) return;
+  if (lines.some((l) => l.discount_bp > limit)) throw new AppError(403, "DISCOUNT_LIMIT", `Discounts above ${limit / 100}% need a manager's approval`);
+}
 const DOC_TYPES = ["quote", "sales_order", "invoice", "credit_note", "purchase_order", "bill", "debit_note"] as const;
 
 const lineSchema = z.object({
@@ -90,7 +111,16 @@ documents.get("/", async (c) => {
   const contactId = c.req.query("contact_id");
   const where = ["d.company_id = ?"];
   const params: (string | number)[] = [company.id];
-  if (type && (DOC_TYPES as readonly string[]).includes(type)) { where.push("d.doc_type = ?"); params.push(type); }
+  if (type && (DOC_TYPES as readonly string[]).includes(type)) {
+    requirePerm(c, famPerm(type, "view"));
+    where.push("d.doc_type = ?"); params.push(type);
+  } else {
+    const visible = DOC_TYPES.filter((t) => hasPerm(c, famPerm(t, "view")));
+    if (!visible.length) requirePerm(c, "sales.view");
+    where.push(`d.doc_type IN (${visible.map(() => "?").join(",")})`); params.push(...visible);
+  }
+  const bf = branchFilter(c, "d.branch_id");
+  if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
   if (status === "outstanding") where.push("d.status = 'posted' AND d.total > d.amount_settled");
   else if (status === "overdue") { where.push("d.status = 'posted' AND d.total > d.amount_settled AND d.due_date < ?"); params.push(todayIso()); }
   else if (status) { where.push("d.status = ?"); params.push(status); }
@@ -108,6 +138,7 @@ documents.get("/", async (c) => {
 documents.get("/:id", async (c) => {
   const company = c.get("company");
   const id = c.req.param("id");
+  await access(c, id, "view");
   const doc = await first(c.env.DB,
     `SELECT d.*, ct.name AS contact_name, ct.email AS contact_email, ct.tax_id AS contact_tax_id, ct.billing_address AS contact_address,
             ct.shipping_address AS contact_shipping_address, ct.state_code AS contact_state_code, ct.phone AS contact_phone,
@@ -130,10 +161,11 @@ documents.get("/:id", async (c) => {
 });
 
 documents.post("/", async (c) => {
-  requirePerm(c, "txn.write");
   const input = await body(c, docSchema);
+  requirePerm(c, famPerm(input.doc_type, "create"));
   const company = c.get("company");
-  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, input);
+  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id) });
+  checkDiscounts(c, input.doc_type, draft.lines);
   const prepared = await prepareDraft(c, draft);
   await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.create`, "document", prepared.id, { total: prepared.totals.total })]);
   const warnings = input.doc_type === "bill" ? await duplicateBillCheck(c.env.DB, company.id, input.contact_id, input.reference ?? null, prepared.totals.total, prepared.id) : [];
@@ -141,25 +173,23 @@ documents.post("/", async (c) => {
 });
 
 documents.put("/:id", async (c) => {
-  requirePerm(c, "txn.write");
   const input = await body(c, docSchema);
   const company = c.get("company");
   const id = c.req.param("id");
-  const existing = await first<{ status: string; doc_type: string }>(c.env.DB, `SELECT status, doc_type FROM documents WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!existing) throw notFound("Document");
+  const existing = await access(c, id, "create");
   if (existing.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be edited");
   if (existing.doc_type !== input.doc_type) throw badRequest("Document type cannot change");
-  const prepared = await prepareDraft(c, await toDraftInput(c.env.DB, company.base_currency, company.id, input), id);
+  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
+  checkDiscounts(c, input.doc_type, draft.lines);
+  const prepared = await prepareDraft(c, draft, id);
   await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.update`, "document", id, { total: prepared.totals.total })]);
   return c.json({ id, totals: prepared.totals });
 });
 
 documents.delete("/:id", async (c) => {
-  requirePerm(c, "txn.write");
   const company = c.get("company");
   const id = c.req.param("id");
-  const d = await first<{ status: string; doc_type: string }>(c.env.DB, `SELECT status, doc_type FROM documents WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!d) throw notFound("Document");
+  const d = await access(c, id, "create");
   if (d.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be deleted. Void issued documents instead.");
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE documents SET related_doc_id = NULL WHERE related_doc_id = ? AND company_id = ? AND status = 'draft'`, id, company.id),
@@ -171,15 +201,21 @@ documents.delete("/:id", async (c) => {
 
 documents.post("/:id/issue", async (c) => {
   const company = c.get("company");
-  const d = await first<{ doc_type: DocType }>(c.env.DB, `SELECT doc_type FROM documents WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
-  if (!d) throw notFound("Document");
-  requirePerm(c, POSTING_TYPES.includes(d.doc_type) ? "txn.post" : "txn.write");
-  const number = await issueDocument(c, c.req.param("id"));
+  const id = c.req.param("id");
+  const d = await access(c, id, "view");
+  requirePerm(c, famPerm(d.doc_type, POSTING_TYPES.includes(d.doc_type) ? "post" : "create"));
+  // Purchases above the approval limit need an approval by someone with purchase.approve (who may post directly).
+  const limit = company.purchase_approval_limit;
+  if (docFamily(d.doc_type) === "purchase" && POSTING_TYPES.includes(d.doc_type) && limit !== null && limit !== undefined && d.total_base > limit && !hasPerm(c, "purchase.approve")) {
+    const ok = await first(c.env.DB, `SELECT 1 FROM document_approvals WHERE document_id = ? AND approved_at IS NOT NULL`, id);
+    if (!ok) throw new AppError(403, "APPROVAL_REQUIRED", "This purchase is above the approval limit. Request approval first.");
+  }
+  const number = await issueDocument(c, id);
   return c.json({ ok: true, number });
 });
 
 documents.post("/:id/void", async (c) => {
-  requirePerm(c, "txn.reverse");
+  await access(c, c.req.param("id"), "void");
   const input = await body(c, z.object({ date: isoDate.optional(), reason: shortText(300).nullish() }));
   await voidDocument(c, c.req.param("id"), input.date ?? todayIso(), input.reason);
   return c.json({ ok: true });
@@ -187,8 +223,9 @@ documents.post("/:id/void", async (c) => {
 
 /** Quote → sales order/invoice, sales order → invoice, purchase order → bill. Creates a draft. */
 documents.post("/:id/convert", async (c) => {
-  requirePerm(c, "txn.write");
+  await access(c, c.req.param("id"), "create");
   const input = await body(c, z.object({ to: z.enum(["sales_order", "invoice", "bill", "credit_note", "debit_note"]) }));
+  requirePerm(c, famPerm(input.to, "create"));
   const company = c.get("company");
   const { doc, lines } = await loadDoc(c.env.DB, company.id, c.req.param("id"));
   const allowed: Record<string, string[]> = {
@@ -215,7 +252,7 @@ documents.post("/:id/convert", async (c) => {
 });
 
 documents.post("/:id/status", async (c) => {
-  requirePerm(c, "txn.write");
+  await access(c, c.req.param("id"), "create");
   const input = await body(c, z.object({ status: z.enum(["accepted", "declined", "closed", "open"]) }));
   const company = c.get("company");
   const d = await first<{ doc_type: string; status: string }>(c.env.DB, `SELECT doc_type, status FROM documents WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
@@ -231,12 +268,44 @@ documents.post("/:id/status", async (c) => {
 
 /** Apply a credit/debit note to an invoice/bill. */
 documents.post("/:id/apply", async (c) => {
-  requirePerm(c, "txn.post");
+  await access(c, c.req.param("id"), "post");
   const input = await body(c, z.object({ document_id: z.string(), amount: z.union([z.string(), z.number()]), date: isoDate.optional() }));
   const company = c.get("company");
   const note = await first<{ currency: string }>(c.env.DB, `SELECT currency FROM documents WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
   if (!note) throw notFound("Note");
   await applyCredit(c, { kind: "note", id: c.req.param("id") }, input.document_id, minor(input.amount, currencyExponent(note.currency)), input.date ?? todayIso());
+  return c.json({ ok: true });
+});
+
+/** Ask for approval of a purchase above the approval limit. */
+documents.post("/:id/request-approval", async (c) => {
+  const id = c.req.param("id");
+  const d = await access(c, id, "create");
+  if (docFamily(d.doc_type) !== "purchase") throw badRequest("Only purchases need approval");
+  if (d.status !== "draft") throw conflict("INVALID_STATUS", "Only drafts can be sent for approval");
+  const note = (await body(c, z.object({ note: shortText(300).nullish() }))).note ?? null;
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO document_approvals (document_id, company_id, requested_by, note) VALUES (?,?,?,?)
+      ON CONFLICT (document_id) DO UPDATE SET requested_by = excluded.requested_by, requested_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), approved_by = NULL, approved_at = NULL, note = excluded.note`,
+      id, c.get("company").id, c.get("user").id, note),
+    audit(c, `${d.doc_type}.approval_requested`, "document", id, { note }),
+  ]);
+  return c.json({ ok: true });
+});
+
+/** Approve a purchase. Approvers cannot approve a request they made themselves (unless they are the owner). */
+documents.post("/:id/approve", async (c) => {
+  const id = c.req.param("id");
+  const d = await access(c, id, "view");
+  requirePerm(c, "purchase.approve");
+  const req = await first<{ requested_by: string; approved_at: string | null }>(c.env.DB, `SELECT requested_by, approved_at FROM document_approvals WHERE document_id = ?`, id);
+  if (!req) throw conflict("NOT_REQUESTED", "Approval has not been requested for this document");
+  if (req.approved_at) throw conflict("ALREADY_APPROVED", "Already approved");
+  if (req.requested_by === c.get("user").id && c.get("role") !== "owner") throw new AppError(403, "SELF_APPROVAL", "You cannot approve your own request");
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE document_approvals SET approved_by = ?, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE document_id = ?`, c.get("user").id, id),
+    audit(c, `${d.doc_type}.approved`, "document", id),
+  ]);
   return c.json({ ok: true });
 });
 

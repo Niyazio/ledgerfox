@@ -6,7 +6,7 @@ import { all, batch, bumpSequence, first, seqNumberExpr, stmt, nowIso, todayIso 
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, optId, minor, rate, pageParams, reqText } from "../lib/validate";
 import { newId } from "../lib/crypto";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
 import { can } from "@shared/permissions";
 import { currencyExponent } from "@shared/currencies";
 import { computeLine, resolveTaxMode, schemeForCountry, type TaxCodeLike } from "@shared/tax";
@@ -16,6 +16,7 @@ import { lookupRate } from "../services/documents";
 import { suggestExpenseCategory } from "../services/insights";
 
 const expenses = new Hono<AppEnv>();
+expenses.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "expense.create", "expense.approve", "reports.read"); await next(); });
 
 const schema = z.object({
   expense_date: isoDate,
@@ -105,7 +106,7 @@ expenses.get("/:id", async (c) => {
 });
 
 expenses.post("/", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const input = await body(c, schema);
   const company = c.get("company");
   const r = await compute(c, input);
@@ -123,7 +124,7 @@ expenses.post("/", async (c) => {
 });
 
 expenses.put("/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const input = await body(c, schema);
   const company = c.get("company");
   const id = c.req.param("id");
@@ -144,7 +145,7 @@ expenses.put("/:id", async (c) => {
 });
 
 expenses.delete("/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const company = c.get("company");
   const id = c.req.param("id");
   const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
@@ -159,7 +160,7 @@ expenses.delete("/:id", async (c) => {
 });
 
 expenses.post("/:id/submit", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const company = c.get("company");
   const id = c.req.param("id");
   const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM expenses WHERE id = ? AND company_id = ?`, id, company.id);
@@ -193,7 +194,7 @@ expenses.post("/:id/reject", async (c) => {
  */
 expenses.post("/:id/approve", async (c) => {
   requirePerm(c, "expense.approve");
-  requirePerm(c, "txn.post");
+  requirePerm(c, "expense.approve");
   const company = c.get("company");
   const user = c.get("user");
   const id = c.req.param("id");
@@ -250,7 +251,7 @@ const templateSchema = z.object({
 });
 
 expenses.post("/templates", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const input = await body(c, templateSchema);
   const company = c.get("company");
   await compute(c, { ...input.expense, expense_date: input.next_run_date }); // validate
@@ -264,7 +265,7 @@ expenses.post("/templates", async (c) => {
 });
 
 expenses.patch("/templates/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const input = await body(c, z.object({ is_active: z.boolean() }));
   const company = c.get("company");
   await batch(c.env.DB, [
@@ -290,7 +291,7 @@ export function advance(date: string, freq: string): string {
 
 /** Generate draft expenses for all templates due on or before today (max 24 per template per run). Drafts still need approval. */
 expenses.post("/templates/run", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "expense.create");
   const company = c.get("company");
   const today = todayIso();
   const templates = await all<{ id: string; frequency: string; next_run_date: string; end_date: string | null; payload: string }>(

@@ -65,7 +65,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     APP_ENV: "desktop",
     // 100k is the most the cloud runtime accepts, so a file moved to the cloud later keeps working logins.
     PBKDF2_ITERATIONS: "100000",
-    // Sign-in starts as admin / admin (changed at first sign-in); more users are added from Settings → Users.
+    // First sign-in is "admin" with a random one-time password shown on this computer; more users come from Settings → Users.
     ALLOW_REGISTRATION: "false",
     PASSWORD_MIN_LENGTH: "6",
     ...opts.env,

@@ -12,6 +12,7 @@ import { computeDocument, resolveTaxMode, INDIA_STATES, type TaxMode } from "@sh
 import { parseDecimal, parseQty, parsePercentToBp, roundToWhole } from "@shared/money";
 import { CURRENCIES } from "@shared/currencies";
 import { downloadCsv } from "../lib/csv";
+import { docFamily } from "@shared/permissions";
 import { ContactForm } from "./Contacts";
 
 const area = (t: string) => (SALES_DOCS.includes(t) ? "sales" : "purchases");
@@ -19,6 +20,7 @@ const area = (t: string) => (SALES_DOCS.includes(t) ? "sales" : "purchases");
 export function DocumentList() {
   const { docType = "invoice" } = useParams();
   const { path, money, id, settings, can } = useCompany();
+  const fam = docFamily(docType);
   const [params, setParams] = useSearchParams();
   const status = params.get("status") ?? "";
   const [q, setQ] = useState("");
@@ -31,7 +33,7 @@ export function DocumentList() {
     <>
       <PageHeader title={label.many} actions={<>
         {data && <Button variant="secondary" onClick={() => downloadCsv(`${label.many.toLowerCase()}.csv`, ["Date", "Number", "Contact", "Status", "Currency", "Total", "Balance", "Due"], data.documents.map((d) => [d.issue_date, d.number ?? "Draft", d.contact_name, d.status, d.currency, toInput(d.total, d.currency), d.status === "posted" ? toInput(d.total - d.amount_settled, d.currency) : "", d.due_date]))}><Download className="h-4 w-4" />CSV</Button>}
-        {can("txn.write") && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}><Plus className="h-4 w-4" />New {label.one.toLowerCase()}</LinkButton>}
+        {can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}><Plus className="h-4 w-4" />New {label.one.toLowerCase()}</LinkButton>}
       </>} />
       <Card padded={false}>
         <div className="flex flex-wrap gap-3 border-b border-[var(--border)] p-3">
@@ -44,7 +46,7 @@ export function DocumentList() {
         </div>
         {error && <Alert className="m-3">{error}</Alert>}
         {loading && !data ? <Spinner /> : data && !data.documents.length ? (
-          <EmptyState title={`No ${label.many.toLowerCase()}`} action={can("txn.write") && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}>Create {label.one.toLowerCase()}</LinkButton>} />
+          <EmptyState title={`No ${label.many.toLowerCase()}`} action={can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}>Create {label.one.toLowerCase()}</LinkButton>} />
         ) : data && (
           <TableWrap>
             <table className="table">
@@ -273,6 +275,7 @@ function ApplyCreditModal({ note, onClose }: { note: any; onClose: () => void })
 export function DocumentView() {
   const { docType = "invoice", docId } = useParams();
   const { path, money, id, settings, can } = useCompany();
+  const fam = docFamily(docType);
   const nav = useNavigate();
   const toast = useToast();
   const { data, error, loading, reload } = useApi<any>(path(`/documents/${docId}`));
@@ -299,19 +302,19 @@ export function DocumentView() {
         actions={<>
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}`}><Printer className="h-4 w-4" />Print preview</LinkButton>
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}?format=thermal80`}><Printer className="h-4 w-4" />Thermal bill</LinkButton>
-          {d.status === "draft" && can("txn.write") && <LinkButton variant="secondary" to={`/app/${id}/${area(docType)}/${docType}/${d.id}/edit`}>Edit</LinkButton>}
-          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "txn.post" : "txn.write") && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/issue`)), "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
-          {d.status === "draft" && can("txn.write") && <ConfirmButton label="Delete" title="Delete draft?" body="Drafts can be deleted; issued documents must be voided." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/documents/${d.id}`)); nav(`/app/${id}/${area(docType)}/${docType}`); }} />}
-          {d.status === "posted" && settles && outstanding > 0 && can("txn.post") && <LinkButton to={`/app/${id}/payments/${sales ? "in" : "out"}/new?contact=${d.contact_id}&doc=${d.id}`}>Record {sales ? "receipt" : "payment"}</LinkButton>}
-          {d.status === "posted" && isNote && outstanding > 0 && can("txn.post") && <Button variant="secondary" onClick={() => setApplying(true)}>Apply to {sales ? "invoice" : "bill"}</Button>}
-          {["open", "accepted"].includes(d.status) && d.doc_type === "quote" && can("txn.write") && <>
+          {d.status === "draft" && can(`${fam}.create`) && <LinkButton variant="secondary" to={`/app/${id}/${area(docType)}/${docType}/${d.id}/edit`}>Edit</LinkButton>}
+          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? `${fam}.post` : `${fam}.create`) && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/issue`)), "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
+          {d.status === "draft" && can(`${fam}.create`) && <ConfirmButton label="Delete" title="Delete draft?" body="Drafts can be deleted; issued documents must be voided." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/documents/${d.id}`)); nav(`/app/${id}/${area(docType)}/${docType}`); }} />}
+          {d.status === "posted" && settles && outstanding > 0 && can(`${fam}.post`) && <LinkButton to={`/app/${id}/payments/${sales ? "in" : "out"}/new?contact=${d.contact_id}&doc=${d.id}`}>Record {sales ? "receipt" : "payment"}</LinkButton>}
+          {d.status === "posted" && isNote && outstanding > 0 && can(`${fam}.post`) && <Button variant="secondary" onClick={() => setApplying(true)}>Apply to {sales ? "invoice" : "bill"}</Button>}
+          {["open", "accepted"].includes(d.status) && d.doc_type === "quote" && can(`${fam}.create`) && <>
             <Button variant="secondary" onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "sales_order" }); nav(`/app/${id}/sales/sales_order/${r.id}`); }, "Sales order draft created")}>→ Sales order</Button>
             <Button onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "invoice" }); nav(`/app/${id}/sales/invoice/${r.id}`); }, "Invoice draft created")}>→ Invoice</Button>
           </>}
-          {["open", "accepted"].includes(d.status) && d.doc_type === "sales_order" && can("txn.write") && <Button onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "invoice" }); nav(`/app/${id}/sales/invoice/${r.id}`); }, "Invoice draft created")}>→ Invoice</Button>}
-          {["open", "accepted"].includes(d.status) && d.doc_type === "purchase_order" && can("txn.write") && <Button onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "bill" }); nav(`/app/${id}/purchases/bill/${r.id}`); }, "Bill draft created")}>→ Bill</Button>}
-          {d.status === "posted" && settles && can("txn.write") && <Button variant="secondary" onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: sales ? "credit_note" : "debit_note" }); nav(`/app/${id}/${area(docType)}/${sales ? "credit_note" : "debit_note"}/${r.id}/edit`); }, `${sales ? "Credit" : "Debit"} note draft created`)}>{sales ? "Credit note" : "Debit note"}</Button>}
-          {d.status !== "draft" && d.status !== "void" && can("txn.reverse") && (!settles || d.amount_settled === 0) && (
+          {["open", "accepted"].includes(d.status) && d.doc_type === "sales_order" && can(`${fam}.create`) && <Button onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "invoice" }); nav(`/app/${id}/sales/invoice/${r.id}`); }, "Invoice draft created")}>→ Invoice</Button>}
+          {["open", "accepted"].includes(d.status) && d.doc_type === "purchase_order" && can(`${fam}.create`) && <Button onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "bill" }); nav(`/app/${id}/purchases/bill/${r.id}`); }, "Bill draft created")}>→ Bill</Button>}
+          {d.status === "posted" && settles && can(`${fam}.create`) && <Button variant="secondary" onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: sales ? "credit_note" : "debit_note" }); nav(`/app/${id}/${area(docType)}/${sales ? "credit_note" : "debit_note"}/${r.id}/edit`); }, `${sales ? "Credit" : "Debit"} note draft created`)}>{sales ? "Credit note" : "Debit note"}</Button>}
+          {d.status !== "draft" && d.status !== "void" && can(`${fam}.void`) && (!settles || d.amount_settled === 0) && (
             <ConfirmButton label="Void" title={`Void ${label.one.toLowerCase()}?`} withReason confirmLabel="Void"
               body={isNote || settles ? "A reversing journal is posted (and any stock movement reversed). The document remains on record marked void." : "The document will be marked void."}
               onConfirm={(reason) => act(() => api.post(path(`/documents/${d.id}/void`), { reason: reason ?? null }), "Voided")} />

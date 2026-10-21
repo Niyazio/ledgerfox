@@ -93,7 +93,7 @@ export default function Inventory() {
   return (
     <>
       <PageHeader title="Products & inventory" subtitle="Costing method: moving weighted average per item. Stock value reconciles to the Inventory account."
-        actions={can("masters.write") && <>
+        actions={can("items.write") && <>
           <Button variant="secondary" onClick={() => setStockOp("adjust")}>Adjust stock</Button>
           <Button variant="secondary" onClick={() => setStockOp("transfer")}>Transfer</Button>
           <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New item</Button>
@@ -102,7 +102,7 @@ export default function Inventory() {
       {tab === "items" && (
         <Card padded={false}>
           <div className="border-b border-[var(--border)] p-3"><Input placeholder="Search name, SKU, HSN…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" aria-label="Search items" /></div>
-          {items.loading && !items.data ? <Spinner /> : !items.data?.items.length ? <EmptyState title="No products or services" action={can("masters.write") && <Button onClick={() => setEdit("new")}>Add item</Button>} /> : (
+          {items.loading && !items.data ? <Spinner /> : !items.data?.items.length ? <EmptyState title="No products or services" action={can("items.write") && <Button onClick={() => setEdit("new")}>Add item</Button>} /> : (
             <TableWrap><table className="table">
               <thead><tr><th>Name</th><th>SKU</th><th>HSN/SAC</th><th className="num">Sale price</th><th className="num">On hand</th><th className="num">Stock value</th><th /></tr></thead>
               <tbody>{items.data.items.map((i) => (
@@ -113,7 +113,7 @@ export default function Inventory() {
                   <td className="num">{money(i.sale_price)}</td>
                   <td className="num">{i.track_inventory ? `${qty(i.stock_qty_milli)} ${i.unit}` : "—"}</td>
                   <td className="num">{i.track_inventory ? money(i.stock_value) : "—"}</td>
-                  <td className="text-right">{can("masters.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(i)}>Edit</Button>}</td>
+                  <td className="text-right">{can("items.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(i)}>Edit</Button>}</td>
                 </tr>
               ))}</tbody>
             </table></TableWrap>
@@ -135,7 +135,7 @@ export default function Inventory() {
       {tab === "warehouses" && (
         <Card>
           <ul className="mb-4 divide-y divide-[var(--border)] text-sm">{(settings?.warehouses ?? []).map((w: any) => <li key={w.id} className="flex justify-between py-2"><span>{w.code} · {w.name}</span>{!w.is_active && <Badge>inactive</Badge>}</li>)}</ul>
-          {can("masters.write") && <div className="flex flex-wrap items-end gap-2">
+          {can("items.write") && <div className="flex flex-wrap items-end gap-2">
             <Field label="Code">{(id) => <Input id={id} value={wh.code} onChange={(e) => setWh({ ...wh, code: e.target.value })} className="w-28" />}</Field>
             <Field label="Name">{(id) => <Input id={id} value={wh.name} onChange={(e) => setWh({ ...wh, name: e.target.value })} />}</Field>
             <Button onClick={async () => { try { await api.post(path("/items/warehouses"), wh); setWh({ name: "", code: "" }); reloadSettings(); toast("success", "Warehouse added"); } catch (e) { toast("error", errorMessage(e)); } }}>Add warehouse</Button>

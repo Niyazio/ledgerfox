@@ -55,7 +55,7 @@ async function checkParent(db: D1Database, companyId: string, parentId: string |
 }
 
 accounts.post("/", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "accounts.write");
   const input = await body(c, accountSchema);
   const company = c.get("company");
   if (!isValidSubtype(input.type as AccountType, input.subtype)) throw badRequest("Subtype does not match the account type");
@@ -70,7 +70,7 @@ accounts.post("/", async (c) => {
 });
 
 accounts.patch("/:id", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "accounts.write");
   const company = c.get("company");
   const id = c.req.param("id");
   const input = await body(c, accountSchema.partial().extend({ is_active: z.boolean().optional() }));
@@ -109,7 +109,7 @@ accounts.patch("/:id", async (c) => {
 });
 
 accounts.delete("/:id", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "accounts.write");
   const company = c.get("company");
   const id = c.req.param("id");
   const acc = await first<{ system_key: string | null }>(c.env.DB, `SELECT system_key FROM accounts WHERE id = ? AND company_id = ?`, id, company.id);

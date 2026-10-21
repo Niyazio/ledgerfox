@@ -21,7 +21,7 @@ export function JournalList() {
   return (
     <>
       <PageHeader title="Journals" subtitle="Every posting in the ledger, including those created by invoices, bills, payments and expenses."
-        actions={can("txn.write") && <>
+        actions={can("journal.create") && <>
           <LinkButton variant="secondary" to={`/app/${id}/journals/opening`}>Opening balances</LinkButton>
           <LinkButton to={`/app/${id}/journals/new`}><Plus className="h-4 w-4" />New journal</LinkButton>
         </>} />
@@ -215,10 +215,10 @@ export function JournalView() {
       <PageHeader title={e.entry_number ?? "Draft journal"} subtitle={e.memo} back={{ to: `/app/${id}/journals`, label: "Journals" }}
         actions={<>
           <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
-          {e.status === "draft" && can("txn.write") && <LinkButton variant="secondary" to={`/app/${id}/journals/${e.id}/edit`}>Edit</LinkButton>}
-          {e.status === "draft" && can("txn.post") && <Button onClick={async () => { try { await api.post(path(`/journals/${e.id}/post`)); toast("success", "Posted"); reload(); } catch (err) { toast("error", (err as Error).message); } }}>Post</Button>}
-          {e.status === "draft" && can("txn.write") && <ConfirmButton label="Delete" title="Delete draft?" body="The draft will be removed. This only works for drafts." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/journals/${e.id}`)); nav(`/app/${id}/journals`); }} />}
-          {e.status === "posted" && !e.reversed_by_id && e.kind !== "reversal" && !e.source_type && can("txn.reverse") && (
+          {e.status === "draft" && can("journal.create") && <LinkButton variant="secondary" to={`/app/${id}/journals/${e.id}/edit`}>Edit</LinkButton>}
+          {e.status === "draft" && can("journal.post") && <Button onClick={async () => { try { await api.post(path(`/journals/${e.id}/post`)); toast("success", "Posted"); reload(); } catch (err) { toast("error", (err as Error).message); } }}>Post</Button>}
+          {e.status === "draft" && can("journal.create") && <ConfirmButton label="Delete" title="Delete draft?" body="The draft will be removed. This only works for drafts." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/journals/${e.id}`)); nav(`/app/${id}/journals`); }} />}
+          {e.status === "posted" && !e.reversed_by_id && e.kind !== "reversal" && !e.source_type && can("journal.reverse") && (
             <ConfirmButton label="Reverse" title="Reverse this entry?" variant="primary" confirmLabel="Post reversal" withReason
               body={<div className="space-y-3"><p>An equal and opposite entry will be posted and linked. The original stays in the ledger for audit.</p>
                 <Field label="Reversal date">{(fid) => <Input id={fid} type="date" value={revDate} onChange={(ev) => setRevDate(ev.target.value)} />}</Field></div>}

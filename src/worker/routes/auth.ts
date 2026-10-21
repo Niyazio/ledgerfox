@@ -4,7 +4,7 @@ import type { AppEnv } from "../env";
 import { all, batch, first, run, stmt, nowIso } from "../lib/db";
 import { AppError, badRequest, forbidden, unauthorized } from "../lib/errors";
 import { body, reqText } from "../lib/validate";
-import { hashPassword, newId, recoveryCode, sha256Hex, verifyPassword } from "../lib/crypto";
+import { hashPassword, newId, recoveryCode, sha256Hex, temporaryPassword, verifyPassword } from "../lib/crypto";
 import { createSession, destroySession, loadSessionUser, rateLimit, clientIp, requireAuth, requireSession, isLocalRequest } from "../lib/auth";
 
 const auth = new Hono<AppEnv>();
@@ -17,15 +17,27 @@ export function passwordSchema(env: AppEnv["Bindings"]) {
   return z.string().min(n, `Use at least ${n} characters`).max(200);
 }
 
-/** Default desktop sign-in. It must be changed at first sign-in, and only from the computer itself. */
-export const DEFAULT_ADMIN = { username: "admin", password: "admin", email: "admin@ledgerfox.local", name: "Administrator" };
+/**
+ * Desktop first run: the administrator account gets a random one-time password (never a shared default). It is kept
+ * only in this process's memory, shown on the sign-in page to requests from this computer, and must be changed at
+ * first sign-in. If the app restarts before that, a new one is generated.
+ */
+export const DEFAULT_ADMIN = { username: "admin", email: "admin@ledgerfox.local", name: "Administrator" };
+let firstRunPassword: string | null = null;
+export const getFirstRunPassword = () => firstRunPassword;
 
-export async function ensureDefaultAdmin(env: AppEnv["Bindings"]) {
-  if (await first(env.DB, `SELECT 1 FROM users LIMIT 1`)) return false;
-  const h = await hashPassword(DEFAULT_ADMIN.password, iterations(env));
-  await run(env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, must_change_password) VALUES (?,?,?,?,?,?,?,1)`,
-    newId(), DEFAULT_ADMIN.email, DEFAULT_ADMIN.username, DEFAULT_ADMIN.name, h.hash, h.salt, h.iterations);
-  return true;
+export async function ensureDefaultAdmin(env: AppEnv["Bindings"]): Promise<string | null> {
+  const existing = await first<{ id: string }>(env.DB, `SELECT id FROM users WHERE email = ? AND must_change_password = 1`, DEFAULT_ADMIN.email);
+  if (!existing && (await first(env.DB, `SELECT 1 FROM users LIMIT 1`))) return (firstRunPassword = null);
+  const password = temporaryPassword();
+  const h = await hashPassword(password, iterations(env));
+  if (existing) {
+    await run(env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ? WHERE id = ?`, h.hash, h.salt, h.iterations, existing.id);
+  } else {
+    await run(env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, must_change_password) VALUES (?,?,?,?,?,?,?,1)`,
+      newId(), DEFAULT_ADMIN.email, DEFAULT_ADMIN.username, DEFAULT_ADMIN.name, h.hash, h.salt, h.iterations);
+  }
+  return (firstRunPassword = password);
 }
 
 export function iterations(env: AppEnv["Bindings"]) {
@@ -88,7 +100,7 @@ auth.post("/login", async (c) => {
   if (user.is_disabled || !(await verifyPassword(input.password, user))) throw unauthorized("Invalid username or password");
   // A default or temporary password may only be used on the computer running LedgerFox, never over the network.
   if (user.must_change_password && c.env.APP_ENV === "desktop" && !isLocalRequest(c)) {
-    throw forbidden("This account still has its default password. Sign in on the main computer first and change it.");
+    throw forbidden("This account still has its one-time password. Sign in on the main computer first and change it.");
   }
   // Transparently upgrade hashes when the configured work factor increases.
   if (user.password_iters < iterations(c.env)) {
@@ -109,8 +121,11 @@ auth.get("/me", async (c) => {
   const edition = c.env.APP_ENV === "desktop" ? "desktop" : c.env.APP_ENV === "offline" ? "offline" : "cloud";
   if (!user) {
     const closed = c.env.ALLOW_REGISTRATION === "false" || (c.env.ALLOW_REGISTRATION === "first" && Boolean(await first(c.env.DB, `SELECT 1 FROM users LIMIT 1`)));
-    const defaultLogin = edition === "desktop" && isLocalRequest(c) && Boolean(await first(c.env.DB, `SELECT 1 FROM users WHERE username = ? AND must_change_password = 1`, DEFAULT_ADMIN.username));
-    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open", default_login: defaultLogin });
+    const pending = edition === "desktop" && isLocalRequest(c) && firstRunPassword
+      ? await first<{ username: string }>(c.env.DB, `SELECT username FROM users WHERE email = ? AND must_change_password = 1`, DEFAULT_ADMIN.email)
+      : null;
+    const firstRun = pending ? { username: pending.username, password: firstRunPassword } : null;
+    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open", default_login: Boolean(firstRun), first_run: firstRun });
   }
   if (user.must_change_password) {
     return c.json({ user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: true }, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition });
@@ -138,7 +153,6 @@ auth.get("/me", async (c) => {
 auth.post("/change-password", requireSession, async (c) => {
   const input = await body(c, z.object({ current_password: z.string().min(1), new_password: passwordSchema(c.env), username: usernameSchema.optional() }));
   if (input.new_password === input.current_password) throw badRequest("Choose a password different from the current one");
-  if (input.new_password.toLowerCase() === DEFAULT_ADMIN.password) throw badRequest("Choose a password other than the default");
   const u = c.get("user");
   const row = await first<{ password_hash: string; password_salt: string; password_iters: number }>(c.env.DB, `SELECT * FROM users WHERE id = ?`, u.id);
   if (!row || !(await verifyPassword(input.current_password, row))) throw badRequest("Current password is incorrect");
@@ -151,6 +165,7 @@ auth.post("/change-password", requireSession, async (c) => {
       h.hash, h.salt, h.iterations, input.username ?? null, nowIso(), u.id),
     stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ? AND id <> ?`, u.id, u.session_id),
   ]);
+  if (u.email === DEFAULT_ADMIN.email) firstRunPassword = null;
   return c.json({ ok: true });
 });
 

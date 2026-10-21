@@ -41,8 +41,8 @@ export function Login() {
     <AuthCard title="Sign in" subtitle={me?.registration === "closed" ? "Ask the owner for an invitation if you don't have an account." : <>New here? <Link className="text-brand-700 hover:underline dark:text-brand-300" to="/register">Create an account</Link></>}>
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
-        {me?.default_login && (
-          <Alert kind="info">First time? Sign in with username <b>admin</b> and password <b>admin</b>. You will be asked to choose your own password straight away.</Alert>
+        {me?.first_run && (
+          <Alert kind="info">First time? Sign in with username <b>{me.first_run.username}</b> and the one-time password <b className="font-mono select-all">{me.first_run.password}</b>. It is shown only on this computer, and you will choose your own password straight away.</Alert>
         )}
         <Field label="Username or email">{(id) => <Input id={id} autoComplete="username" autoCapitalize="none" spellCheck={false} required value={login} onChange={(e) => setLogin(e.target.value)} />}</Field>
         <Field label="Password">{(id) => <Input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>

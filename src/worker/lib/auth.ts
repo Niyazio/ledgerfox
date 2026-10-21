@@ -1,10 +1,10 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import type { AppEnv, CompanyRow, SessionUser } from "../env";
-import { first, run, stmt } from "./db";
+import type { AppEnv, BranchScope, CompanyRow, SessionUser } from "../env";
+import { all, first, run, stmt } from "./db";
 import { AppError, forbidden, notFound, unauthorized } from "./errors";
 import { randomToken, sha256Hex, newId } from "./crypto";
-import { can, type Permission, type Role } from "@shared/permissions";
+import { effectivePermissions, type Permission, type Role } from "@shared/permissions";
 
 export const SESSION_DAYS = 14;
 
@@ -97,20 +97,72 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   const companyId = c.req.param("companyId");
   const user = c.get("user");
   if (!companyId) throw notFound("Company");
-  const row = await first<CompanyRow & { role: Role }>(
+  const row = await first<CompanyRow & { role: Role; all_branches: number }>(
     c.env.DB,
-    `SELECT co.*, m.role FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? WHERE co.id = ?`,
+    `SELECT co.*, m.role, m.all_branches FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? WHERE co.id = ?`,
     user.id, companyId,
   );
   if (!row) throw notFound("Company");
-  const { role, ...company } = row;
+  const { role, all_branches, ...company } = row;
   c.set("company", company as CompanyRow);
   c.set("role", role);
+  c.set("perms", await orgPermissions(c.env.DB, company.org_id, role));
+  c.set("branches", await branchScope(c.env.DB, company.org_id, company.id, user.id, role, Boolean(all_branches)));
   await next();
 };
 
+/** Role defaults with the organisation's customisations applied (Owner is never reduced). */
+export async function orgPermissions(db: D1Database, orgId: string, role: Role): Promise<Permission[]> {
+  if (role === "owner") return effectivePermissions(role);
+  const overrides = await all<{ permission: string; allowed: number }>(db, `SELECT permission, allowed FROM role_permissions WHERE org_id = ? AND role = ?`, orgId, role);
+  return effectivePermissions(role, overrides);
+}
+
+/** Owners always see every branch; others see every branch or only their assigned ones. */
+export async function branchScope(db: D1Database, orgId: string, companyId: string, userId: string, role: Role, allBranches: boolean): Promise<BranchScope> {
+  if (role === "owner" || allBranches) return { all: true, ids: [] };
+  const rows = await all<{ branch_id: string }>(db, `SELECT branch_id FROM member_branches WHERE org_id = ? AND user_id = ? AND company_id = ?`, orgId, userId, companyId);
+  return { all: false, ids: rows.map((r) => r.branch_id) };
+}
+
+export function hasPerm(c: Context<AppEnv>, perm: Permission): boolean {
+  return (c.get("perms") ?? []).includes(perm);
+}
+
 export function requirePerm(c: Context<AppEnv>, perm: Permission) {
-  if (!can(c.get("role"), perm)) throw forbidden();
+  if (!hasPerm(c, perm)) throw forbidden();
+}
+
+export function requireAnyPerm(c: Context<AppEnv>, ...perms: Permission[]) {
+  if (!perms.some((p) => hasPerm(c, p))) throw forbidden();
+}
+
+/**
+ * Validate a branch chosen by the client against the member's access. Restricted members must use one of their
+ * branches (their first branch is the default); others may leave it empty.
+ */
+export function resolveBranch(c: Context<AppEnv>, requested: string | null | undefined): string | null {
+  const scope = c.get("branches");
+  if (scope.all) return requested || null;
+  if (!scope.ids.length) throw forbidden("You are not assigned to any branch of this company. Ask the owner to assign one.");
+  if (!requested) return scope.ids[0];
+  if (!scope.ids.includes(requested)) throw forbidden("You do not have access to that branch");
+  return requested;
+}
+
+/** Throw 404 when a record belongs to a branch the member cannot see (records without a branch are company-wide). */
+export function assertBranchVisible(c: Context<AppEnv>, branchId: string | null | undefined) {
+  const scope = c.get("branches");
+  if (scope.all) return;
+  if (!branchId || !scope.ids.includes(branchId)) throw notFound("Record");
+}
+
+/** SQL fragment + params restricting a query to the member's branches, e.g. `AND d.branch_id IN (?,?)`. */
+export function branchFilter(c: Context<AppEnv>, column: string): { sql: string; params: string[] } {
+  const scope = c.get("branches");
+  if (scope.all) return { sql: "", params: [] };
+  if (!scope.ids.length) return { sql: " AND 1 = 0", params: [] };
+  return { sql: ` AND ${column} IN (${scope.ids.map(() => "?").join(",")})`, params: scope.ids };
 }
 
 export function clientIp(c: Context<AppEnv>): string {

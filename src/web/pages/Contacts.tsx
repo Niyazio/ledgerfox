@@ -78,13 +78,13 @@ export function ContactList({ kind }: { kind: "customer" | "supplier" }) {
     <>
       <PageHeader title={title} actions={<>
         {data && <Button variant="secondary" onClick={() => downloadCsv(`${title.toLowerCase()}.csv`, ["Name", "Email", "Phone", "Tax ID", "State", "Currency", "Outstanding (doc currency sum)"], data.contacts.map((c) => [c.name, c.email, c.phone, c.tax_id, c.state_code, c.currency, toInput(c[bal], c.currency ?? "INR")]))}><Download className="h-4 w-4" />CSV</Button>}
-        {can("masters.write") && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />New {kind}</Button>}
+        {can(kind === "customer" ? "customers.write" : "suppliers.write") && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />New {kind}</Button>}
       </>} />
       <Card padded={false}>
         <div className="border-b border-[var(--border)] p-3"><Input placeholder="Search name, email, GSTIN…" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="max-w-xs" aria-label={`Search ${title}`} /></div>
         {error && <Alert className="m-3">{error}</Alert>}
         {loading && !data ? <Spinner /> : data && !data.contacts.length ? (
-          <EmptyState title={`No ${title.toLowerCase()} yet`} action={can("masters.write") && <Button onClick={() => setAdding(true)}>Add {kind}</Button>} />
+          <EmptyState title={`No ${title.toLowerCase()} yet`} action={can(kind === "customer" ? "customers.write" : "suppliers.write") && <Button onClick={() => setAdding(true)}>Add {kind}</Button>} />
         ) : data && (
           <TableWrap>
             <table className="table">
@@ -125,9 +125,9 @@ export function ContactView() {
       <PageHeader title={c.name} subtitle={[c.email, c.phone, c.tax_id].filter(Boolean).join(" · ")} back={{ to: `/app/${id}/${isCustomer ? "customers" : "suppliers"}`, label: isCustomer ? "Customers" : "Suppliers" }}
         actions={<>
           <LinkButton variant="secondary" to={`/app/${id}/reports/statement/${c.id}`}>Statement</LinkButton>
-          {can("masters.write") && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
-          {isCustomer && can("txn.write") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
-          {c.kind !== "customer" && can("txn.write") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}
+          {can(isCustomer ? "customers.write" : "suppliers.write") && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
+          {isCustomer && can("sales.create") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
+          {c.kind !== "customer" && can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}
         </>} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Details">

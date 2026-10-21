@@ -180,11 +180,16 @@ describe("inventory costing", () => {
 
 describe("permissions", () => {
   it("role matrix", () => {
-    expect(can("viewer", "txn.post")).toBe(false);
+    expect(can("viewer", "sales.post")).toBe(false);
+    expect(can("billing", "sales.post")).toBe(true);
+    expect(can("billing", "purchase.view")).toBe(false);
+    expect(can("purchase", "sales.view")).toBe(false);
+    expect(can("inventory", "inventory.transfer")).toBe(true);
     expect(can("auditor", "audit.read")).toBe(true);
-    expect(can("auditor", "txn.write")).toBe(false);
+    expect(can("auditor", "sales.create")).toBe(false);
     expect(can("accountant", "data.export")).toBe(false);
-    expect(can("admin", "data.export")).toBe(true);
+    expect(can("owner", "data.export")).toBe(true);
+    expect(can("admin", "roles.manage")).toBe(false);
     expect(canAssignRole("admin", "admin")).toBe(false);
     expect(canAssignRole("owner", "admin")).toBe(true);
     expect(canAssignRole("accountant", "viewer")).toBe(false);

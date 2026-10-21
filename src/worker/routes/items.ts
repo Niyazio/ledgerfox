@@ -5,12 +5,13 @@ import { all, batch, first, stmt } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, reqText, shortText, optId, minor, qty, isoDate, pageParams } from "../lib/validate";
 import { newId } from "../lib/crypto";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
 import { buildJournal, systemAccounts, assertOpenPeriod } from "../services/ledger";
 import { companyPosition, issueCost, stockMoveStmt, warehouseQty } from "../services/inventory";
 
 const items = new Hono<AppEnv>();
+items.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "inventory.view", "sales.create", "purchase.create"); await next(); });
 
 const itemSchema = z.object({
   kind: z.enum(["goods", "service"]),
@@ -86,7 +87,7 @@ items.get("/:id", async (c) => {
 });
 
 items.post("/", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "items.write");
   const input = await body(c, itemSchema);
   const company = c.get("company");
   await checkRefs(c.env.DB, company.id, input);
@@ -105,7 +106,7 @@ items.post("/", async (c) => {
 });
 
 items.put("/:id", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "items.write");
   const input = await body(c, itemSchema);
   const company = c.get("company");
   const id = c.req.param("id");
@@ -132,7 +133,7 @@ items.put("/:id", async (c) => {
 
 // ── Warehouses ──
 items.post("/warehouses", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "branches.manage");
   const input = await body(c, z.object({ name: reqText(120), code: reqText(20), branch_id: optId }));
   const company = c.get("company");
   const id = newId();
@@ -144,7 +145,7 @@ items.post("/warehouses", async (c) => {
 });
 
 items.patch("/warehouses/:id", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "branches.manage");
   const input = await body(c, z.object({ name: reqText(120), code: reqText(20), is_active: z.boolean().default(true) }));
   const company = c.get("company");
   await batch(c.env.DB, [
@@ -171,7 +172,7 @@ async function checkWarehouse(db: D1Database, companyId: string, id: string) {
  * (or Opening Balance Equity for opening stock) in the same transaction.
  */
 items.post("/adjustments", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "inventory.adjust");
   const input = await body(c, z.object({
     item_id: z.string(), warehouse_id: z.string(), date: isoDate,
     quantity: z.union([z.string(), z.number()]), // signed
@@ -226,7 +227,7 @@ items.post("/adjustments", async (c) => {
 
 /** Transfer between warehouses at moving-average cost; no ledger impact (same inventory account). */
 items.post("/transfers", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "inventory.transfer");
   const input = await body(c, z.object({ item_id: z.string(), from_warehouse_id: z.string(), to_warehouse_id: z.string(), date: isoDate, quantity: z.union([z.string(), z.number()]), memo: shortText(300).nullish() }));
   const company = c.get("company");
   const user = c.get("user");

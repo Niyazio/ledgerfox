@@ -1,15 +1,17 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { conflict, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, rate, pageParams } from "../lib/validate";
-import { audit, requirePerm } from "../lib/auth";
+import { assertBranchVisible, audit, branchFilter, requireAnyPerm, requirePerm, resolveBranch } from "../lib/auth";
 import { buildJournal, buildReversal, postDraft, lineStmt, assertBalanced, normaliseLines, systemAccount, type LineInput } from "../services/ledger";
 import { currencyExponent, isCurrency } from "@shared/currencies";
 import { convertToBase } from "@shared/money";
 
 const journals = new Hono<AppEnv>();
+journals.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "journal.view"); await next(); });
 
 const lineSchema = z.object({
   account_id: z.string().min(1),
@@ -67,6 +69,14 @@ async function checkLineRefs(db: D1Database, companyId: string, lines: LineInput
   if (found.length !== ids.length) throw unprocessable("INVALID_ACCOUNT", "One or more accounts do not exist in this company");
 }
 
+/** 404 when the entry does not exist or belongs to a branch the member cannot see. */
+async function visibleEntry(c: Context<AppEnv>, id: string) {
+  const e = await first<{ status: string; source_type: string | null; branch_id: string | null }>(c.env.DB, `SELECT status, source_type, branch_id FROM journal_entries WHERE id = ? AND company_id = ?`, id, c.get("company").id);
+  if (!e) throw notFound("Journal entry");
+  assertBranchVisible(c, e.branch_id);
+  return e;
+}
+
 journals.get("/", async (c) => {
   const company = c.get("company");
   const { limit, offset } = pageParams(c);
@@ -80,6 +90,8 @@ journals.get("/", async (c) => {
   if (from) { where.push("e.entry_date >= ?"); params.push(from); }
   if (to) { where.push("e.entry_date <= ?"); params.push(to); }
   if (q) { where.push("(e.entry_number LIKE ? OR e.memo LIKE ? OR e.reference LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  const bf = branchFilter(c, "e.branch_id");
+  if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
   const rows = await all(
     c.env.DB,
     `SELECT e.id, e.entry_number, e.entry_date, e.status, e.kind, e.memo, e.reference, e.total, e.source_type, e.source_id,
@@ -102,6 +114,7 @@ journals.get("/:id", async (c) => {
     c.req.param("id"), company.id,
   );
   if (!entry) throw notFound("Journal entry");
+  assertBranchVisible(c, (entry as { branch_id?: string | null }).branch_id);
   const lines = await all(
     c.env.DB,
     `SELECT l.*, a.code AS account_code, a.name AS account_name, ct.name AS contact_name,
@@ -116,9 +129,9 @@ journals.get("/:id", async (c) => {
 });
 
 journals.post("/", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "journal.create");
   const input = await body(c, journalSchema);
-  if (input.post) requirePerm(c, "txn.post");
+  if (input.post) requirePerm(c, "journal.post");
   const company = c.get("company");
   const user = c.get("user");
   if (input.idempotency_key) {
@@ -129,7 +142,7 @@ journals.post("/", async (c) => {
   await checkLineRefs(c.env.DB, company.id, normaliseLines(lines));
   const built = buildJournal(c.env.DB, {
     company_id: company.id, entry_date: input.entry_date, kind: input.kind, memo: input.memo, reference: input.reference,
-    branch_id: input.branch_id, idempotency_key: input.idempotency_key, created_by: user.id, lines, post: input.post,
+    branch_id: resolveBranch(c, input.branch_id), idempotency_key: input.idempotency_key, created_by: user.id, lines, post: input.post,
   });
   await batch(c.env.DB, [...built.stmts, audit(c, input.post ? "journal.create_post" : "journal.create", "journal", built.id, { total: built.total, kind: input.kind })]);
   const row = await first<{ entry_number: string | null }>(c.env.DB, `SELECT entry_number FROM journal_entries WHERE id = ?`, built.id);
@@ -137,12 +150,11 @@ journals.post("/", async (c) => {
 });
 
 journals.put("/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "journal.create");
   const input = await body(c, journalSchema.omit({ post: true, idempotency_key: true }));
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string }>(c.env.DB, `SELECT status FROM journal_entries WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Journal entry");
+  const e = await visibleEntry(c, id);
   if (e.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Posted entries cannot be edited; reverse and re-enter instead");
   const lines = normaliseLines(toLedgerLines(input.lines, company.base_currency));
   await checkLineRefs(c.env.DB, company.id, lines);
@@ -150,7 +162,7 @@ journals.put("/:id", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM journal_lines WHERE entry_id = ? AND company_id = ?`, id, company.id),
     stmt(c.env.DB, `UPDATE journal_entries SET entry_date = ?, memo = ?, reference = ?, kind = ?, branch_id = ?, total = ? WHERE id = ? AND company_id = ? AND status = 'draft'`,
-      input.entry_date, input.memo ?? null, input.reference ?? null, input.kind, input.branch_id ?? null, total, id, company.id),
+      input.entry_date, input.memo ?? null, input.reference ?? null, input.kind, resolveBranch(c, input.branch_id ?? e.branch_id), total, id, company.id),
     ...lines.map((l, i) => lineStmt(c.env.DB, company.id, id, i + 1, l)),
     audit(c, "journal.update", "journal", id, { total }),
   ]);
@@ -158,20 +170,20 @@ journals.put("/:id", async (c) => {
 });
 
 journals.post("/:id/post", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "journal.post");
   const company = c.get("company");
   const id = c.req.param("id");
+  await visibleEntry(c, id);
   await postDraft(c.env.DB, company.id, id, c.get("user").id, [audit(c, "journal.post", "journal", id)]);
   const row = await first<{ entry_number: string }>(c.env.DB, `SELECT entry_number FROM journal_entries WHERE id = ?`, id);
   return c.json({ ok: true, entry_number: row?.entry_number });
 });
 
 journals.delete("/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requirePerm(c, "journal.create");
   const company = c.get("company");
   const id = c.req.param("id");
-  const e = await first<{ status: string; source_type: string | null }>(c.env.DB, `SELECT status, source_type FROM journal_entries WHERE id = ? AND company_id = ?`, id, company.id);
-  if (!e) throw notFound("Journal entry");
+  const e = await visibleEntry(c, id);
   if (e.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Posted entries cannot be deleted; reverse them instead");
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM journal_entries WHERE id = ? AND company_id = ? AND status = 'draft'`, id, company.id),
@@ -181,10 +193,11 @@ journals.delete("/:id", async (c) => {
 });
 
 journals.post("/:id/reverse", async (c) => {
-  requirePerm(c, "txn.reverse");
+  requirePerm(c, "journal.reverse");
   const input = await body(c, z.object({ date: isoDate.optional(), memo: shortText(500).nullish() }));
   const company = c.get("company");
   const id = c.req.param("id");
+  await visibleEntry(c, id);
   const built = await buildReversal(c.env.DB, company.id, id, input.date ?? todayIso(), c.get("user").id, input.memo);
   await batch(c.env.DB, [...built.stmts, audit(c, "journal.reverse", "journal", id, { reversal_id: built.id })]);
   return c.json({ id: built.id }, 201);
@@ -195,7 +208,7 @@ journals.post("/:id/reverse", async (c) => {
  * so the entry always balances.
  */
 journals.post("/opening-balances", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "journal.post");
   const input = await body(c, z.object({
     date: isoDate,
     lines: z.array(z.object({ account_id: z.string(), debit: z.union([z.string(), z.number()]).nullish(), credit: z.union([z.string(), z.number()]).nullish(), contact_id: optId })).min(1).max(300),

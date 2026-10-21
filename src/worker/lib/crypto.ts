@@ -62,3 +62,16 @@ export function recoveryCode(): string {
   const chars = [...b].map((x) => alphabet[x % alphabet.length]).join("");
   return `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 12)}`;
 }
+
+/** Random one-time password for a new or reset staff account, e.g. "k7QfR-9XwDm-2PaH8" (≈ 85 bits; no look-alike characters). */
+export function temporaryPassword(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const out: string[] = [];
+  while (out.length < 15) {
+    for (const x of crypto.getRandomValues(new Uint8Array(32))) {
+      if (x < 220 && out.length < 15) out.push(alphabet[x % 55]); // 220 = 4 × 55, so every character is equally likely
+    }
+  }
+  const s = out.join("");
+  return `${s.slice(0, 5)}-${s.slice(5, 10)}-${s.slice(10)}`;
+}

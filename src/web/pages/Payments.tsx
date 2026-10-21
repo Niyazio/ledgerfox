@@ -20,7 +20,7 @@ export function PaymentList() {
   return (
     <>
       <PageHeader title={title} subtitle={direction === "in" ? "Money received from customers" : "Money paid to suppliers"}
-        actions={can("txn.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>} />
+        actions={can(direction === "in" ? "sales.post" : "purchase.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>} />
       <Card padded={false}>
         {error && <Alert className="m-3">{error}</Alert>}
         {loading && !data ? <Spinner /> : data && !data.payments.length ? <EmptyState title={`No ${title.toLowerCase()} yet`} /> : data && (
@@ -173,8 +173,8 @@ export function PaymentView() {
       <PageHeader title={`${p.direction === "in" ? "Receipt" : "Payment"} ${p.number}`} subtitle={p.contact_name} back={{ to: `/app/${id}/payments/${p.direction}`, label: p.direction === "in" ? "Receipts" : "Payments" }}
         actions={<>
           <LinkButton variant="secondary" to={`/print/${id}/payment/${p.id}`}>Print receipt</LinkButton>
-          {p.status === "posted" && p.amount - allocated > 0 && can("txn.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
-          {p.status === "posted" && can("txn.reverse") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}
+          {p.status === "posted" && p.amount - allocated > 0 && can(p.direction === "in" ? "sales.post" : "purchase.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
+          {p.status === "posted" && can(p.direction === "in" ? "sales.void" : "purchase.void") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}
         </>} />
       <Card className="print-area">
         <div className="grid gap-4 text-sm sm:grid-cols-4">

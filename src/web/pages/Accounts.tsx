@@ -88,7 +88,7 @@ export default function Accounts() {
       <PageHeader title="Chart of accounts" subtitle="Group accounts organise the chart; only ledger accounts accept postings."
         actions={<>
           <Button variant="secondary" onClick={() => downloadCsv("chart-of-accounts.csv", ["Code", "Name", "Type", "Detail type", "Group", "Active", "Balance"], tree.map(({ a }) => [a.code, a.name, a.type, a.subtype, a.is_group ? "yes" : "no", a.is_active ? "yes" : "no", a.is_group ? "" : toInput(balance(a), cur)]))}><Download className="h-4 w-4" />CSV</Button>
-          {can("masters.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New account</Button>}
+          {can("accounts.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New account</Button>}
         </>} />
       <Card padded={false}>
         <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] p-3">
@@ -110,8 +110,8 @@ export default function Accounts() {
                   <td className="text-xs muted">{a.type} · {a.subtype.replace(/_/g, " ")}</td>
                   <td className="num">{a.is_group ? "" : money(balance(a))}</td>
                   <td className="no-print text-right">
-                    {can("masters.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(a)}>Edit</Button>}
-                    {can("masters.write") && !a.system_key && !a.debit_total && !a.credit_total && (
+                    {can("accounts.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(a)}>Edit</Button>}
+                    {can("accounts.write") && !a.system_key && !a.debit_total && !a.credit_total && (
                       <Button size="sm" variant="ghost" onClick={async () => {
                         try { await api.del(path(`/accounts/${a.id}`)); await reloadAccounts(); toast("success", "Account deleted"); } catch (e) { toast("error", errorMessage(e)); }
                       }}>Delete</Button>

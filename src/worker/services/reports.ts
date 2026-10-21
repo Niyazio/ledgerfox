@@ -45,9 +45,9 @@ export async function balances(db: D1Database, companyId: string, from: string |
     ...(from ? [companyId, to, from, ...fs.params] : [companyId, to, ...fs.params]));
 }
 
-export async function trialBalance(db: D1Database, company: CompanyRow, from: string, to: string) {
-  const opening = await balances(db, company.id, null, prevDay(from));
-  const movement = await balances(db, company.id, from, to);
+export async function trialBalance(db: D1Database, company: CompanyRow, from: string, to: string, f: Filters = {}) {
+  const opening = await balances(db, company.id, null, prevDay(from), f);
+  const movement = await balances(db, company.id, from, to, f);
   const map = new Map<string, { id: string; code: string; name: string; type: string; opening: number; debit: number; credit: number; closing: number }>();
   for (const o of opening) map.set(o.id, { id: o.id, code: o.code, name: o.name, type: o.type, opening: o.debit - o.credit, debit: 0, credit: 0, closing: 0 });
   for (const m of movement) {
@@ -108,22 +108,23 @@ export async function profitAndLoss(db: D1Database, company: CompanyRow, from: s
 }
 
 /** Cumulative profit (income − expense) for entries dated within [from, to]. */
-async function cumulativeProfit(db: D1Database, companyId: string, from: string | null, to: string) {
+async function cumulativeProfit(db: D1Database, companyId: string, from: string | null, to: string, f: Filters = {}) {
+  const fs = filterSql(f);
   const r = await first<{ p: number }>(db,
     `SELECT COALESCE(SUM(CASE WHEN a.type = 'income' THEN l.credit - l.debit WHEN a.type = 'expense' THEN l.credit - l.debit ELSE 0 END),0) AS p
      FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}`,
-    ...(from ? [companyId, to, from] : [companyId, to]));
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}${fs.sql}`,
+    ...(from ? [companyId, to, from, ...fs.params] : [companyId, to, ...fs.params]));
   return r?.p ?? 0;
 }
 
-export async function balanceSheet(db: D1Database, company: CompanyRow, asOf: string) {
-  const rows = (await balances(db, company.id, null, asOf)).filter((r) => ["asset", "liability", "equity"].includes(r.type));
+export async function balanceSheet(db: D1Database, company: CompanyRow, asOf: string, f: Filters = {}) {
+  const rows = (await balances(db, company.id, null, asOf, f)).filter((r) => ["asset", "liability", "equity"].includes(r.type));
   const fy = fiscalYearFor(asOf, company.fiscal_year_start_month);
   const fyRow = await first<{ start_date: string }>(db, `SELECT start_date FROM fiscal_years WHERE company_id = ? AND start_date <= ? AND end_date >= ?`, company.id, asOf, asOf);
   const fyStart = fyRow?.start_date ?? fy.start;
-  const currentEarnings = await cumulativeProfit(db, company.id, fyStart, asOf);
-  const priorEarnings = await cumulativeProfit(db, company.id, null, prevDay(fyStart));
+  const currentEarnings = await cumulativeProfit(db, company.id, fyStart, asOf, f);
+  const priorEarnings = await cumulativeProfit(db, company.id, null, prevDay(fyStart), f);
   const group = (type: string, sign: 1 | -1) => {
     const lines = rows.filter((r) => r.type === type).map((r) => ({ id: r.id, code: r.code, name: r.name, subtype: r.subtype, amount: sign * (r.debit - r.credit) })).filter((l) => l.amount !== 0);
     return { lines, total: lines.reduce((t, l) => t + l.amount, 0) };

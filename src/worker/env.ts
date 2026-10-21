@@ -1,4 +1,4 @@
-import type { Role } from "@shared/permissions";
+import type { Permission, Role } from "@shared/permissions";
 
 export interface Env {
   DB: D1Database;
@@ -48,6 +48,8 @@ export interface CompanyRow {
   is_demo: number;
   upi_id: string | null;
   print_template: string;
+  purchase_approval_limit: number | null;
+  billing_discount_limit_bp: number | null;
   created_at: string;
 }
 
@@ -55,7 +57,13 @@ export type AppVariables = {
   user: SessionUser;
   company: CompanyRow;
   role: Role;
+  /** Effective permissions for this company's organisation (role defaults + owner customisations). */
+  perms: Permission[];
+  /** Branches this member may use: every branch, or only the listed ones. */
+  branches: BranchScope;
   requestId: string;
 };
+
+export interface BranchScope { all: boolean; ids: string[] }
 
 export type AppEnv = { Bindings: Env; Variables: AppVariables };

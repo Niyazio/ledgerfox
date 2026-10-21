@@ -6,7 +6,6 @@ import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, reqText, shortText, isoDate, rate, percentBp } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, requirePerm } from "../lib/auth";
-import { permissionsFor } from "@shared/permissions";
 import { companySchema, validateCompanyInput } from "./orgs";
 import { fiscalYearStatements, monthlyPeriods } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
@@ -30,7 +29,8 @@ settings.get("/", async (c) => {
   return c.json({
     company,
     role,
-    permissions: permissionsFor(role),
+    permissions: c.get("perms"),
+    branch_scope: c.get("branches"),
     jurisdiction: JURISDICTIONS[company.country] ?? JURISDICTIONS.DEFAULT,
     tax_scheme: schemeForCountry(company.country),
     branches, departments, projects, cost_centres: costCentres, tax_codes: taxCodes, warehouses, units,
@@ -72,7 +72,7 @@ const dimSchema = z.object({ name: reqText(120), code: reqText(20), is_active: z
 
 for (const [path, table] of Object.entries(DIMENSIONS)) {
   settings.post(`/${path}`, async (c) => {
-    requirePerm(c, "masters.write");
+    requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
     const id = newId();
     const company = c.get("company");
@@ -83,7 +83,7 @@ for (const [path, table] of Object.entries(DIMENSIONS)) {
     return c.json({ id }, 201);
   });
   settings.patch(`/${path}/:id`, async (c) => {
-    requirePerm(c, "masters.write");
+    requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
     const company = c.get("company");
     const id = c.req.param("id");
@@ -166,7 +166,7 @@ settings.get("/exchange-rates", async (c) => {
 });
 
 settings.post("/exchange-rates", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "accounts.write");
   const input = await body(c, z.object({ currency: z.string().regex(/^[A-Z]{3}$/), rate_date: isoDate, rate: z.union([z.string(), z.number()]) }));
   const company = c.get("company");
   if (!isCurrency(input.currency)) throw badRequest("Unsupported currency");

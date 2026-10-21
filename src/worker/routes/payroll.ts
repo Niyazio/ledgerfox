@@ -280,7 +280,6 @@ payroll.delete("/runs/:id", async (c) => {
 /** Post the salary journal: expense and employer contributions against salaries payable and statutory liabilities. */
 payroll.post("/runs/:id/post", async (c) => {
   requirePerm(c, "payroll.manage");
-  requirePerm(c, "txn.post");
   const company = c.get("company");
   const runId = c.req.param("id");
   const run = await first<{ status: string; period: string; pay_date: string }>(c.env.DB, `SELECT status, period, pay_date FROM payroll_runs WHERE id = ? AND company_id = ?`, runId, company.id);
@@ -317,7 +316,6 @@ payroll.post("/runs/:id/post", async (c) => {
 /** Record that net salaries were paid from a bank/cash account. */
 payroll.post("/runs/:id/pay", async (c) => {
   requirePerm(c, "payroll.manage");
-  requirePerm(c, "txn.post");
   const company = c.get("company");
   const runId = c.req.param("id");
   const input = await body(c, z.object({ account_id: z.string(), date: isoDate }));

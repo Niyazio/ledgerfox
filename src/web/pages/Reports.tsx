@@ -442,7 +442,7 @@ export function Budgets() {
   return (
     <Shell title="Budget vs actual" controls={<>
       <Select value={sel} onChange={(e) => setSel(e.target.value)} className="max-w-xs" aria-label="Budget"><option value="">Select budget…</option>{list.data?.budgets.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.fiscal_year_name})</option>)}</Select>
-      {can("masters.write") && <Button variant="secondary" onClick={() => setCreating(!creating)}>{creating ? "Cancel" : "New budget"}</Button>}
+      {can("accounts.write") && <Button variant="secondary" onClick={() => setCreating(!creating)}>{creating ? "Cancel" : "New budget"}</Button>}
     </>} onCsv={r.data ? () => downloadCsv("budget-vs-actual.csv", ["Account", "Budget", "Actual", "Variance"], r.data.rows.map((x: any) => [`${x.code} ${x.name}`, toInput(x.amount, cur), toInput(x.actual, cur), toInput(x.variance, cur)])) : undefined}>
       {creating && (
         <div className="mb-6 space-y-3 rounded-lg bg-[var(--surface-2)] p-4">
