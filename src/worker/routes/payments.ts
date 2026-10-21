@@ -4,11 +4,24 @@ import type { AppEnv } from "../env";
 import { all, first, todayIso } from "../lib/db";
 import { notFound } from "../lib/errors";
 import { body, isoDate, shortText, minor, rate, pageParams } from "../lib/validate";
-import { requirePerm } from "../lib/auth";
+import { requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
+import type { Context } from "hono";
+import type { Permission } from "@shared/permissions";
 import { currencyExponent } from "@shared/currencies";
 import { recordPayment, voidPayment, applyCredit } from "../services/payments";
 
 const payments = new Hono<AppEnv>();
+
+/** Receipts belong to sales, supplier payments to purchases. */
+const payPerm = (direction: string, action: "view" | "post" | "void") => `${direction === "in" ? "sales" : "purchase"}.${action}` as Permission;
+
+async function access(c: Context<AppEnv>, id: string, action: "view" | "post" | "void") {
+  const p = await first<{ direction: string; branch_id: string | null; currency: string }>(c.env.DB, `SELECT direction, branch_id, currency FROM payments WHERE id = ? AND company_id = ?`, id, c.get("company").id);
+  if (!p) throw notFound("Payment");
+  assertBranchVisible(c, p.branch_id);
+  requirePerm(c, payPerm(p.direction, action));
+  return p;
+}
 
 payments.get("/", async (c) => {
   const company = c.get("company");
@@ -16,7 +29,15 @@ payments.get("/", async (c) => {
   const direction = c.req.query("direction");
   const where = ["p.company_id = ?"];
   const params: (string | number)[] = [company.id];
-  if (direction === "in" || direction === "out") { where.push("p.direction = ?"); params.push(direction); }
+  if (direction === "in" || direction === "out") { requirePerm(c, payPerm(direction, "view")); where.push("p.direction = ?"); params.push(direction); }
+  else {
+    const dirs = ["in", "out"].filter((d) => hasPerm(c, payPerm(d, "view")));
+    if (!dirs.length) requirePerm(c, "sales.view");
+    where.push(`p.direction IN (${dirs.map(() => "?").join(",")})`); params.push(...dirs);
+  }
+  const bf = branchFilter(c, "p.branch_id");
+  if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
+  if (c.req.query("branch_id")) { where.push("p.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
   const contactId = c.req.query("contact_id");
   if (contactId) { where.push("p.contact_id = ?"); params.push(contactId); }
   const rows = await all(c.env.DB,
@@ -29,6 +50,7 @@ payments.get("/", async (c) => {
 });
 
 payments.get("/:id", async (c) => {
+  await access(c, c.req.param("id"), "view");
   const company = c.get("company");
   const p = await first(c.env.DB,
     `SELECT p.*, ct.name AS contact_name, a.name AS account_name, je.entry_number AS journal_number
@@ -53,11 +75,12 @@ const paySchema = z.object({
   notes: shortText(1000).nullish(),
   idempotency_key: z.string().min(8).max(100).nullish(),
   allocations: z.array(z.object({ document_id: z.string(), amount: z.union([z.string(), z.number()]) })).max(100).default([]),
+  branch_id: z.string().nullish(),
 });
 
 payments.post("/", async (c) => {
-  requirePerm(c, "txn.post");
   const input = await body(c, paySchema);
+  requirePerm(c, payPerm(input.direction, "post"));
   const company = c.get("company");
   let currency = input.currency ?? null;
   if (!currency) {
@@ -68,24 +91,21 @@ payments.post("/", async (c) => {
   const result = await recordPayment(c, {
     direction: input.direction, contact_id: input.contact_id, payment_date: input.payment_date, account_id: input.account_id, currency,
     fx_rate_scaled: input.fx_rate ? rate(input.fx_rate) : null, amount: minor(input.amount, exp), method: input.method, reference: input.reference,
-    notes: input.notes, idempotency_key: input.idempotency_key,
+    notes: input.notes, idempotency_key: input.idempotency_key, branch_id: resolveBranch(c, input.branch_id),
     allocations: input.allocations.filter((a) => a.amount !== "" && a.amount !== 0 && a.amount !== "0").map((a) => ({ document_id: a.document_id, amount: minor(a.amount, exp, "allocation") })),
   });
   return c.json(result, result.duplicate ? 200 : 201);
 });
 
 payments.post("/:id/apply", async (c) => {
-  requirePerm(c, "txn.post");
+  const p = await access(c, c.req.param("id"), "post");
   const input = await body(c, z.object({ document_id: z.string(), amount: z.union([z.string(), z.number()]), date: isoDate.optional() }));
-  const company = c.get("company");
-  const p = await first<{ currency: string }>(c.env.DB, `SELECT currency FROM payments WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
-  if (!p) throw notFound("Payment");
   await applyCredit(c, { kind: "payment", id: c.req.param("id") }, input.document_id, minor(input.amount, currencyExponent(p.currency)), input.date ?? todayIso());
   return c.json({ ok: true });
 });
 
 payments.post("/:id/void", async (c) => {
-  requirePerm(c, "txn.reverse");
+  await access(c, c.req.param("id"), "void");
   const input = await body(c, z.object({ date: isoDate.optional(), reason: shortText(300).nullish() }));
   await voidPayment(c, c.req.param("id"), input.date ?? todayIso(), input.reason);
   return c.json({ ok: true });

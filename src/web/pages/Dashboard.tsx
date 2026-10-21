@@ -32,9 +32,39 @@ function IncomeExpenseChart({ months, fmt }: { months: { month: string; income: 
   );
 }
 
+/** Start page for staff without access to the financial dashboard (e.g. billing or store staff). */
+function StaffHome() {
+  const { id, can, settings } = useCompany();
+  const actions: [boolean, string, string][] = [
+    [can("sales.create"), "New invoice / bill", `/app/${id}/sales/invoice/new`],
+    [can("sales.post"), "Record a receipt", `/app/${id}/payments/in/new`],
+    [can("purchase.create"), "New supplier bill", `/app/${id}/purchases/bill/new`],
+    [can("purchase.create"), "New purchase order", `/app/${id}/purchases/purchase_order/new`],
+    [can("inventory.view"), "Products & stock", `/app/${id}/inventory`],
+    [can("inventory.transfer"), "Transfer stock", `/app/${id}/inventory?tab=transfers`],
+    [can("labels.print"), "Print product labels", `/app/${id}/labels`],
+    [can("expense.create"), "Record an expense", `/app/${id}/expenses`],
+    [can("daybook.read"), "Daybook", `/app/${id}/daybook`],
+  ];
+  return (
+    <>
+      <PageHeader title={`Welcome to ${settings?.company.name ?? ""}`} subtitle="Your role shows the work you can do here." />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {actions.filter(([ok]) => ok).map(([, label, to]) => <LinkButton key={to} variant="secondary" to={to}>{label}</LinkButton>)}
+      </div>
+    </>
+  );
+}
+
 export default function Dashboard() {
-  const { path, money, settings, id } = useCompany();
-  const { data, error, loading } = useApi<any>(path("/reports/dashboard"));
+  const { can, settings } = useCompany();
+  if (settings && !can("reports.read")) return <StaffHome />;
+  return <FinancialDashboard />;
+}
+
+function FinancialDashboard() {
+  const { path, money, settings, id, branchQuery } = useCompany();
+  const { data, error, loading } = useApi<any>(path(`/reports/dashboard?${branchQuery.slice(1)}`));
   if (loading && !data) return <Spinner />;
   if (error) return <Alert>{error}</Alert>;
   if (!data) return null;

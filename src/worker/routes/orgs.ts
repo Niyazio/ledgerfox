@@ -5,10 +5,10 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt, nowIso, todayIso } from "../lib/db";
 import { AppError, badRequest, forbidden, notFound } from "../lib/errors";
 import { body, reqText, shortText, currencyCode } from "../lib/validate";
-import { hashPassword, newId, randomToken, sha256Hex } from "../lib/crypto";
-import { iterations, passwordSchema, usernameSchema } from "./auth";
-import { audit, requireAuth } from "../lib/auth";
-import { can, canAssignRole, type Role } from "@shared/permissions";
+import { hashPassword, newId, randomToken, sha256Hex, temporaryPassword } from "../lib/crypto";
+import { iterations, usernameSchema } from "./auth";
+import { audit, orgPermissions, requireAuth } from "../lib/auth";
+import { ALL_PERMISSIONS, ROLES, canAssignRole, defaultPermissions, effectivePermissions, type Permission, type Role } from "@shared/permissions";
 import { companySetupStatements } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
 import { isValidGstin, INDIA_STATES } from "@shared/tax";
@@ -45,10 +45,38 @@ export function validateCompanyInput(input: z.infer<typeof companySchema>) {
   }
 }
 
-async function membership(c: Context<AppEnv>, orgId: string): Promise<Role> {
+interface Member { role: Role; perms: Permission[] }
+
+async function membership(c: Context<AppEnv>, orgId: string): Promise<Member> {
   const m = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, c.get("user").id);
   if (!m) throw notFound("Organisation");
-  return m.role;
+  return { role: m.role, perms: await orgPermissions(c.env.DB, orgId, m.role) };
+}
+
+async function requireOrgPerm(c: Context<AppEnv>, orgId: string, perm: Permission): Promise<Member> {
+  const m = await membership(c, orgId);
+  if (!m.perms.includes(perm)) throw forbidden();
+  return m;
+}
+
+const assignableRole = z.enum(["admin", "billing", "purchase", "accountant", "inventory", "auditor", "viewer"]);
+const branchAccess = z.object({ company_id: z.string().min(1), all_branches: z.boolean(), branch_ids: z.array(z.string().min(1)).max(200).default([]) });
+
+/** Statements replacing a member's branch assignments for one company (validated against that company's branches). */
+async function branchStatements(c: Context<AppEnv>, orgId: string, userId: string, a: z.infer<typeof branchAccess>) {
+  const co = await first(c.env.DB, `SELECT 1 FROM companies WHERE id = ? AND org_id = ?`, a.company_id, orgId);
+  if (!co) throw notFound("Company");
+  const ids = [...new Set(a.branch_ids)];
+  if (!a.all_branches) {
+    if (!ids.length) throw badRequest("Choose at least one branch, or allow all branches");
+    const known = await all<{ id: string }>(c.env.DB, `SELECT id FROM branches WHERE company_id = ? AND id IN (${ids.map(() => "?").join(",")})`, a.company_id, ...ids);
+    if (known.length !== ids.length) throw badRequest("Unknown branch");
+  }
+  return [
+    stmt(c.env.DB, `UPDATE memberships SET all_branches = ? WHERE org_id = ? AND user_id = ?`, a.all_branches ? 1 : 0, orgId, userId),
+    stmt(c.env.DB, `DELETE FROM member_branches WHERE org_id = ? AND user_id = ? AND company_id = ?`, orgId, userId, a.company_id),
+    ...(a.all_branches ? [] : ids.map((b) => stmt(c.env.DB, `INSERT INTO member_branches (org_id, user_id, company_id, branch_id) VALUES (?,?,?,?)`, orgId, userId, a.company_id, b))),
+  ];
 }
 
 /** Create an organisation together with its first company (onboarding). */
@@ -72,8 +100,7 @@ orgs.post("/", async (c) => {
 
 orgs.post("/:orgId/companies", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
-  if (!can(role, "company.manage")) throw forbidden();
+  await requireOrgPerm(c, orgId, "company.manage");
   const input = await body(c, companySchema);
   validateCompanyInput(input);
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
@@ -87,8 +114,7 @@ orgs.post("/:orgId/companies", async (c) => {
 orgs.delete("/:orgId/companies/:companyId", async (c) => {
   const orgId = c.req.param("orgId");
   const companyId = c.req.param("companyId");
-  const role = await membership(c, orgId);
-  if (!can(role, "company.manage")) throw forbidden();
+  await requireOrgPerm(c, orgId, "company.manage");
   const co = await first<{ is_demo: number; name: string }>(c.env.DB, `SELECT is_demo, name FROM companies WHERE id = ? AND org_id = ?`, companyId, orgId);
   if (!co) throw notFound("Company");
   if (!co.is_demo) throw new AppError(409, "NOT_DEMO", "Only demo companies can be deleted. Real companies keep their accounting records.");
@@ -105,24 +131,29 @@ orgs.delete("/:orgId/companies/:companyId", async (c) => {
 
 orgs.get("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
+  const { role, perms } = await membership(c, orgId);
   const org = await first(c.env.DB, `SELECT id, name, owner_user_id, created_at FROM organisations WHERE id = ?`, orgId);
   const members = await all(
     c.env.DB,
-    `SELECT u.id, u.name, u.email, u.username, u.must_change_password, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
+    `SELECT u.id, u.name, u.email, u.username, u.must_change_password, m.role, m.all_branches, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
     orgId,
   );
-  const invitations = can(role, "org.manage")
+  const assignments = perms.includes("org.manage")
+    ? await all<{ user_id: string; company_id: string; branch_id: string }>(c.env.DB, `SELECT user_id, company_id, branch_id FROM member_branches WHERE org_id = ?`, orgId)
+    : [];
+  for (const m of members as { id: string; branches?: { company_id: string; branch_id: string }[] }[]) {
+    m.branches = assignments.filter((a) => a.user_id === m.id).map(({ company_id, branch_id }) => ({ company_id, branch_id }));
+  }
+  const invitations = perms.includes("org.manage")
     ? await all(c.env.DB, `SELECT id, email, role, expires_at, accepted_at, revoked_at, created_at FROM invitations WHERE org_id = ? ORDER BY created_at DESC LIMIT 100`, orgId)
     : [];
   const companies = await all(c.env.DB, `SELECT id, name, country, base_currency FROM companies WHERE org_id = ? ORDER BY name`, orgId);
-  return c.json({ organisation: org, role, members, invitations, companies });
+  return c.json({ organisation: org, role, permissions: perms, members, invitations, companies });
 });
 
 orgs.patch("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
+  await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, z.object({ name: reqText(160) }));
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE organisations SET name = ? WHERE id = ?`, input.name, orgId),
@@ -134,9 +165,8 @@ orgs.patch("/:orgId", async (c) => {
 /** Invitations: no email service is required — the inviter copies the one-time link. */
 orgs.post("/:orgId/invitations", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
-  const input = await body(c, z.object({ email: z.string().trim().toLowerCase().email(), role: z.enum(["admin", "accountant", "auditor", "viewer"]) }));
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  const input = await body(c, z.object({ email: z.string().trim().toLowerCase().email(), role: assignableRole }));
   if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
   const already = await first(c.env.DB,
     `SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND u.email = ?`, orgId, input.email);
@@ -153,36 +183,119 @@ orgs.post("/:orgId/invitations", async (c) => {
 });
 
 /**
- * Tally-style user creation: an owner/admin sets a username and a temporary password; the person must choose their
- * own password at first sign-in. No email needed.
+ * Tally-style user creation: the server generates a random one-time password, shown once to the owner/admin; the
+ * person must choose their own password at first sign-in. No email needed and no shared default password.
  */
 orgs.post("/:orgId/users", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const input = await body(c, z.object({
     name: reqText(120),
     username: usernameSchema,
-    password: passwordSchema(c.env),
-    role: z.enum(["admin", "accountant", "auditor", "viewer"]),
+    role: assignableRole,
+    branches: branchAccess.optional(),
   }));
   if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
   if (await first(c.env.DB, `SELECT 1 FROM users WHERE username = ?`, input.username)) throw new AppError(409, "USERNAME_TAKEN", "That username is already taken");
   const id = newId();
-  const h = await hashPassword(input.password, iterations(c.env));
+  const password = temporaryPassword();
+  const h = await hashPassword(password, iterations(c.env));
+  const access = input.branches ? await branchStatements(c, orgId, id, input.branches) : [];
   await batch(c.env.DB, [
     stmt(c.env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, must_change_password) VALUES (?,?,?,?,?,?,?,1)`,
       id, `${input.username}.${id.slice(0, 8)}@users.ledgerfox.local`, input.username, input.name, h.hash, h.salt, h.iterations),
     stmt(c.env.DB, `INSERT INTO memberships (org_id, user_id, role) VALUES (?,?,?)`, orgId, id, input.role),
-    audit(c, "member.create", "user", id, { username: input.username, role: input.role }, { orgId, companyId: null }),
+    ...access,
+    audit(c, "member.create", "user", id, { username: input.username, role: input.role, branches: input.branches ?? null }, { orgId, companyId: null }),
   ]);
-  return c.json({ id, username: input.username }, 201);
+  return c.json({ id, username: input.username, temporary_password: password }, 201);
+});
+
+/** Replace a member's temporary password with a new random one (shown once) and sign them out everywhere. */
+orgs.post("/:orgId/members/:userId/temporary-password", async (c) => {
+  const orgId = c.req.param("orgId");
+  const targetId = c.req.param("userId");
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
+  if (!current) throw notFound("Member");
+  if (current.role === "owner" || !canAssignRole(role, current.role)) throw forbidden("You cannot reset this member's password");
+  const orgCount = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM memberships WHERE user_id = ?`, targetId);
+  if ((orgCount?.n ?? 0) > 1) throw forbidden("This user belongs to other organisations and must use their own recovery codes");
+  const password = temporaryPassword();
+  const h = await hashPassword(password, iterations(c.env));
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, must_change_password = 1 WHERE id = ?`, h.hash, h.salt, h.iterations, targetId),
+    stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ?`, targetId),
+    audit(c, "member.temporary_password", "user", targetId, undefined, { orgId, companyId: null }),
+  ]);
+  return c.json({ temporary_password: password });
+});
+
+/** Which branches of a company a member may use. */
+orgs.put("/:orgId/members/:userId/branches", async (c) => {
+  const orgId = c.req.param("orgId");
+  const targetId = c.req.param("userId");
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  const input = await body(c, branchAccess);
+  const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
+  if (!current) throw notFound("Member");
+  if (current.role === "owner") throw forbidden("Owners always have every branch");
+  if (!canAssignRole(role, current.role)) throw forbidden("You cannot change this member's branches");
+  await batch(c.env.DB, [...(await branchStatements(c, orgId, targetId, input)), audit(c, "member.branches", "user", targetId, input, { orgId, companyId: input.company_id })]);
+  return c.json({ ok: true });
+});
+
+/** Role permission matrix: defaults plus this organisation's customisations. */
+orgs.get("/:orgId/roles", async (c) => {
+  const orgId = c.req.param("orgId");
+  await requireOrgPerm(c, orgId, "org.manage");
+  const rows = await all<{ role: Role; permission: string; allowed: number }>(c.env.DB, `SELECT role, permission, allowed FROM role_permissions WHERE org_id = ?`, orgId);
+  return c.json({
+    roles: ROLES.map((r) => ({
+      role: r,
+      customised: rows.some((o) => o.role === r),
+      defaults: defaultPermissions(r),
+      permissions: effectivePermissions(r, rows.filter((o) => o.role === r)),
+    })),
+  });
+});
+
+/** Owner customises a role. Stored as differences from the defaults so later default improvements still apply. */
+orgs.put("/:orgId/roles/:role", async (c) => {
+  const orgId = c.req.param("orgId");
+  await requireOrgPerm(c, orgId, "roles.manage");
+  const parsed = assignableRole.safeParse(c.req.param("role"));
+  if (!parsed.success) throw badRequest("The Owner role always has every permission and cannot be customised");
+  const target = parsed.data;
+  const input = await body(c, z.object({ permissions: z.array(z.string()).max(200) }));
+  const wanted = new Set(input.permissions.filter((p) => ALL_PERMISSIONS.includes(p as Permission) && p !== "roles.manage"));
+  const defaults = new Set<string>(defaultPermissions(target));
+  const diffs = ALL_PERMISSIONS.filter((p) => p !== "roles.manage" && wanted.has(p) !== defaults.has(p));
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `DELETE FROM role_permissions WHERE org_id = ? AND role = ?`, orgId, target),
+    ...diffs.map((p) => stmt(c.env.DB, `INSERT INTO role_permissions (org_id, role, permission, allowed) VALUES (?,?,?,?)`, orgId, target, p, wanted.has(p) ? 1 : 0)),
+    audit(c, "role.customise", "role", target, { permissions: [...wanted].sort() }, { orgId, companyId: null }),
+  ]);
+  return c.json({ ok: true, permissions: effectivePermissions(target, diffs.map((p) => ({ permission: p, allowed: wanted.has(p) ? 1 : 0 }))) });
+});
+
+/** Back to the default permissions for a role. */
+orgs.delete("/:orgId/roles/:role", async (c) => {
+  const orgId = c.req.param("orgId");
+  await requireOrgPerm(c, orgId, "roles.manage");
+  const parsed = assignableRole.safeParse(c.req.param("role"));
+  if (!parsed.success) throw badRequest("The Owner role always has every permission and cannot be customised");
+  const target = parsed.data;
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `DELETE FROM role_permissions WHERE org_id = ? AND role = ?`, orgId, target),
+    audit(c, "role.reset", "role", target, undefined, { orgId, companyId: null }),
+  ]);
+  return c.json({ ok: true });
 });
 
 orgs.delete("/:orgId/invitations/:id", async (c) => {
   const orgId = c.req.param("orgId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
+  await requireOrgPerm(c, orgId, "org.manage");
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE invitations SET revoked_at = ? WHERE id = ? AND org_id = ? AND accepted_at IS NULL`, nowIso(), c.req.param("id"), orgId),
     audit(c, "member.invite_revoke", "invitation", c.req.param("id"), undefined, { orgId, companyId: null }),
@@ -193,9 +306,8 @@ orgs.delete("/:orgId/invitations/:id", async (c) => {
 orgs.patch("/:orgId/members/:userId", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
-  const input = await body(c, z.object({ role: z.enum(["admin", "accountant", "auditor", "viewer"]) }));
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
+  const input = await body(c, z.object({ role: assignableRole }));
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
   if (!current) throw notFound("Member");
   if (current.role === "owner") throw forbidden("The owner's role cannot be changed");
@@ -210,14 +322,15 @@ orgs.patch("/:orgId/members/:userId", async (c) => {
 orgs.delete("/:orgId/members/:userId", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
-  const role = await membership(c, orgId);
+  const { role, perms } = await membership(c, orgId);
   const self = targetId === c.get("user").id;
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
   if (!current) throw notFound("Member");
   if (current.role === "owner") throw forbidden("The owner cannot be removed");
-  if (!self && (!can(role, "org.manage") || !canAssignRole(role, current.role))) throw forbidden();
+  if (!self && (!perms.includes("org.manage") || !canAssignRole(role, current.role))) throw forbidden();
   await batch(c.env.DB, [
     stmt(c.env.DB, `DELETE FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId),
+    stmt(c.env.DB, `DELETE FROM member_branches WHERE org_id = ? AND user_id = ?`, orgId, targetId),
     audit(c, "member.remove", "user", targetId, { role: current.role }, { orgId, companyId: null }),
   ]);
   return c.json({ ok: true });
@@ -227,8 +340,7 @@ orgs.delete("/:orgId/members/:userId", async (c) => {
 orgs.post("/:orgId/members/:userId/reset-link", async (c) => {
   const orgId = c.req.param("orgId");
   const targetId = c.req.param("userId");
-  const role = await membership(c, orgId);
-  if (!can(role, "org.manage")) throw forbidden();
+  const { role } = await requireOrgPerm(c, orgId, "org.manage");
   const current = await first<{ role: Role }>(c.env.DB, `SELECT role FROM memberships WHERE org_id = ? AND user_id = ?`, orgId, targetId);
   if (!current) throw notFound("Member");
   if (current.role === "owner" || !canAssignRole(role, current.role)) throw forbidden("You cannot reset this member's password");

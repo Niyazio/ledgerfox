@@ -5,12 +5,13 @@ import { all, batch, first, stmt } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor } from "../lib/validate";
 import { newId, sha256Hex } from "../lib/crypto";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
 import { parseCsv, parseBankDate } from "@shared/csv";
 import { currencyExponent } from "@shared/currencies";
 import { buildJournal, assertOpenPeriod } from "../services/ledger";
 
 const banking = new Hono<AppEnv>();
+banking.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "bank.reconcile"); await next(); });
 
 async function bankAccount(db: D1Database, companyId: string, id: string) {
   const a = await first<{ id: string; name: string; subtype: string; is_group: number }>(db, `SELECT id, name, subtype, is_group FROM accounts WHERE id = ? AND company_id = ?`, id, companyId);
@@ -181,7 +182,7 @@ banking.post("/lines/:id/:action{unmatch|ignore|restore}", async (c) => {
 
 /** Create and post a journal for an unrecorded bank transaction (e.g. bank charges, interest) and match it. */
 banking.post("/lines/:id/create-entry", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "bank.reconcile");
   requirePerm(c, "bank.reconcile");
   const input = await body(c, z.object({ account_id: z.string(), contact_id: optId, memo: shortText(300).nullish() }));
   const company = c.get("company");

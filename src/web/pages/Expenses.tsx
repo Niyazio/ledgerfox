@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
 import { useCompany } from "../lib/company";
+import { HistoryButton } from "../components/History";
 import { useApi, useAction, useDebounced } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
@@ -44,7 +45,7 @@ function Attachments({ entityId, canEdit }: { entityId: string; canEdit: boolean
 }
 
 function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: boolean) => void }) {
-  const { path, accounts, settings, can } = useCompany();
+  const { path, accounts, settings, can, branch } = useCompany();
   const toast = useToast();
   const [v, setV] = useState({
     expense_date: initial?.expense_date ?? today(), contact_id: initial?.contact_id ?? "", category_account_id: initial?.category_account_id ?? "",
@@ -57,7 +58,7 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
   const sugg = useApi<{ suggestions: any[] }>(!initial && (desc.length >= 3 || v.contact_id) ? path(`/expenses/suggest-category?description=${encodeURIComponent(desc)}&contact_id=${v.contact_id}`) : null);
   const editable = !initial || ["draft", "rejected"].includes(initial.status);
   const save = async (andApprove: boolean) => {
-    const body = { ...v, contact_id: v.contact_id || null, tax_code_id: v.tax_code_id || null, department_id: v.department_id || null, project_id: v.project_id || null, cost_centre_id: v.cost_centre_id || null };
+    const body = { ...v, contact_id: v.contact_id || null, tax_code_id: v.tax_code_id || null, department_id: v.department_id || null, project_id: v.project_id || null, cost_centre_id: v.cost_centre_id || null, branch_id: initial?.branch_id ?? (branch || null) };
     const r = await run(async () => {
       if (recurring.on && !navigator.onLine) throw new Error("Recurring templates need an internet connection. Untick “repeat” to save this expense offline.");
       const res = initial ? await api.put(path(`/expenses/${initial.id}`), body).then(() => ({ id: initial.id })) : await postOrQueue(path("/expenses"), body, { label: `Expense: ${v.description} (${v.expense_date})`, then: andApprove ? "/approve" : undefined });
@@ -77,7 +78,7 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
       footer={editable ? <>
         <Button variant="secondary" onClick={() => onClose(false)}>Cancel</Button>
         <Button variant="secondary" loading={busy} onClick={() => save(false)}>Save draft</Button>
-        {can("org.manage") && <Button loading={busy} onClick={() => save(true)} title="Owners and administrators may approve their own expenses">Save & post</Button>}
+        {can("expense.approve") && <Button loading={busy} onClick={() => save(true)} title="Owners and administrators may approve their own expenses">Save & post</Button>}
       </> : <Button variant="secondary" onClick={() => onClose(false)}>Close</Button>}>
       <div className="grid gap-4 sm:grid-cols-2">
         {error && <Alert className="sm:col-span-2">{error}</Alert>}
@@ -116,21 +117,22 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
             </div>}
           </div>
         )}
-        {initial && <div className="sm:col-span-2"><p className="mb-1 text-sm font-medium">Receipts</p><Attachments entityId={initial.id} canEdit={can("txn.write")} /></div>}
+        {initial && <div className="sm:col-span-2"><HistoryButton type="expense" id={initial.id} /></div>}
+        {initial && <div className="sm:col-span-2"><p className="mb-1 text-sm font-medium">Receipts</p><Attachments entityId={initial.id} canEdit={can("expense.create")} /></div>}
       </div>
     </Modal>
   );
 }
 
 export default function Expenses() {
-  const { path, money, settings, can } = useCompany();
+  const { path, money, settings, can, branchQuery } = useCompany();
   const [params, setParams] = useSearchParams();
   const toast = useToast();
   const [tab, setTab] = useState<"list" | "templates">("list");
   const status = params.get("status") ?? "";
   const [offset, setOffset] = useState(0);
   const [editing, setEditing] = useState<any>(null);
-  const { data, loading, error, reload } = useApi<{ expenses: any[]; total: number }>(path(`/expenses?limit=50&offset=${offset}&status=${status}`));
+  const { data, loading, error, reload } = useApi<{ expenses: any[]; total: number }>(path(`/expenses?limit=50&offset=${offset}&status=${status}${branchQuery}`));
   const templates = useApi<{ templates: any[] }>(tab === "templates" ? path("/expenses/templates") : null);
   useEffect(() => {
     const open = params.get("open");
@@ -140,7 +142,7 @@ export default function Expenses() {
   return (
     <>
       <PageHeader title="Expenses" subtitle="Record spending, attach receipts and route claims for approval before they post."
-        actions={can("txn.write") && <Button onClick={() => setEditing("new")}><Plus className="h-4 w-4" />New expense</Button>} />
+        actions={can("expense.create") && <Button onClick={() => setEditing("new")}><Plus className="h-4 w-4" />New expense</Button>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "list", label: "Expenses" }, { value: "templates", label: "Recurring templates" }]} />
       {tab === "list" ? (
         <Card padded={false}>
@@ -162,7 +164,7 @@ export default function Expenses() {
                   <td><StatusBadge status={e.status} /></td>
                   <td className="num">{money(e.total, e.currency)}</td>
                   <td className="whitespace-nowrap text-right no-print">
-                    {e.status === "draft" && can("txn.write") && <Button size="sm" variant="ghost" onClick={() => act(() => api.post(path(`/expenses/${e.id}/submit`)), "Submitted for approval")}>Submit</Button>}
+                    {e.status === "draft" && can("expense.create") && <Button size="sm" variant="ghost" onClick={() => act(() => api.post(path(`/expenses/${e.id}/submit`)), "Submitted for approval")}>Submit</Button>}
                     {["draft", "submitted"].includes(e.status) && can("expense.approve") && <Button size="sm" variant="ghost" onClick={() => act(() => api.post(path(`/expenses/${e.id}/approve`)), "Approved & posted")}>Approve</Button>}
                     {e.status === "submitted" && can("expense.approve") && <Button size="sm" variant="ghost" onClick={() => { const reason = prompt("Reason for rejection"); if (reason) act(() => api.post(path(`/expenses/${e.id}/reject`), { reason }), "Rejected"); }}>Reject</Button>}
                     {e.status === "posted" && e.journal_entry_id && <Link className="text-xs text-brand-700 hover:underline dark:text-brand-300" to={`../journals/${e.journal_entry_id}`} relative="path">Journal</Link>}
@@ -174,14 +176,14 @@ export default function Expenses() {
           {data && <Pagination total={data.total} limit={50} offset={offset} onChange={setOffset} />}
         </Card>
       ) : (
-        <Card padded={false} title="Recurring templates" actions={can("txn.write") && <Button size="sm" onClick={() => act(async () => { const r = await api.post(path("/expenses/templates/run")); toast("info", `${r.created} draft expense(s) generated`); templates.reload(); }, "Templates processed")}>Generate due drafts</Button>}>
+        <Card padded={false} title="Recurring templates" actions={can("expense.create") && <Button size="sm" onClick={() => act(async () => { const r = await api.post(path("/expenses/templates/run")); toast("info", `${r.created} draft expense(s) generated`); templates.reload(); }, "Templates processed")}>Generate due drafts</Button>}>
           <p className="px-4 pt-3 text-sm muted">Templates create <strong>draft</strong> expenses when you click “Generate due drafts”. Drafts still need approval before they post. (No background scheduler runs on the free plan.)</p>
           {templates.data?.templates.length ? (
             <TableWrap><table className="table mt-3">
               <thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th><th /></tr></thead>
               <tbody>{templates.data.templates.map((t) => (
                 <tr key={t.id}><td>{t.name}</td><td>{t.frequency}</td><td>{fmtDate(t.next_run_date, settings?.company.date_format)}</td><td>{t.is_active ? <Badge color="green">Active</Badge> : <Badge>Paused</Badge>}</td>
-                  <td className="text-right">{can("txn.write") && <Button size="sm" variant="ghost" onClick={() => act(async () => { await api.patch(path(`/expenses/templates/${t.id}`), { is_active: !t.is_active }); templates.reload(); }, t.is_active ? "Paused" : "Resumed")}>{t.is_active ? "Pause" : "Resume"}</Button>}</td></tr>
+                  <td className="text-right">{can("expense.create") && <Button size="sm" variant="ghost" onClick={() => act(async () => { await api.patch(path(`/expenses/templates/${t.id}`), { is_active: !t.is_active }); templates.reload(); }, t.is_active ? "Paused" : "Resumed")}>{t.is_active ? "Pause" : "Resume"}</Button>}</td></tr>
               ))}</tbody>
             </table></TableWrap>
           ) : <EmptyState title="No recurring templates" body="Tick “Also save as a recurring template” when creating an expense." />}

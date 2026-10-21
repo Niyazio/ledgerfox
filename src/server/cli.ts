@@ -8,6 +8,7 @@ import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { networkInterfaces } from "node:os";
 import { startServer } from "./http";
+import { getFirstRunPassword } from "../worker/routes/auth";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -28,6 +29,8 @@ const server = await startServer({
 });
 console.log(`LedgerFox is running. Data file: ${dataFile}`);
 console.log(`  This computer: http://127.0.0.1:${server.port}`);
+const firstPassword = getFirstRunPassword();
+if (firstPassword) console.log(`  First sign-in: username "admin", one-time password ${firstPassword} (change it when asked)`);
 if (lan) for (const list of Object.values(networkInterfaces())) for (const a of list ?? []) if (a.family === "IPv4" && !a.internal) console.log(`  Same network:  http://${a.address}:${server.port}`);
 if (process.argv.includes("--pair")) {
   // One-time code for the LedgerFox Android app to download a view-only copy (valid 10 minutes).

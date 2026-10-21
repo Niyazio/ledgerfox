@@ -97,7 +97,8 @@ export function buildJournal(db: D1Database, input: JournalInput): BuiltJournal 
       input.branch_id ?? null, input.created_by,
     ),
   );
-  lines.forEach((l, i) => stmts.push(lineStmt(db, input.company_id, id, i + 1, l)));
+  // Lines inherit the entry's branch so branch reports (which read journal lines) include every posting.
+  lines.forEach((l, i) => stmts.push(lineStmt(db, input.company_id, id, i + 1, { ...l, branch_id: (l as LineInput).branch_id ?? input.branch_id ?? null })));
   if (input.post) stmts.push(...postStatements(db, input.company_id, id, total, input.created_by));
   else stmts.push(stmt(db, `UPDATE journal_entries SET total = ? WHERE id = ?`, total, id));
   return { id, stmts, total };

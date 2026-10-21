@@ -11,6 +11,7 @@ const json = { "x-requested-with": "ledgerfox", "content-type": "application/jso
 const owner = { password: "correct horse battery" };
 let cookie = "";
 let orgId = "";
+let firstPassword = "";
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "lf-desktop-"));
@@ -34,6 +35,12 @@ describe("desktop server", () => {
     expect(names.slice(0, 4)).toEqual(["0001_core.sql", "0002_business.sql", "0003_idempotency.sql", "0004_business_types_payroll.sql"]);
     const me = await (await fetch(`${base}/api/auth/me`)).json();
     expect(me).toMatchObject({ user: null, edition: "desktop", registration: "closed", default_login: true });
+    firstPassword = (me as { first_run: { username: string; password: string } }).first_run.password;
+    expect(firstPassword).toMatch(/^[A-Za-z2-9]{5}-[A-Za-z2-9]{5}-[A-Za-z2-9]{5}$/);
+    expect(firstPassword).not.toBe("admin");
+    // Requests from another device never see it.
+    const remoteMe = await (await fetch(`${base}/api/auth/me`, { headers: { "cf-connecting-ip": "203.0.113.9" } })).json();
+    expect((remoteMe as { first_run: unknown }).first_run).toBeNull();
   });
 
   it("serves the UI with SPA fallback, security headers, and nothing outside the web folder", async () => {
@@ -47,21 +54,22 @@ describe("desktop server", () => {
     expect(await (await fetch(`${base}/%2e%2e/secret.txt`)).text()).not.toContain("do not serve");
   });
 
-  it("starts with admin / admin, which works only on this computer and must be changed first", async () => {
+  it("starts with a random one-time admin password that works only on this computer and must be changed first", async () => {
     expect((await fetch(`${base}/api/auth/register`, { method: "POST", headers: json, body: JSON.stringify({ name: "X", email: "x@example.com", password: "whatever123" }) })).status).toBe(403);
     // Over the internet link (or network) the default password is refused.
-    const remote = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { ...json, "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ login: "admin", password: "admin" }) });
+    const remote = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { ...json, "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ login: "admin", password: firstPassword }) });
     expect(remote.status).toBe(403);
-    const local = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "admin", password: "admin" }) });
+    expect((await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "admin", password: "admin" }) })).status).toBe(401);
+    const local = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "admin", password: firstPassword }) });
     expect(local.status).toBe(200);
     expect(((await local.json()) as { must_change_password: boolean }).must_change_password).toBe(true);
     cookie = local.headers.get("set-cookie")!.split(";")[0];
     const blocked = await fetch(`${base}/api/orgs`, { method: "POST", headers: { ...json, cookie }, body: "{}" });
     expect(blocked.status).toBe(403);
     expect(((await blocked.json()) as { error: { code: string } }).error.code).toBe("PASSWORD_CHANGE_REQUIRED");
-    const same = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: "admin", new_password: "admin" }) });
+    const same = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: firstPassword, new_password: firstPassword }) });
     expect(same.status).toBe(400);
-    const changed = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: "admin", new_password: owner.password }) });
+    const changed = await fetch(`${base}/api/auth/change-password`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ current_password: firstPassword, new_password: owner.password }) });
     expect(changed.status).toBe(200);
     expect(((await (await fetch(`${base}/api/auth/me`)).json()) as { default_login: boolean }).default_login).toBe(false);
     const org = await fetch(`${base}/api/orgs`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Shop", company: { name: "Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" } }) });
@@ -69,12 +77,17 @@ describe("desktop server", () => {
     orgId = ((await org.json()) as { org_id: string }).org_id;
   });
 
-  it("owner adds users Tally-style with username + temporary password", async () => {
-    const r = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Cashier", username: "cashier1", password: "temp123", role: "accountant" }) });
+  it("owner adds users Tally-style; the server generates a different one-time password for each", async () => {
+    const r = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Cashier", username: "cashier1", role: "billing" }) });
     expect(r.status).toBe(201);
-    const dup = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Again", username: "CASHIER1", password: "temp123", role: "viewer" }) });
+    const temp = ((await r.json()) as { temporary_password: string }).temporary_password;
+    const dup = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Again", username: "CASHIER1", role: "viewer" }) });
     expect(dup.status).toBe(409);
-    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "Cashier1", password: "temp123" }) });
+    const other = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Store", username: "store1", role: "inventory" }) });
+    expect(((await other.json()) as { temporary_password: string }).temporary_password).not.toBe(temp);
+    const stored = srv.db.raw.prepare("SELECT password_hash FROM users WHERE username = 'cashier1'").get() as { password_hash: string };
+    expect(stored.password_hash).not.toContain(temp);
+    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: json, body: JSON.stringify({ login: "Cashier1", password: temp }) });
     expect(login.status).toBe(200);
     expect(((await login.json()) as { must_change_password: boolean }).must_change_password).toBe(true);
   });
@@ -129,7 +142,7 @@ describe("desktop server", () => {
     srv = await startServer({ dataFile: file, webDir: join(dir, "web"), migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0 });
     base = `http://127.0.0.1:${srv.port}`;
     const n = srv.db.raw.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
-    expect(n.n).toBe(2);
+    expect(n.n).toBe(3);
   });
 });
 

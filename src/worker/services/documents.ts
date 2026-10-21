@@ -200,15 +200,18 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
   if (doc.status !== "draft") throw conflict("ALREADY_ISSUED", "Only drafts can be issued");
   if (!lines.length) throw badRequest("Add at least one line");
 
+  // Branches with their own prefix number their documents separately, e.g. BLR-INV-0001.
+  const branch = doc.branch_id ? await first<{ invoice_prefix: string | null }>(db, `SELECT invoice_prefix FROM branches WHERE id = ? AND company_id = ?`, doc.branch_id, company.id) : null;
+  const seqKey = branch?.invoice_prefix ? `${doc.doc_type}@${doc.branch_id}` : doc.doc_type;
   const numberStmts = [
-    ...bumpSequence(db, company.id, doc.doc_type, `${doc.doc_type.toUpperCase().slice(0, 3)}-`),
+    ...bumpSequence(db, company.id, seqKey, `${branch?.invoice_prefix ? `${branch.invoice_prefix}-` : ""}${doc.doc_type.toUpperCase().slice(0, 3)}-`),
   ];
 
   if (!POSTING_TYPES.includes(doc.doc_type)) {
     await batch(db, [
       ...numberStmts,
       stmt(db, `UPDATE documents SET status = 'open', number = ${seqNumberExpr()}, posted_by = ?, posted_at = ?, updated_at = ? WHERE id = ? AND company_id = ? AND status = 'draft'`,
-        company.id, doc.doc_type, user.id, nowIso(), nowIso(), id, company.id),
+        company.id, seqKey, user.id, nowIso(), nowIso(), id, company.id),
       audit(c, `${doc.doc_type}.issue`, "document", id),
     ]);
     return (await first<{ number: string }>(db, `SELECT number FROM documents WHERE id = ?`, id))?.number;
@@ -318,7 +321,7 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
   const [header, ...rest] = built.stmts;
   const stmts: D1PreparedStatement[] = [
     ...numberStmts,
-    stmt(db, `UPDATE documents SET number = ${seqNumberExpr()} WHERE id = ? AND company_id = ? AND status = 'draft'`, company.id, doc.doc_type, id, company.id),
+    stmt(db, `UPDATE documents SET number = ${seqNumberExpr()} WHERE id = ? AND company_id = ? AND status = 'draft'`, company.id, seqKey, id, company.id),
     header,
     stmt(db, `UPDATE journal_entries SET memo = memo || ' ' || (SELECT number FROM documents WHERE id = ?) WHERE id = ? AND status = 'draft'`, id, built.id),
     ...rest,

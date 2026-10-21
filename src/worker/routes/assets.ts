@@ -5,12 +5,13 @@ import { all, batch, first, stmt } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, reqText, shortText, optId, minor, percentBp } from "../lib/validate";
 import { newId } from "../lib/crypto";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
 import { buildJournal, systemAccounts, assertOpenPeriod, assertPostable, type LineInput } from "../services/ledger";
 import { depreciationFor, schedule, type AssetLike } from "../services/depreciation";
 
 const assets = new Hono<AppEnv>();
+assets.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "assets.manage", "reports.read"); await next(); });
 
 type AssetRow = AssetLike & { id: string; code: string; name: string; status: string; asset_account_id: string; accum_dep_account_id: string; dep_expense_account_id: string; acquisition_date: string };
 
@@ -58,7 +59,7 @@ const assetSchema = z.object({
 });
 
 assets.post("/", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "assets.manage");
   const input = await body(c, assetSchema);
   const company = c.get("company");
   const user = c.get("user");
@@ -108,7 +109,7 @@ assets.post("/", async (c) => {
  * One journal per month; uniqueness of (asset, month) makes re-runs harmless.
  */
 assets.post("/depreciation/run", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "assets.manage");
   const input = await body(c, z.object({ through: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }));
   const company = c.get("company");
   const user = c.get("user");
@@ -163,7 +164,7 @@ assets.post("/depreciation/run", async (c) => {
 });
 
 assets.post("/:id/dispose", async (c) => {
-  requirePerm(c, "txn.post");
+  requirePerm(c, "assets.manage");
   const input = await body(c, z.object({ date: isoDate, proceeds: z.union([z.string(), z.number()]).default("0"), deposit_account_id: optId }));
   const company = c.get("company");
   const user = c.get("user");

@@ -28,11 +28,12 @@ to publish a GitHub Release).
   and keeps the newest 14. **File → Back up now…** saves a copy anywhere (USB drive, Google Drive folder, etc.).
 - Backups are consistent snapshots (SQLite `VACUUM INTO`), safe to take while the app is open. To restore, open the
   backup file with **File → Open data file…**.
-- **First sign-in: username `admin`, password `admin`.** LedgerFox immediately asks for a new password (and lets you
-  pick your own username). The default password works only on the computer itself — never from phones or the internet
-  link — so nobody on the network can use it first.
-- Add staff in **Settings → Users → Add a user** with a username and a temporary password; they choose their own
-  password at first sign-in. Nobody can register themselves.
+- **First sign-in: username `admin` with the one-time password shown on the sign-in page** (only on the computer
+  itself; the headless server prints it in its console). LedgerFox immediately asks for your own password (and lets you
+  pick your own username). The one-time password never works from phones or the internet link.
+- Add staff in **Settings → Users & permissions → Add a user**: LedgerFox creates a random one-time password and
+  shows it once; the person chooses their own password at first sign-in. Limit them to branches with **Change** in
+  the Branches column. Nobody can register themselves.
 - The file is a standard SQLite database. It is **not encrypted** by LedgerFox; protect the computer with a login
   password and disk encryption (BitLocker / FileVault).
 - Use one computer per data file. Do **not** open the same file from several computers over a shared network drive —

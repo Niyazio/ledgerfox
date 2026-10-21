@@ -37,17 +37,20 @@ function filterSql(f: Filters = {}) {
 /** Sum of posted debits/credits per account for entry_date in [from, to] (from may be null = beginning). */
 export async function balances(db: D1Database, companyId: string, from: string | null, to: string, f: Filters = {}): Promise<AccountBalance[]> {
   const fs = filterSql(f);
+  // Sum per account from the covering indexes first, then attach account details (much less work per line).
   return all<AccountBalance>(db,
-    `SELECT a.id, a.code, a.name, a.type, a.subtype, a.parent_id, COALESCE(SUM(l.debit),0) AS debit, COALESCE(SUM(l.credit),0) AS credit
-     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}${fs.sql}
-     GROUP BY a.id ORDER BY a.code`,
+    `SELECT a.id, a.code, a.name, a.type, a.subtype, a.parent_id, s.debit, s.credit
+     FROM (SELECT l.account_id, COALESCE(SUM(l.debit),0) AS debit, COALESCE(SUM(l.credit),0) AS credit
+           FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+           WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}${fs.sql}
+           GROUP BY l.account_id) s
+     JOIN accounts a ON a.id = s.account_id ORDER BY a.code`,
     ...(from ? [companyId, to, from, ...fs.params] : [companyId, to, ...fs.params]));
 }
 
-export async function trialBalance(db: D1Database, company: CompanyRow, from: string, to: string) {
-  const opening = await balances(db, company.id, null, prevDay(from));
-  const movement = await balances(db, company.id, from, to);
+export async function trialBalance(db: D1Database, company: CompanyRow, from: string, to: string, f: Filters = {}) {
+  const opening = await balances(db, company.id, null, prevDay(from), f);
+  const movement = await balances(db, company.id, from, to, f);
   const map = new Map<string, { id: string; code: string; name: string; type: string; opening: number; debit: number; credit: number; closing: number }>();
   for (const o of opening) map.set(o.id, { id: o.id, code: o.code, name: o.name, type: o.type, opening: o.debit - o.credit, debit: 0, credit: 0, closing: 0 });
   for (const m of movement) {
@@ -108,22 +111,26 @@ export async function profitAndLoss(db: D1Database, company: CompanyRow, from: s
 }
 
 /** Cumulative profit (income − expense) for entries dated within [from, to]. */
-async function cumulativeProfit(db: D1Database, companyId: string, from: string | null, to: string) {
+async function cumulativeProfit(db: D1Database, companyId: string, from: string | null, to: string, f: Filters = {}) {
+  const fs = filterSql(f);
   const r = await first<{ p: number }>(db,
-    `SELECT COALESCE(SUM(CASE WHEN a.type = 'income' THEN l.credit - l.debit WHEN a.type = 'expense' THEN l.credit - l.debit ELSE 0 END),0) AS p
-     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}`,
-    ...(from ? [companyId, to, from] : [companyId, to]));
+    `SELECT COALESCE(SUM(CASE WHEN a.type IN ('income','expense') THEN s.credit - s.debit ELSE 0 END),0) AS p
+     FROM (SELECT l.account_id, SUM(l.debit) AS debit, SUM(l.credit) AS credit
+           FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+           WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? ${from ? "AND e.entry_date >= ?" : ""}${fs.sql}
+           GROUP BY l.account_id) s
+     JOIN accounts a ON a.id = s.account_id`,
+    ...(from ? [companyId, to, from, ...fs.params] : [companyId, to, ...fs.params]));
   return r?.p ?? 0;
 }
 
-export async function balanceSheet(db: D1Database, company: CompanyRow, asOf: string) {
-  const rows = (await balances(db, company.id, null, asOf)).filter((r) => ["asset", "liability", "equity"].includes(r.type));
+export async function balanceSheet(db: D1Database, company: CompanyRow, asOf: string, f: Filters = {}) {
+  const rows = (await balances(db, company.id, null, asOf, f)).filter((r) => ["asset", "liability", "equity"].includes(r.type));
   const fy = fiscalYearFor(asOf, company.fiscal_year_start_month);
   const fyRow = await first<{ start_date: string }>(db, `SELECT start_date FROM fiscal_years WHERE company_id = ? AND start_date <= ? AND end_date >= ?`, company.id, asOf, asOf);
   const fyStart = fyRow?.start_date ?? fy.start;
-  const currentEarnings = await cumulativeProfit(db, company.id, fyStart, asOf);
-  const priorEarnings = await cumulativeProfit(db, company.id, null, prevDay(fyStart));
+  const currentEarnings = await cumulativeProfit(db, company.id, fyStart, asOf, f);
+  const priorEarnings = await cumulativeProfit(db, company.id, null, prevDay(fyStart), f);
   const group = (type: string, sign: 1 | -1) => {
     const lines = rows.filter((r) => r.type === type).map((r) => ({ id: r.id, code: r.code, name: r.name, subtype: r.subtype, amount: sign * (r.debit - r.credit) })).filter((l) => l.amount !== 0);
     return { lines, total: lines.reduce((t, l) => t + l.amount, 0) };
@@ -168,8 +175,8 @@ export async function cashFlow(db: D1Database, company: CompanyRow, from: string
   const investing = sections.investing.reduce((t, l) => t + l.amount, 0);
   const financing = sections.financing.reduce((t, l) => t + l.amount, 0);
   const openingCash = (await first<{ b: number }>(db,
-    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date < ? AND a.subtype IN ('cash','bank')`, company.id, from))?.b ?? 0;
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date < ? AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype IN ('cash','bank'))`, company.id, from, company.id))?.b ?? 0;
   return {
     from, to,
     net_profit: pl.net_profit,
@@ -214,11 +221,12 @@ export async function generalLedger(db: D1Database, company: CompanyRow, account
 export async function aging(db: D1Database, company: CompanyRow, kind: "receivable" | "payable", asOf: string) {
   const docType = kind === "receivable" ? "invoice" : "bill";
   const docs = await all<{ id: string; number: string; contact_id: string; contact_name: string; issue_date: string; due_date: string | null; currency: string; total: number; total_base: number; settled: number }>(db,
-    `SELECT d.id, d.number, d.contact_id, ct.name AS contact_name, d.issue_date, d.due_date, d.currency, d.total, d.total_base,
-       (SELECT COALESCE(SUM(a.amount),0) FROM allocations a WHERE a.document_id = d.id AND a.allocation_date <= ?) AS settled
-     FROM documents d JOIN contacts ct ON ct.id = d.contact_id
-     WHERE d.company_id = ? AND d.doc_type = ? AND d.issue_date <= ? AND (d.status = 'posted' OR (d.status = 'void' AND d.updated_at > ?))
-     ORDER BY ct.name, d.issue_date`, asOf, company.id, docType, asOf, `${asOf}T23:59:59.999Z`);
+    `SELECT * FROM (
+       SELECT d.id, d.number, d.contact_id, ct.name AS contact_name, d.issue_date, d.due_date, d.currency, d.total, d.total_base,
+         (SELECT COALESCE(SUM(a.amount),0) FROM allocations a WHERE a.document_id = d.id AND a.allocation_date <= ?) AS settled
+       FROM documents d JOIN contacts ct ON ct.id = d.contact_id
+       WHERE d.company_id = ? AND d.doc_type = ? AND d.issue_date <= ? AND (d.status = 'posted' OR (d.status = 'void' AND d.updated_at > ?))
+     ) WHERE total > settled ORDER BY contact_name, issue_date`, asOf, company.id, docType, asOf, `${asOf}T23:59:59.999Z`);
   const buckets = ["current", "1_30", "31_60", "61_90", "over_90"] as const;
   const rows = docs.map((d) => {
     const outstanding = d.total - d.settled;
@@ -238,8 +246,8 @@ export async function aging(db: D1Database, company: CompanyRow, kind: "receivab
   const totals = summary.reduce((t, s) => { for (const b of [...buckets, "total"] as const) t[b] += s[b]; return t; }, { current: 0, "1_30": 0, "31_60": 0, "61_90": 0, over_90: 0, total: 0 });
   // Reconciliation: document-based outstanding vs control account balance (differences arise from manual journals or advances).
   const ctrl = await first<{ b: number }>(db,
-    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? AND a.subtype = ?`, company.id, asOf, kind);
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype = ?)`, company.id, asOf, company.id, kind);
   const ledgerBalance = kind === "receivable" ? ctrl?.b ?? 0 : -(ctrl?.b ?? 0);
   return { as_of: asOf, kind, documents: rows, summary, totals, ledger_balance: ledgerBalance, unreconciled_difference: ledgerBalance - totals.total };
 }
@@ -250,8 +258,9 @@ export async function contactStatement(db: D1Database, company: CompanyRow, cont
     db, `SELECT id, name, kind, billing_address, tax_id, email FROM contacts WHERE id = ? AND company_id = ?`, contactId, company.id);
   if (!contact) return null;
   const op = await first<{ b: number }>(db,
-    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND l.contact_id = ? AND a.subtype IN ('receivable','payable') AND e.entry_date < ?`, company.id, contactId, from);
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
+     WHERE e.company_id = ? AND e.status = 'posted' AND l.contact_id = ? AND e.entry_date < ?
+       AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype IN ('receivable','payable'))`, company.id, contactId, from, company.id);
   const lines = await all<{ entry_date: string; entry_number: string; memo: string | null; source_type: string | null; source_id: string | null; debit: number; credit: number; currency: string | null; amount_fc: number | null; doc_number: string | null; pay_number: string | null }>(db,
     `SELECT e.entry_date, e.entry_number, e.memo, e.source_type, e.source_id, l.debit, l.credit, l.currency, l.amount_fc,
        d.number AS doc_number, p.number AS pay_number
@@ -279,10 +288,13 @@ export async function gstSummary(db: D1Database, company: CompanyRow, from: stri
   const foreign = await first<{ n: number }>(db, `SELECT COUNT(*) AS n FROM documents WHERE company_id = ? AND status = 'posted' AND currency <> ? AND issue_date BETWEEN ? AND ?`, company.id, company.base_currency, from, to);
   // Ledger-based tax account movements are the authoritative totals (include expenses and foreign-currency documents).
   const ledger = await all<{ code: string; name: string; system_key: string | null; debit: number; credit: number }>(db,
-    `SELECT a.code, a.name, a.system_key, COALESCE(SUM(l.debit),0) AS debit, COALESCE(SUM(l.credit),0) AS credit
-     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date BETWEEN ? AND ? AND a.subtype IN ('tax_input','tax_output')
-     GROUP BY a.id ORDER BY a.code`, company.id, from, to);
+    `SELECT a.code, a.name, a.system_key, s.debit, s.credit
+     FROM (SELECT l.account_id, COALESCE(SUM(l.debit),0) AS debit, COALESCE(SUM(l.credit),0) AS credit
+           FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+           WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date BETWEEN ? AND ?
+             AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype IN ('tax_input','tax_output'))
+           GROUP BY l.account_id) s
+     JOIN accounts a ON a.id = s.account_id ORDER BY a.code`, company.id, from, to, company.id);
   const output = ledger.filter((l) => l.system_key?.startsWith("OUT_")).reduce((t, l) => t + l.credit - l.debit, 0);
   const input = ledger.filter((l) => l.system_key?.startsWith("IN_")).reduce((t, l) => t + l.debit - l.credit, 0);
   const sign = (t: string) => (t === "credit_note" || t === "debit_note" ? -1 : 1);
@@ -302,8 +314,8 @@ export async function inventoryValuation(db: D1Database, company: CompanyRow, as
      WHERE i.company_id = ? AND i.track_inventory = 1 GROUP BY i.id ORDER BY i.name`, asOf, company.id);
   const stockValue = rows.reduce((t, r) => t + r.value, 0);
   const gl = await first<{ b: number }>(db,
-    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? AND a.subtype = 'inventory'`, company.id, asOf);
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date <= ? AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype = 'inventory')`, company.id, asOf, company.id);
   return {
     as_of: asOf, method: "Moving weighted average (company-wide per item)",
     items: rows.map((r) => ({ ...r, avg_cost: r.qty_milli > 0 ? Math.round((r.value * 1000) / r.qty_milli) : 0, below_reorder: r.reorder_level_milli > 0 && r.qty_milli <= r.reorder_level_milli })),

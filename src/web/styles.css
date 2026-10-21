@@ -78,3 +78,9 @@
   main { padding: 0 !important; margin: 0 !important; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* Label printing: no page margins for roll printers; labels never split across pages. */
+@media print {
+  body:has(.label-sheet) { margin: 0; }
+  .label-sheet .label-cell { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -3,13 +3,12 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, nowIso } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
-import { body, reqText, shortText, isoDate, rate, percentBp } from "../lib/validate";
+import { body, reqText, shortText, isoDate, rate, percentBp, minor } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, requirePerm } from "../lib/auth";
-import { permissionsFor } from "@shared/permissions";
 import { companySchema, validateCompanyInput } from "./orgs";
 import { fiscalYearStatements, monthlyPeriods } from "../services/setup";
-import { isCurrency } from "@shared/currencies";
+import { currencyExponent, isCurrency } from "@shared/currencies";
 import { JURISDICTIONS, schemeForCountry } from "@shared/tax";
 import { rateToString } from "@shared/money";
 
@@ -30,7 +29,8 @@ settings.get("/", async (c) => {
   return c.json({
     company,
     role,
-    permissions: permissionsFor(role),
+    permissions: c.get("perms"),
+    branch_scope: c.get("branches"),
     jurisdiction: JURISDICTIONS[company.country] ?? JURISDICTIONS.DEFAULT,
     tax_scheme: schemeForCountry(company.country),
     branches, departments, projects, cost_centres: costCentres, tax_codes: taxCodes, warehouses, units,
@@ -46,20 +46,31 @@ settings.patch("/", async (c) => {
     invoice_terms: shortText(2000).nullish(),
     date_format: z.enum(["DD-MM-YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"]).optional(),
     number_locale: z.enum(["en-IN", "en-US", "en-GB", "de-DE", "fr-FR", "ar-AE"]).optional(),
+    // Approval limits: purchases above this amount need purchase.approve; sales discounts above this % need sales.discount_any. Empty = no limit.
+    purchase_approval_limit: z.union([z.string(), z.number()]).nullish(),
+    billing_discount_limit: z.union([z.string(), z.number()]).nullish(),
   }));
+  const limits = {
+    purchase: input.purchase_approval_limit === undefined ? undefined : input.purchase_approval_limit === null || input.purchase_approval_limit === "" ? null : minor(input.purchase_approval_limit, currencyExponent(company.base_currency), "approval limit"),
+    discount: input.billing_discount_limit === undefined ? undefined : input.billing_discount_limit === null || input.billing_discount_limit === "" ? null : percentBp(input.billing_discount_limit, "discount limit"),
+  };
+  if ((limits.purchase ?? 0) < 0 || (limits.discount ?? 0) < 0 || (limits.discount ?? 0) > 10000) throw badRequest("Limits must be positive (discount 0–100%)");
   validateCompanyInput({ ...input, country: company.country, base_currency: company.base_currency, fiscal_year_start_month: company.fiscal_year_start_month });
   await batch(c.env.DB, [
     stmt(
       c.env.DB,
       `UPDATE companies SET name = ?, legal_name = ?, tax_id = ?, state_code = ?, address = ?, city = ?, postal_code = ?, phone = ?, email = ?,
          round_off_invoices = COALESCE(?, round_off_invoices), invoice_terms = ?, date_format = COALESCE(?, date_format), number_locale = COALESCE(?, number_locale),
-         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template)
+         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template),
+         purchase_approval_limit = CASE WHEN ? THEN ? ELSE purchase_approval_limit END,
+         billing_discount_limit_bp = CASE WHEN ? THEN ? ELSE billing_discount_limit_bp END
        WHERE id = ?`,
       input.name, input.legal_name ?? null, input.tax_id ?? null, input.state_code ?? null, input.address ?? null, input.city ?? null,
       input.postal_code ?? null, input.phone ?? null, input.email || null,
       input.round_off_invoices === undefined ? null : input.round_off_invoices ? 1 : 0, input.invoice_terms ?? null,
       input.date_format ?? null, input.number_locale ?? null,
-      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null, company.id,
+      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null,
+      limits.purchase === undefined ? 0 : 1, limits.purchase ?? null, limits.discount === undefined ? 0 : 1, limits.discount ?? null, company.id,
     ),
     audit(c, "company.update", "company", company.id, input),
   ]);
@@ -68,29 +79,36 @@ settings.patch("/", async (c) => {
 
 // ── Dimensions (branches, departments, projects, cost centres) ──
 const DIMENSIONS = { branches: "branches", departments: "departments", projects: "projects", "cost-centres": "cost_centres" } as const;
-const dimSchema = z.object({ name: reqText(120), code: reqText(20), is_active: z.boolean().optional(), state_code: shortText(4).nullish(), address: shortText(500).nullish() });
+const dimSchema = z.object({
+  name: reqText(120), code: reqText(20), is_active: z.boolean().optional(), state_code: shortText(4).nullish(), address: shortText(500).nullish(),
+  invoice_prefix: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,8}$/, "Prefix: up to 8 letters or digits").nullish().or(z.literal("")),
+  phone: shortText(40).nullish(), gstin: shortText(15).nullish(),
+});
 
 for (const [path, table] of Object.entries(DIMENSIONS)) {
   settings.post(`/${path}`, async (c) => {
-    requirePerm(c, "masters.write");
+    requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
     const id = newId();
     const company = c.get("company");
     const s = table === "branches"
-      ? stmt(c.env.DB, `INSERT INTO branches (id, company_id, name, code, state_code, address) VALUES (?,?,?,?,?,?)`, id, company.id, input.name, input.code, input.state_code ?? null, input.address ?? null)
+      ? stmt(c.env.DB, `INSERT INTO branches (id, company_id, name, code, state_code, address, invoice_prefix, phone, gstin) VALUES (?,?,?,?,?,?,?,?,?)`, id, company.id, input.name, input.code, input.state_code ?? null, input.address ?? null, input.invoice_prefix || null, input.phone ?? null, input.gstin || null)
       : stmt(c.env.DB, `INSERT INTO ${table} (id, company_id, name, code) VALUES (?,?,?,?)`, id, company.id, input.name, input.code);
     await batch(c.env.DB, [s, audit(c, `${table}.create`, table, id, input)]);
     return c.json({ id }, 201);
   });
   settings.patch(`/${path}/:id`, async (c) => {
-    requirePerm(c, "masters.write");
+    requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
     const company = c.get("company");
     const id = c.req.param("id");
     const r = await first(c.env.DB, `SELECT 1 FROM ${table} WHERE id = ? AND company_id = ?`, id, company.id);
     if (!r) throw notFound();
     const s = table === "branches"
-      ? stmt(c.env.DB, `UPDATE branches SET name = ?, code = ?, state_code = ?, address = ?, is_active = ? WHERE id = ? AND company_id = ?`, input.name, input.code, input.state_code ?? null, input.address ?? null, input.is_active === false ? 0 : 1, id, company.id)
+      ? stmt(c.env.DB, `UPDATE branches SET name = ?, code = ?, state_code = ?, address = ?, is_active = ?,
+          invoice_prefix = CASE WHEN ? THEN ? ELSE invoice_prefix END, phone = CASE WHEN ? THEN ? ELSE phone END, gstin = CASE WHEN ? THEN ? ELSE gstin END WHERE id = ? AND company_id = ?`,
+          input.name, input.code, input.state_code ?? null, input.address ?? null, input.is_active === false ? 0 : 1,
+          input.invoice_prefix !== undefined ? 1 : 0, input.invoice_prefix || null, input.phone !== undefined ? 1 : 0, input.phone ?? null, input.gstin !== undefined ? 1 : 0, input.gstin || null, id, company.id)
       : stmt(c.env.DB, `UPDATE ${table} SET name = ?, code = ?, is_active = ? WHERE id = ? AND company_id = ?`, input.name, input.code, input.is_active === false ? 0 : 1, id, company.id);
     await batch(c.env.DB, [s, audit(c, `${table}.update`, table, id, input)]);
     return c.json({ ok: true });
@@ -166,7 +184,7 @@ settings.get("/exchange-rates", async (c) => {
 });
 
 settings.post("/exchange-rates", async (c) => {
-  requirePerm(c, "masters.write");
+  requirePerm(c, "accounts.write");
   const input = await body(c, z.object({ currency: z.string().regex(/^[A-Z]{3}$/), rate_date: isoDate, rate: z.union([z.string(), z.number()]) }));
   const company = c.get("company");
   if (!isCurrency(input.currency)) throw badRequest("Unsupported currency");

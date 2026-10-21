@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Copy, Download, Lock, Unlock } from "lucide-react";
+import { Download, Lock, Unlock } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useSession } from "../lib/session";
 import { useApi, useAction } from "../lib/hooks";
@@ -10,7 +10,8 @@ import { CURRENCY_OPTIONS } from "../components/pickers";
 import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { INDIA_STATES } from "@shared/tax";
-import { fmtDate, fmtDateTime, pct, today } from "../lib/format";
+import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
+import { MembersTab } from "./Users";
 
 type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
@@ -18,7 +19,8 @@ function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const c = settings!.company;
-  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern" });
+  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern",
+    purchase_approval_limit: c.purchase_approval_limit != null ? toInput(c.purchase_approval_limit, c.base_currency) : "", billing_discount_limit: c.billing_discount_limit_bp != null ? String(c.billing_discount_limit_bp / 100) : "" });
   const { busy, error, run } = useAction();
   const disabled = !can("company.manage");
   return (
@@ -39,6 +41,8 @@ function CompanyTab() {
         <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" disabled={disabled} checked={v.round_off_invoices} onChange={(e) => setV({ ...v, round_off_invoices: e.target.checked })} /> Round invoice totals to the nearest whole currency unit (difference posts to Rounding Off)</label>
         <Field label="UPI ID for payment QR" hint="Printed invoices show a 'Scan to pay' UPI QR for the balance due.">{(id) => <Input id={id} disabled={disabled} placeholder="business@okbank" value={v.upi_id} onChange={(e) => setV({ ...v, upi_id: e.target.value })} />}</Field>
         <Field label="Default print layout">{(id) => <Select id={id} disabled={disabled} value={v.print_template} onChange={(e) => setV({ ...v, print_template: e.target.value })}><option value="modern">A4 — modern</option><option value="classic">A4 — classic</option><option value="compact">Compact</option></Select>}</Field>
+        <Field label="Purchase approval limit" hint="Bills above this amount need approval by someone with “Approve purchases”. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.purchase_approval_limit} onChange={(e) => setV({ ...v, purchase_approval_limit: e.target.value })} />}</Field>
+        <Field label="Billing discount limit (%)" hint="Billing staff cannot give a line discount above this. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.billing_discount_limit} onChange={(e) => setV({ ...v, billing_discount_limit: e.target.value })} />}</Field>
         <Field label="Default invoice terms" className="sm:col-span-2">{(id) => <Textarea id={id} disabled={disabled} value={v.invoice_terms} onChange={(e) => setV({ ...v, invoice_terms: e.target.value })} />}</Field>
         <div className="text-sm muted sm:col-span-2">Country {c.country} · base currency {c.base_currency} · financial year starts month {c.fiscal_year_start_month}. These cannot be changed after creation.</div>
         <div className="rounded-lg bg-[var(--surface-2)] p-3 text-sm sm:col-span-2"><p className="font-medium">Tax capability for {settings!.jurisdiction.name}: <Badge color={settings!.jurisdiction.status === "implemented" ? "green" : "amber"}>{settings!.jurisdiction.status}</Badge></p><p className="mt-1 muted">{settings!.jurisdiction.notes}</p></div>
@@ -149,72 +153,6 @@ function DeleteDemo() {
   );
 }
 
-function MembersTab() {
-  const { settings } = useCompany();
-  const orgId = settings!.company.org_id;
-  const { me } = useSession();
-  const toast = useToast();
-  const org = useApi<any>(`/api/orgs/${orgId}`);
-  const [inv, setInv] = useState({ email: "", role: "accountant" });
-  const [nu, setNu] = useState({ name: "", username: "", password: "", role: "accountant" });
-  const [link, setLink] = useState<string | null>(null);
-  const { busy, error, run } = useAction();
-  const myRole = org.data?.role as Role | undefined;
-  const manage = myRole === "owner" || myRole === "admin";
-  const copy = (t: string) => { navigator.clipboard?.writeText(t); toast("success", "Copied"); };
-  return (
-    <div className="space-y-4">
-      <Card title="Members" padded={false}>
-        <TableWrap><table className="table">
-          <thead><tr><th>Name</th><th>Username / email</th><th>Role</th><th /></tr></thead>
-          <tbody>{org.data?.members.map((m: any) => (
-            <tr key={m.id}><td>{m.name}{m.id === me?.user?.id && <span className="ml-2"><Badge>you</Badge></span>}</td><td>{m.username ? <><b>{m.username}</b>{m.must_change_password ? <span className="ml-2"><Badge>temporary password</Badge></span> : null}</> : m.email}</td>
-              <td>{manage && m.role !== "owner" && m.id !== me?.user?.id ? (
-                <Select value={m.role} className="max-w-[11rem]" aria-label="Role" onChange={async (e) => { try { await api.patch(`/api/orgs/${orgId}/members/${m.id}`, { role: e.target.value }); org.reload(); toast("success", "Role updated"); } catch (err) { toast("error", errorMessage(err)); } }}>
-                  {(["admin", "accountant", "auditor", "viewer"] as Role[]).map((r) => <option key={r} value={r} disabled={myRole !== "owner" && r === "admin"}>{ROLE_LABELS[r]}</option>)}
-                </Select>) : ROLE_LABELS[m.role as Role]}</td>
-              <td className="whitespace-nowrap text-right">{manage && m.role !== "owner" && m.id !== me?.user?.id && <>
-                <Button size="sm" variant="ghost" onClick={async () => { try { const r = await api.post(`/api/orgs/${orgId}/members/${m.id}/reset-link`); setLink(`${location.origin}/reset?token=${r.token}`); } catch (err) { toast("error", errorMessage(err)); } }}>Reset link</Button>
-                <ConfirmButton size="sm" label="Remove" title={`Remove ${m.name}?`} body="They will lose access to all companies in this organisation." confirmLabel="Remove" onConfirm={async () => { await api.del(`/api/orgs/${orgId}/members/${m.id}`); org.reload(); }} />
-              </>}</td></tr>
-          ))}</tbody>
-        </table></TableWrap>
-      </Card>
-      {link && <Alert kind="success"><p>One-time password reset link (valid 24 hours). Send it to the member privately:</p><p className="mt-1 break-all font-mono text-xs">{link}</p><Button size="sm" variant="secondary" className="mt-2" onClick={() => copy(link)}><Copy className="h-3.5 w-3.5" />Copy</Button></Alert>}
-      {manage && (
-        <Card title="Add a user">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Name">{(id) => <Input id={id} value={nu.name} onChange={(e) => setNu({ ...nu, name: e.target.value })} />}</Field>
-            <Field label="Username">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={nu.username} onChange={(e) => setNu({ ...nu, username: e.target.value })} />}</Field>
-            <Field label="Temporary password">{(id) => <Input id={id} type="password" autoComplete="new-password" value={nu.password} onChange={(e) => setNu({ ...nu, password: e.target.value })} />}</Field>
-            <Field label="Role">{(id) => <Select id={id} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>{(["admin", "accountant", "auditor", "viewer"] as Role[]).filter((r) => myRole === "owner" || r !== "admin").map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>}</Field>
-            <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/users`, nu)); if (r) { toast("success", `User ${r.username} added. They choose their own password at first sign-in.`); setNu({ name: "", username: "", password: "", role: nu.role }); org.reload(); } }}>Add user</Button>
-          </div>
-          <p className="mt-2 text-xs muted">Like Tally: give the person their username and temporary password. They must set their own password the first time they sign in.</p>
-        </Card>
-      )}
-      {manage && (
-        <Card title="Invite someone">
-          {error && <Alert className="mb-3">{error}</Alert>}
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Email">{(id) => <Input id={id} type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} />}</Field>
-            <Field label="Role">{(id) => <Select id={id} value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}>{(["admin", "accountant", "auditor", "viewer"] as Role[]).filter((r) => myRole === "owner" || r !== "admin").map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>}</Field>
-            <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/invitations`, inv)); if (r) { setLink(`${location.origin}/invite?token=${r.token}`); setInv({ ...inv, email: "" }); org.reload(); } }}>Create invitation link</Button>
-          </div>
-          <p className="mt-2 text-xs muted">No email is sent (no paid email service). Copy the link and share it with the person; it expires in 7 days and only works for that email address.</p>
-          <ul className="mt-4 text-xs muted">
-            <li><strong>Administrator</strong>: everything except changing the owner. <strong>Accountant</strong>: create and post transactions, reconcile, approve others' expenses. <strong>Auditor</strong>: read everything including the audit log. <strong>Read-only</strong>: view documents and reports.</li>
-          </ul>
-          {org.data?.invitations.filter((i: any) => !i.accepted_at && !i.revoked_at).length > 0 && (
-            <TableWrap><table className="table mt-4 text-sm"><thead><tr><th>Pending invitation</th><th>Role</th><th>Expires</th><th /></tr></thead>
-              <tbody>{org.data.invitations.filter((i: any) => !i.accepted_at && !i.revoked_at).map((i: any) => <tr key={i.id}><td>{i.email}</td><td>{ROLE_LABELS[i.role as Role]}</td><td>{fmtDateTime(i.expires_at)}</td><td className="text-right"><Button size="sm" variant="ghost" onClick={async () => { await api.del(`/api/orgs/${orgId}/invitations/${i.id}`); org.reload(); }}>Revoke</Button></td></tr>)}</tbody></table></TableWrap>
-          )}
-        </Card>
-      )}
-    </div>
-  );
-}
-
 function TaxTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
@@ -243,19 +181,26 @@ function DimensionsTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const kinds: [string, string, "branches" | "departments" | "projects" | "cost_centres"][] = [["branches", "Branches", "branches"], ["departments", "Departments", "departments"], ["projects", "Projects", "projects"], ["cost-centres", "Cost centres", "cost_centres"]];
-  const [forms, setForms] = useState<Record<string, { code: string; name: string }>>({});
+  const [forms, setForms] = useState<Record<string, { code: string; name: string; invoice_prefix?: string }>>({});
+  const patch = async (route: string, d: any, change: Record<string, unknown>) => {
+    try { await api.patch(path(`/settings/${route}/${d.id}`), { name: d.name, code: d.code, is_active: Boolean(d.is_active), state_code: d.state_code ?? null, address: d.address ?? null, ...change }); reload(); } catch (e) { toast("error", errorMessage(e)); }
+  };
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {kinds.map(([route, label, key]) => (
         <Card key={key} title={label}>
           <ul className="mb-3 space-y-1 text-sm">{(settings![key] as any[]).map((d) => (
-            <li key={d.id} className="flex items-center justify-between"><span className={d.is_active ? "" : "line-through muted"}>{d.code} · {d.name}</span>
-              {can("masters.write") && <Button size="sm" variant="ghost" onClick={async () => { try { await api.patch(path(`/settings/${route}/${d.id}`), { name: d.name, code: d.code, is_active: !d.is_active, state_code: d.state_code ?? null }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>{d.is_active ? "Deactivate" : "Activate"}</Button>}</li>
+            <li key={d.id} className="flex items-center justify-between gap-2"><span className={d.is_active ? "" : "line-through muted"}>{d.code} · {d.name}{key === "branches" && d.invoice_prefix ? <span className="ml-2 font-mono text-xs muted">numbers: {d.invoice_prefix}-INV-0001</span> : null}</span>
+              {can(route === "branches" ? "branches.manage" : "company.manage") && <span className="flex shrink-0">
+                {key === "branches" && <Button size="sm" variant="ghost" onClick={() => { const p = prompt("Invoice number prefix for this branch (letters/digits, blank = company numbering)", d.invoice_prefix ?? ""); if (p !== null) void patch(route, d, { invoice_prefix: p.trim() }); }}>Prefix</Button>}
+                <Button size="sm" variant="ghost" onClick={() => void patch(route, d, { is_active: !d.is_active })}>{d.is_active ? "Deactivate" : "Activate"}</Button>
+              </span>}</li>
           ))}{!(settings![key] as any[]).length && <li className="muted">None yet. Tag journal and document lines with {label.toLowerCase()} to filter the profit & loss report.</li>}</ul>
-          {can("masters.write") && <div className="flex flex-wrap items-end gap-2">
+          {can(route === "branches" ? "branches.manage" : "company.manage") && <div className="flex flex-wrap items-end gap-2">
             <Input placeholder="Code" className="w-24" value={forms[key]?.code ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], code: e.target.value } })} aria-label={`${label} code`} />
             <Input placeholder="Name" className="flex-1" value={forms[key]?.name ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], name: e.target.value } })} aria-label={`${label} name`} />
-            <Button size="sm" onClick={async () => { try { await api.post(path(`/settings/${route}`), forms[key]); setForms({ ...forms, [key]: { code: "", name: "" } }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>Add</Button>
+            {key === "branches" && <Input placeholder="Invoice prefix" className="w-32 font-mono uppercase" value={forms[key]?.invoice_prefix ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], invoice_prefix: e.target.value } })} aria-label="Invoice prefix" />}
+            <Button size="sm" onClick={async () => { try { await api.post(path(`/settings/${route}`), forms[key]); setForms({ ...forms, [key]: { code: "", name: "", invoice_prefix: "" } }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>Add</Button>
           </div>}
         </Card>
       ))}
@@ -293,7 +238,7 @@ function CurrencyTab() {
   return (
     <Card title={`Exchange rates (to ${base})`}>
       <p className="mb-3 text-sm muted">Enter rates manually from your bank or the reserve bank's reference rate. No paid rate feed is used. Documents use the latest rate on or before their date unless overridden.</p>
-      {can("masters.write") && <div className="mb-4 flex flex-wrap items-end gap-3">
+      {can("accounts.write") && <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Currency">{(id) => <Select id={id} value={v.currency} onChange={(e) => setV({ ...v, currency: e.target.value })}>{CURRENCY_OPTIONS.filter((c) => c !== base).map((c) => <option key={c}>{c}</option>)}</Select>}</Field>
         <Field label="Date">{(id) => <Input id={id} type="date" value={v.rate_date} onChange={(e) => setV({ ...v, rate_date: e.target.value })} />}</Field>
         <Field label={`1 ${v.currency} = ? ${base}`}>{(id) => <Input id={id} inputMode="decimal" value={v.rate} onChange={(e) => setV({ ...v, rate: e.target.value })} />}</Field>
@@ -423,7 +368,7 @@ export default function Settings() {
     <>
       <PageHeader title="Settings" subtitle={`${settings.company.name} · your role: ${ROLE_LABELS[settings.role as Role]}`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: "company", label: "Company" }, { value: "members", label: "Team" }, { value: "tax", label: "Tax codes" }, { value: "dimensions", label: "Branches & dimensions" },
+        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, { value: "dimensions", label: "Branches & dimensions" },
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),

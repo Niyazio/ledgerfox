@@ -61,7 +61,7 @@ function AssetDetail({ assetId, onClose }: { assetId: string; onClose: (c: boole
               <tr key={s.month}><td>{s.month}</td><td className="num">{money(s.amount)}</td><td className="num">{money(s.accumulated)}</td><td className="num">{money(s.book_value)}</td><td className="text-xs">{posted ? posted.entry_number : ""}</td></tr>
             ); })}</tbody>
           </table></div></TableWrap>
-          {data.asset.status === "active" && can("txn.post") && (
+          {data.asset.status === "active" && can("assets.manage") && (
             <div className="rounded-lg bg-[var(--surface-2)] p-3">
               <h3 className="mb-2 text-sm font-semibold">Dispose / sell</h3>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -90,12 +90,12 @@ export default function Assets() {
   const df = settings?.company.date_format;
   return (
     <>
-      <PageHeader title="Fixed assets" actions={can("masters.write") && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add asset</Button>} />
+      <PageHeader title="Fixed assets" actions={can("assets.manage") && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add asset</Button>} />
       <Card className="mb-4" title="Run depreciation">
         {error && <Alert className="mb-3">{error}</Alert>}
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Through month">{(id) => <Input id={id} type="month" value={through} onChange={(e) => setThrough(e.target.value)} />}</Field>
-          <Button loading={busy} disabled={!can("txn.post")} onClick={async () => { const r = await run(() => api.post(path("/assets/depreciation/run"), { through })); if (r) { toast("success", r.journals ? `Posted ${r.journals} depreciation journal(s): ${r.months.join(", ")}` : "Nothing pending"); reload(); } }}>Post depreciation</Button>
+          <Button loading={busy} disabled={!can("assets.manage")} onClick={async () => { const r = await run(() => api.post(path("/assets/depreciation/run"), { through })); if (r) { toast("success", r.journals ? `Posted ${r.journals} depreciation journal(s): ${r.months.join(", ")}` : "Nothing pending"); reload(); } }}>Post depreciation</Button>
         </div>
         <p className="mt-2 text-xs muted">Posts one journal per month for months not yet depreciated. Safe to run repeatedly — each asset/month is charged once.</p>
       </Card>

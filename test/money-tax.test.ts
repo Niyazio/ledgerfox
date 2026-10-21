@@ -180,11 +180,16 @@ describe("inventory costing", () => {
 
 describe("permissions", () => {
   it("role matrix", () => {
-    expect(can("viewer", "txn.post")).toBe(false);
+    expect(can("viewer", "sales.post")).toBe(false);
+    expect(can("billing", "sales.post")).toBe(true);
+    expect(can("billing", "purchase.view")).toBe(false);
+    expect(can("purchase", "sales.view")).toBe(false);
+    expect(can("inventory", "inventory.transfer")).toBe(true);
     expect(can("auditor", "audit.read")).toBe(true);
-    expect(can("auditor", "txn.write")).toBe(false);
+    expect(can("auditor", "sales.create")).toBe(false);
     expect(can("accountant", "data.export")).toBe(false);
-    expect(can("admin", "data.export")).toBe(true);
+    expect(can("owner", "data.export")).toBe(true);
+    expect(can("admin", "roles.manage")).toBe(false);
     expect(canAssignRole("admin", "admin")).toBe(false);
     expect(canAssignRole("owner", "admin")).toBe(true);
     expect(canAssignRole("accountant", "viewer")).toBe(false);
@@ -198,5 +203,18 @@ describe("amount in words", () => {
     expect(amountInWords(1234567850, "INR")).toBe("Rupees One Crore Twenty Three Lakh Forty Five Thousand Six Hundred Seventy Eight and Fifty Paise Only");
     expect(amountInWords(123456700, "USD")).toBe("Dollars One Million Two Hundred Thirty Four Thousand Five Hundred Sixty Seven Only");
     expect(amountInWords(0, "INR")).toBe("Rupees Zero Only");
+  });
+});
+
+describe("one-time passwords", () => {
+  it("are always 3 groups of 5 from the unambiguous alphabet, and differ", async () => {
+    const { temporaryPassword } = await import("../src/worker/lib/crypto");
+    const seen = new Set<string>();
+    for (let i = 0; i < 2000; i++) {
+      const p = temporaryPassword();
+      expect(p).toMatch(/^[A-HJKMNP-Za-hjkmnp-z2-9]{5}-[A-HJKMNP-Za-hjkmnp-z2-9]{5}-[A-HJKMNP-Za-hjkmnp-z2-9]{5}$/);
+      seen.add(p);
+    }
+    expect(seen.size).toBe(2000);
   });
 });

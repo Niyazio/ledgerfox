@@ -1,6 +1,6 @@
 # Project status
 
-_Last updated: 20 Oct 2026_
+_Last updated: 21 Oct 2026 (phase 2 on branch `feature/multi-branch`, not yet merged or deployed)_
 
 **Overall: suitable for a demo and a supervised pilot (one small business, accountant reviewing reports, monthly
 backups). Not yet production-ready** for unsupervised use or as a statutory system of record. See "Before production".
@@ -12,8 +12,12 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Registration, login, sessions, password change | ✅ Done | PBKDF2, hashed session tokens, rate limiting |
 | Password recovery | ✅ Done | One-time recovery codes; admin reset links. No email. |
 | Organisations, multiple companies, company switching | ✅ Done | |
-| Roles (owner/admin/accountant/auditor/read-only), invitations | ✅ Done | Invitation links are copied manually (no email) |
+| Seven roles (Owner, Admin/Branch manager, Billing, Purchase, Accountant, Inventory, Viewer/Auditor) with 39 fine-grained permissions; owner can customise every role except Owner | ✅ Done (phase 2) | Checked on the server for every request; the UI only hides what the server refuses |
 | Branches, departments, projects, cost centres | ✅ Done | Tag lines; P&L filters by dimension |
+| Multi-branch access: users limited to assigned branches, header branch selector, branch-wise reports, branch invoice prefixes, inter-branch stock transfers | ✅ Done (phase 2) | Lists, details, edits, reports and contact balances are scoped on the server. Some reports (cash flow, GL, ageing, GST, inventory valuation, insights, budgets) are whole-company only and refused for branch-limited users |
+| Daybook (created / modified / approved / posted / cancelled by and when) and per-record history with previous → new values | ✅ Done (phase 2) | From the append-only audit log |
+| Approval limits: purchase bills above a limit need approval by another user; billing discount limit | ✅ Done (phase 2) | |
+| Product codes (auto P000001…), barcodes, QR + Code 128 labels, scanning by USB scanner, camera (where the browser supports BarcodeDetector) or typing | ✅ Done (phase 2) | QR holds only the product code |
 | Chart of accounts (groups, types, detail types, system accounts) | ✅ Done | India / generic seeds |
 | Journals: draft, post, reverse, adjustment, opening balances | ✅ Done | DB-enforced balance & immutability |
 | Fiscal years, monthly periods, period locking | ✅ Done | |
@@ -35,7 +39,7 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Desktop edition (Windows/macOS/Linux) | ✅ Done (Linux build verified here) | Data file in a chosen folder, daily backups, Wi-Fi phone access with QR, temporary free internet link. Windows/macOS installers are built by GitHub Actions (cannot be built in this Linux environment); unsigned. |
 | Move desktop data to the cloud | ❌ Not yet | Same schema; needs an import tool |
 | Permanent per-client internet address | ❌ Not yet | Options: relay on Cloudflare Workers (free tier, counts against 100k requests/day) or named tunnels on each client's Cloudflare account |
-| Username login, Tally-style user creation, desktop admin/admin with forced change | ✅ Done | |
+| Username login, Tally-style user creation, forced password change | ✅ Done | Phase 2: every new user and the desktop's first sign-in get a random one-time password (no shared default such as admin/admin) |
 | Business types (12) with tailored accounts, units, starter items | ✅ Done | |
 | Demo company (load / delete) | ✅ Done | Loaded through the normal API |
 | Payroll: employees, timesheets, monthly runs, PF/ESI/PT/TDS, posting, salary payment, salary register, payslips | ✅ Done | Statutory defaults for India; PT and TDS are per-employee fixed amounts (no slab/tax computation) |
@@ -47,7 +51,7 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Android app: full app inside, update check, view-only offline copy from the desktop by QR | ✅ Done | Copy is a snapshot; scan again to refresh |
 | Encrypted automatic cloud backup of desktop data | ✅ Done | Keeps newest 5 per user |
 | Website deploy workflow (GitHub Actions) | ✅ Added | Needs CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets |
-| Multi-branch access control, 7 roles, daybook, product barcodes (phase 2 brief) | ⏳ Next | On a separate branch, for review before merging |
+| Phase 2 rollout | ⏳ Awaiting your approval | Branch `feature/multi-branch`. Migrations 0006 and 0007 are not applied to the live database; nothing is deployed |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 
 ## Incomplete, partial or not implemented (honest list)
@@ -63,7 +67,9 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 - Payment allocation requires the payment and invoice to share a currency.
 - Ageing is document-based; manual journals to AR/AP show as an "unreconciled difference" (flagged on the report).
 - No year-end closing entry (retained earnings are computed); no consolidation across companies.
-- No payroll, CRM, manufacturing or other ERP modules.
+- No CRM, manufacturing or other ERP modules.
+- Camera scanning needs a browser with the BarcodeDetector API (Chrome/Edge on Android/Windows/macOS, the Android app); Safari/Firefox users can use a USB scanner or type the code.
+- Branch-wise cash flow, general ledger, ageing, GST summary and inventory valuation are not available yet (whole company only).
 - Not tested: real production Cloudflare deployment (not deployed yet), load against free-tier limits, accessibility audit.
 
 ## Before production

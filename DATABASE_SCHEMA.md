@@ -18,13 +18,14 @@ and are applied by the test harness to every test database.
 | Area | Tables |
 |---|---|
 | Identity | `users`, `sessions` (SHA-256 of token), `recovery_codes` (hashed), `password_resets` (hashed), `rate_limits` |
-| Tenancy | `organisations`, `memberships` (owner/admin/accountant/auditor/viewer), `invitations` (hashed token), `companies` |
-| Dimensions | `branches`, `departments`, `projects`, `cost_centres` |
+| Tenancy | `organisations`, `memberships` (owner/admin/billing/purchase/accountant/inventory/auditor/viewer + `all_branches`), `member_branches`, `role_permissions` (owner's overrides of role defaults), `invitations` (hashed token), `companies` (+ purchase approval and discount limits) |
+| Dimensions | `branches` (+ invoice prefix, phone, GSTIN), `departments`, `projects`, `cost_centres` |
 | Setup | `number_sequences`, `exchange_rates`, `fiscal_years`, `fiscal_periods` (open/locked), `tax_codes`, `units` |
 | Ledger | `accounts` (type/subtype/group tree/system_key), `journal_entries`, `journal_lines` |
-| Parties & items | `contacts` (customer/supplier/both), `items`, `warehouses`, `stock_moves` |
+| Parties & items | `contacts` (customer/supplier/both), `items` (+ unique `code` and `barcode` per company), `warehouses` (optional branch), `stock_moves`, `stock_transfers` (append-only; from/to warehouse and branch) |
 | Documents | `documents` (quote, sales_order, invoice, credit_note, purchase_order, bill, debit_note), `document_lines` |
-| Settlement | `payments` (in/out), `allocations` (payment or note → invoice/bill; reversible by negative mirror) |
+| Settlement | `payments` (in/out, branch), `allocations` (payment or note → invoice/bill; reversible by negative mirror) |
+| Approvals | `document_approvals` (requested by/at, approved by/at) |
 | Expenses | `expenses` (draft → submitted → approved/rejected → posted), `recurring_templates`, `attachments` (BLOB ≤ 1 MB) |
 | Banking | `bank_imports`, `bank_statement_lines` (dedupe hash, match), `bank_reconciliations` |
 | Assets | `fixed_assets` (SLM/WDV), `depreciation_entries` (unique asset+month) |
@@ -57,6 +58,17 @@ and are applied by the test harness to every test database.
 
 Seeded per company (`src/shared/coa.ts`), India adds CGST/SGST/IGST input/output and TDS accounts. System accounts
 (`system_key`: AR, AP, SALES, COGS, INVENTORY, OUT_CGST, …) are used automatically by postings and cannot be deleted.
+
+## Phase 2 migrations
+
+- `0006_branches_roles.sql` — widens the role CHECK on `memberships` / `invitations` by rebuilding those two tables
+  with every row copied (existing members get `all_branches = 1`, so nobody loses access); adds `member_branches`,
+  `role_permissions`, `document_approvals`, `stock_transfers`; adds `branch_id` to payments and expenses, branch
+  profile columns, approval limits, and `items.code` (backfilled `P000001…`) / `items.barcode` with unique indexes.
+- `0007_report_indexes.sql` — covering indexes for ledger aggregation and settled amounts. Index-only.
+
+Verified on a data file created by the released v0.3.0 server: all row counts and ledger totals identical after
+upgrade, owner still signs in, existing items received codes.
 
 ## Adding a migration
 

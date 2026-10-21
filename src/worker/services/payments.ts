@@ -30,6 +30,7 @@ export interface PaymentInput {
   reference?: string | null;
   notes?: string | null;
   idempotency_key?: string | null;
+  branch_id?: string | null;
   allocations: { document_id: string; amount: number }[];
 }
 
@@ -106,17 +107,17 @@ export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
   const built = buildJournal(db, {
     company_id: company.id, entry_date: input.payment_date, kind: "system",
     memo: `${input.direction === "in" ? "Receipt" : "Payment"}${input.reference ? ` ${input.reference}` : ""}`,
-    source_type: input.direction === "in" ? "receipt" : "payment", source_id: id, created_by: user.id, post: true, lines,
+    source_type: input.direction === "in" ? "receipt" : "payment", source_id: id, branch_id: input.branch_id ?? null, created_by: user.id, post: true, lines,
   });
   const stmts: D1PreparedStatement[] = [
     ...built.stmts,
     ...bumpSequence(db, company.id, seqKey, input.direction === "in" ? "RCPT-" : "PAY-"),
     stmt(db,
       `INSERT INTO payments (id, company_id, direction, number, contact_id, payment_date, account_id, currency, fx_rate_scaled, amount, amount_base,
-         method, reference, notes, status, journal_entry_id, idempotency_key, created_by)
-       VALUES (?,?,?,${seqNumberExpr()},?,?,?,?,?,?,?,?,?,?,'posted',?,?,?)`,
+         method, reference, notes, status, journal_entry_id, idempotency_key, created_by, branch_id)
+       VALUES (?,?,?,${seqNumberExpr()},?,?,?,?,?,?,?,?,?,?,'posted',?,?,?,?)`,
       id, company.id, input.direction, company.id, seqKey, input.contact_id, input.payment_date, input.account_id, currency, fx, input.amount, amountBase,
-      input.method ?? null, input.reference ?? null, input.notes ?? null, built.id, input.idempotency_key ?? null, user.id),
+      input.method ?? null, input.reference ?? null, input.notes ?? null, built.id, input.idempotency_key ?? null, user.id, input.branch_id ?? null),
   ];
   for (const d of docs) {
     stmts.push(stmt(db, `INSERT INTO allocations (id, company_id, source_kind, payment_id, document_id, amount, allocation_date, created_by) VALUES (?,?,?,?,?,?,?,?)`,

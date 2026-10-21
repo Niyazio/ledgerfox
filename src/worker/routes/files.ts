@@ -3,9 +3,10 @@ import type { AppEnv } from "../env";
 import { all, batch, first, stmt } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { newId, sha256Hex } from "../lib/crypto";
-import { audit, requirePerm } from "../lib/auth";
+import { audit, requireAnyPerm } from "../lib/auth";
 
 const files = new Hono<AppEnv>();
+files.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "sales.view", "purchase.view", "expense.create", "expense.approve", "journal.view"); await next(); });
 
 export const MAX_ATTACHMENT_BYTES = 1024 * 1024; // D1 rows are limited in size; keep attachments small.
 const ALLOWED: Record<string, (b: Uint8Array) => boolean> = {
@@ -17,7 +18,7 @@ const ALLOWED: Record<string, (b: Uint8Array) => boolean> = {
 const ENTITY_TABLES: Record<string, string> = { expense: "expenses", document: "documents", journal: "journal_entries", payment: "payments", asset: "fixed_assets" };
 
 files.post("/", async (c) => {
-  requirePerm(c, "txn.write");
+  requireAnyPerm(c, "sales.create", "purchase.create", "expense.create", "journal.create");
   const company = c.get("company");
   const entityType = c.req.query("entity_type") ?? "";
   const entityId = c.req.query("entity_id") ?? "";
@@ -70,7 +71,7 @@ files.get("/:id", async (c) => {
 });
 
 files.delete("/:id", async (c) => {
-  requirePerm(c, "txn.write");
+  requireAnyPerm(c, "sales.create", "purchase.create", "expense.create", "journal.create");
   const company = c.get("company");
   const a = await first<{ entity_type: string; entity_id: string }>(c.env.DB, `SELECT entity_type, entity_id FROM attachments WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
   if (!a) throw notFound("Attachment");
