@@ -32,6 +32,7 @@ const Labels = lazy(() => import("./pages/Labels"));
 const GstReturns = lazy(() => import("./pages/GstReturns"));
 const ImportPage = lazy(() => import("./pages/Import"));
 const Recurring = lazy(() => import("./pages/Recurring"));
+const Pos = lazy(() => import("./pages/Pos"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Assets = lazy(() => import("./pages/Assets"));
@@ -88,6 +89,7 @@ function App() {
         <Route path="labels" element={<Labels />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="recurring" element={<Recurring />} />
+        <Route path="pos" element={<Pos />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<JournalList />} />
         <Route path="journals/new" element={<JournalForm />} />

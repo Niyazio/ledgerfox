@@ -83,3 +83,43 @@ describe("recurring invoices", () => {
     expect((await W.owner.post(W.c("/recurring/run"))).json.created).toHaveLength(0);
   });
 });
+
+describe("POS counter sale", () => {
+  it("issues the invoice and records split payments in one step; walk-in sales must be paid in full", async () => {
+    const W = await world();
+    const tea = (await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "100", tax_code_id: W.tax["GST 5%"], track_inventory: false })).json.id;
+    const rice = (await W.owner.post(W.c("/items"), { kind: "goods", name: "Rice", sale_price: "50" })).json.id;
+    // 2 × 100 + 5% = 210; 3 × 50 = 150; total 360, paid 300 cash + 60 UPI.
+    const r = await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: tea, quantity: "2" }, { item_id: rice, quantity: "3" }], payments: [{ mode: "cash", amount: "300" }, { mode: "upi", amount: "60" }] });
+    expect(r.status, JSON.stringify(r.json)).toBe(201);
+    expect(r.json).toMatchObject({ total: 36_000, paid: 36_000, balance: 0 });
+    expect(r.json.number).toMatch(/^INV-/);
+    const doc = (await W.owner.get(W.c(`/documents/${r.json.invoice_id}`))).json.document;
+    expect([doc.status, doc.amount_settled, doc.contact_name]).toEqual(["posted", 36_000, "Walk-in customer"]);
+    const book = (await W.owner.get(W.c("/reports/cash-book?kind=all"))).json;
+    expect([book.receipts, book.closing]).toEqual([36_000, 36_000]);
+    // A second walk-in sale reuses the same contact.
+    await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1" }], payments: [{ mode: "card", amount: "50" }] });
+    expect((await W.owner.get(W.c("/contacts?kind=customer&q=Walk-in"))).json.total).toBe(1);
+    // Unpaid walk-in sale and overpayment are refused.
+    expect((await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1" }], payments: [] })).status).toBe(400);
+    expect((await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1" }], payments: [{ mode: "cash", amount: "500" }] })).status).toBe(400);
+    // A named customer may buy on credit.
+    const cust = await contact(W, "customer");
+    const credit = await W.owner.post(W.c("/pos/sale"), { contact_id: cust, lines: [{ item_id: rice, quantity: "2" }], payments: [{ mode: "cash", amount: "40" }] });
+    expect(credit.json).toMatchObject({ total: 10_000, paid: 4_000, balance: 6_000 });
+  });
+
+  it("billing staff cannot change prices or exceed the discount limit at the counter", async () => {
+    const W = await world();
+    await W.owner.patch(W.c("/settings"), { name: "Acme Traders", state_code: "29", billing_discount_limit: "5" });
+    const rice = (await W.owner.post(W.c("/items"), { kind: "goods", name: "Rice", sale_price: "50" })).json.id;
+    const u = await W.owner.post(`/api/orgs/${W.orgId}/users`, { name: "Cashier", username: "pos.cashier", role: "billing" });
+    const cl = new Client(W.env);
+    await cl.post("/api/auth/login", { login: "pos.cashier", password: u.json.temporary_password });
+    await cl.post("/api/auth/change-password", { current_password: u.json.temporary_password, new_password: "pos cashier pass 1" });
+    expect((await cl.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1", unit_price: "40" }], payments: [{ mode: "cash", amount: "40" }] })).json.error.code).toBe("PRICE_LOCKED");
+    expect((await cl.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1", discount_percent: "10" }], payments: [{ mode: "cash", amount: "45" }] })).json.error.code).toBe("DISCOUNT_LIMIT");
+    expect((await cl.post(W.c("/pos/sale"), { lines: [{ item_id: rice, quantity: "1", discount_percent: "5" }], payments: [{ mode: "cash", amount: "47.50" }] })).status).toBe(201);
+  });
+});

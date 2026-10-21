@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
-  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
@@ -69,6 +69,7 @@ const NAV: NavGroup[] = [
     { to: "daybook", label: "Daybook", icon: <CalendarDays className="h-4 w-4" />, perm: "daybook.read" },
   ] },
   { label: "Sales & billing", items: [
+    { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },

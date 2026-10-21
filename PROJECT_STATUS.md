@@ -60,6 +60,12 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Import customers, suppliers and products (with opening stock) from Excel .xlsx or CSV | ✅ Done | Built-in reader; old .xls must be saved as .xlsx |
 | Share invoices, quotes and receipts via WhatsApp / email / copy; payment reminders; customer link with full invoice and UPI pay button + QR | ✅ Done | Free: opens your own WhatsApp/email. Desktop edition sends text without a link |
 
+| POS counter billing: scan/tap products, cash/UPI/card/split, change, hold bills, auto thermal print, walk-in customer, F2/F9 shortcuts | ✅ Done | Prices locked for staff without discount rights |
+| Proforma invoices and delivery challans (own number series, convert to invoice) | ✅ Done | Delivery challans do not move stock |
+| Recurring invoices (weekly/monthly/quarterly/yearly; draft or auto-issue; catches up missed periods) | ✅ Done | Run when someone opens the app (daily) or with “Create due invoices now”; no background job |
+| Customer credit limit: warning on draft, blocked on issue unless a manager confirms (recorded in history) | ✅ Done | |
+| Cash book / bank book with running balance; share customer/supplier statements | ✅ Done | |
+
 ## Incomplete, partial or not implemented (honest list)
 
 - **GST compliance:** GSTR-1/3B are prepared for upload but not filed; no e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
