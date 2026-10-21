@@ -10,7 +10,7 @@ import { CURRENCY_OPTIONS } from "../components/pickers";
 import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { INDIA_STATES } from "@shared/tax";
-import { fmtDate, fmtDateTime, pct, today } from "../lib/format";
+import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
 
 type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
@@ -19,7 +19,8 @@ function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const c = settings!.company;
-  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern" });
+  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern",
+    purchase_approval_limit: c.purchase_approval_limit != null ? toInput(c.purchase_approval_limit, c.base_currency) : "", billing_discount_limit: c.billing_discount_limit_bp != null ? String(c.billing_discount_limit_bp / 100) : "" });
   const { busy, error, run } = useAction();
   const disabled = !can("company.manage");
   return (
@@ -40,6 +41,8 @@ function CompanyTab() {
         <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" disabled={disabled} checked={v.round_off_invoices} onChange={(e) => setV({ ...v, round_off_invoices: e.target.checked })} /> Round invoice totals to the nearest whole currency unit (difference posts to Rounding Off)</label>
         <Field label="UPI ID for payment QR" hint="Printed invoices show a 'Scan to pay' UPI QR for the balance due.">{(id) => <Input id={id} disabled={disabled} placeholder="business@okbank" value={v.upi_id} onChange={(e) => setV({ ...v, upi_id: e.target.value })} />}</Field>
         <Field label="Default print layout">{(id) => <Select id={id} disabled={disabled} value={v.print_template} onChange={(e) => setV({ ...v, print_template: e.target.value })}><option value="modern">A4 — modern</option><option value="classic">A4 — classic</option><option value="compact">Compact</option></Select>}</Field>
+        <Field label="Purchase approval limit" hint="Bills above this amount need approval by someone with “Approve purchases”. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.purchase_approval_limit} onChange={(e) => setV({ ...v, purchase_approval_limit: e.target.value })} />}</Field>
+        <Field label="Billing discount limit (%)" hint="Billing staff cannot give a line discount above this. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.billing_discount_limit} onChange={(e) => setV({ ...v, billing_discount_limit: e.target.value })} />}</Field>
         <Field label="Default invoice terms" className="sm:col-span-2">{(id) => <Textarea id={id} disabled={disabled} value={v.invoice_terms} onChange={(e) => setV({ ...v, invoice_terms: e.target.value })} />}</Field>
         <div className="text-sm muted sm:col-span-2">Country {c.country} · base currency {c.base_currency} · financial year starts month {c.fiscal_year_start_month}. These cannot be changed after creation.</div>
         <div className="rounded-lg bg-[var(--surface-2)] p-3 text-sm sm:col-span-2"><p className="font-medium">Tax capability for {settings!.jurisdiction.name}: <Badge color={settings!.jurisdiction.status === "implemented" ? "green" : "amber"}>{settings!.jurisdiction.status}</Badge></p><p className="mt-1 muted">{settings!.jurisdiction.notes}</p></div>
@@ -178,19 +181,26 @@ function DimensionsTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const kinds: [string, string, "branches" | "departments" | "projects" | "cost_centres"][] = [["branches", "Branches", "branches"], ["departments", "Departments", "departments"], ["projects", "Projects", "projects"], ["cost-centres", "Cost centres", "cost_centres"]];
-  const [forms, setForms] = useState<Record<string, { code: string; name: string }>>({});
+  const [forms, setForms] = useState<Record<string, { code: string; name: string; invoice_prefix?: string }>>({});
+  const patch = async (route: string, d: any, change: Record<string, unknown>) => {
+    try { await api.patch(path(`/settings/${route}/${d.id}`), { name: d.name, code: d.code, is_active: Boolean(d.is_active), state_code: d.state_code ?? null, address: d.address ?? null, ...change }); reload(); } catch (e) { toast("error", errorMessage(e)); }
+  };
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {kinds.map(([route, label, key]) => (
         <Card key={key} title={label}>
           <ul className="mb-3 space-y-1 text-sm">{(settings![key] as any[]).map((d) => (
-            <li key={d.id} className="flex items-center justify-between"><span className={d.is_active ? "" : "line-through muted"}>{d.code} · {d.name}</span>
-              {can(route === "branches" ? "branches.manage" : "company.manage") && <Button size="sm" variant="ghost" onClick={async () => { try { await api.patch(path(`/settings/${route}/${d.id}`), { name: d.name, code: d.code, is_active: !d.is_active, state_code: d.state_code ?? null }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>{d.is_active ? "Deactivate" : "Activate"}</Button>}</li>
+            <li key={d.id} className="flex items-center justify-between gap-2"><span className={d.is_active ? "" : "line-through muted"}>{d.code} · {d.name}{key === "branches" && d.invoice_prefix ? <span className="ml-2 font-mono text-xs muted">numbers: {d.invoice_prefix}-INV-0001</span> : null}</span>
+              {can(route === "branches" ? "branches.manage" : "company.manage") && <span className="flex shrink-0">
+                {key === "branches" && <Button size="sm" variant="ghost" onClick={() => { const p = prompt("Invoice number prefix for this branch (letters/digits, blank = company numbering)", d.invoice_prefix ?? ""); if (p !== null) void patch(route, d, { invoice_prefix: p.trim() }); }}>Prefix</Button>}
+                <Button size="sm" variant="ghost" onClick={() => void patch(route, d, { is_active: !d.is_active })}>{d.is_active ? "Deactivate" : "Activate"}</Button>
+              </span>}</li>
           ))}{!(settings![key] as any[]).length && <li className="muted">None yet. Tag journal and document lines with {label.toLowerCase()} to filter the profit & loss report.</li>}</ul>
           {can(route === "branches" ? "branches.manage" : "company.manage") && <div className="flex flex-wrap items-end gap-2">
             <Input placeholder="Code" className="w-24" value={forms[key]?.code ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], code: e.target.value } })} aria-label={`${label} code`} />
             <Input placeholder="Name" className="flex-1" value={forms[key]?.name ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], name: e.target.value } })} aria-label={`${label} name`} />
-            <Button size="sm" onClick={async () => { try { await api.post(path(`/settings/${route}`), forms[key]); setForms({ ...forms, [key]: { code: "", name: "" } }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>Add</Button>
+            {key === "branches" && <Input placeholder="Invoice prefix" className="w-32 font-mono uppercase" value={forms[key]?.invoice_prefix ?? ""} onChange={(e) => setForms({ ...forms, [key]: { ...forms[key], invoice_prefix: e.target.value } })} aria-label="Invoice prefix" />}
+            <Button size="sm" onClick={async () => { try { await api.post(path(`/settings/${route}`), forms[key]); setForms({ ...forms, [key]: { code: "", name: "", invoice_prefix: "" } }); reload(); } catch (e) { toast("error", errorMessage(e)); } }}>Add</Button>
           </div>}
         </Card>
       ))}

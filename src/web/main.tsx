@@ -27,6 +27,8 @@ const PaymentForm = lazy(() => named(import("./pages/Payments"), "PaymentForm"))
 const PaymentList = lazy(() => named(import("./pages/Payments"), "PaymentList"));
 const PaymentView = lazy(() => named(import("./pages/Payments"), "PaymentView"));
 const Expenses = lazy(() => import("./pages/Expenses"));
+const Daybook = lazy(() => import("./pages/Daybook"));
+const Labels = lazy(() => import("./pages/Labels"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Assets = lazy(() => import("./pages/Assets"));
@@ -79,6 +81,8 @@ function App() {
       <Route path="/app/:companyId" element={<RequireAuth><CompanyLayout /></RequireAuth>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="daybook" element={<Daybook />} />
+        <Route path="labels" element={<Labels />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<JournalList />} />
         <Route path="journals/new" element={<JournalForm />} />

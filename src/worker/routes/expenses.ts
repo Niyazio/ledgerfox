@@ -86,6 +86,7 @@ expenses.get("/", async (c) => {
   if (status) { where.push("e.status = ?"); params.push(status); }
   const bf = branchFilter(c, "e.branch_id");
   if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
+  if (c.req.query("branch_id")) { where.push("e.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
   const rows = await all(c.env.DB,
     `SELECT e.*, a.name AS category_name, pa.name AS paid_from_name, ct.name AS contact_name, u.name AS created_by_name,
        (SELECT COUNT(*) FROM attachments at WHERE at.entity_type = 'expense' AND at.entity_id = e.id) AS attachment_count

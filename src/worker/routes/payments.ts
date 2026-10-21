@@ -37,6 +37,7 @@ payments.get("/", async (c) => {
   }
   const bf = branchFilter(c, "p.branch_id");
   if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
+  if (c.req.query("branch_id")) { where.push("p.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
   const contactId = c.req.query("contact_id");
   if (contactId) { where.push("p.contact_id = ?"); params.push(contactId); }
   const rows = await all(c.env.DB,

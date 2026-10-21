@@ -205,3 +205,16 @@ describe("amount in words", () => {
     expect(amountInWords(0, "INR")).toBe("Rupees Zero Only");
   });
 });
+
+describe("one-time passwords", () => {
+  it("are always 3 groups of 5 from the unambiguous alphabet, and differ", async () => {
+    const { temporaryPassword } = await import("../src/worker/lib/crypto");
+    const seen = new Set<string>();
+    for (let i = 0; i < 2000; i++) {
+      const p = temporaryPassword();
+      expect(p).toMatch(/^[A-HJKMNP-Za-hjkmnp-z2-9]{5}-[A-HJKMNP-Za-hjkmnp-z2-9]{5}-[A-HJKMNP-Za-hjkmnp-z2-9]{5}$/);
+      seen.add(p);
+    }
+    expect(seen.size).toBe(2000);
+  });
+});

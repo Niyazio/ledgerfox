@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
+import { HistoryButton } from "../components/History";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
 import { isQueued, postOrQueue, randomKey } from "../lib/offline";
@@ -13,9 +14,9 @@ import { CURRENCIES } from "@shared/currencies";
 
 export function PaymentList() {
   const { direction = "in" } = useParams();
-  const { path, money, id, settings, can } = useCompany();
+  const { path, money, id, settings, can, branchQuery } = useCompany();
   const [offset, setOffset] = useState(0);
-  const { data, loading, error } = useApi<{ payments: any[]; total: number }>(path(`/payments?direction=${direction}&limit=50&offset=${offset}`));
+  const { data, loading, error } = useApi<{ payments: any[]; total: number }>(path(`/payments?direction=${direction}&limit=50&offset=${offset}${branchQuery}`));
   const title = direction === "in" ? "Receipts" : "Payments";
   return (
     <>
@@ -47,7 +48,7 @@ export function PaymentList() {
 export function PaymentForm() {
   const { direction = "in" } = useParams();
   const [params] = useSearchParams();
-  const { path, id, settings, accounts } = useCompany();
+  const { path, id, settings, accounts, branch } = useCompany();
   const nav = useNavigate();
   const toast = useToast();
   const base = settings?.company.base_currency ?? "INR";
@@ -85,7 +86,7 @@ export function PaymentForm() {
   const submit = async () => {
     const r = await run(() => postOrQueue<{ id: string }>(path("/payments"), {
       direction, contact_id: contactId, payment_date: v.payment_date, account_id: v.account_id, currency, fx_rate: currency !== base ? v.fx_rate || null : null,
-      amount: v.amount, method: v.method, reference: v.reference || null, notes: v.notes || null, idempotency_key: idem,
+      amount: v.amount, method: v.method, reference: v.reference || null, notes: v.notes || null, idempotency_key: idem, branch_id: branch || null,
       allocations: Object.entries(alloc).filter(([, a]) => a && a !== "0").map(([document_id, amount]) => ({ document_id, amount })),
     }, { label: `${direction === "in" ? "Receipt" : "Payment"} ${v.amount} ${currency} (${v.payment_date})` }));
     if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); nav(`/app/${id}/payments/${direction}`); return; }
@@ -172,6 +173,7 @@ export function PaymentView() {
     <>
       <PageHeader title={`${p.direction === "in" ? "Receipt" : "Payment"} ${p.number}`} subtitle={p.contact_name} back={{ to: `/app/${id}/payments/${p.direction}`, label: p.direction === "in" ? "Receipts" : "Payments" }}
         actions={<>
+          <HistoryButton type="payment" id={p.id} />
           <LinkButton variant="secondary" to={`/print/${id}/payment/${p.id}`}>Print receipt</LinkButton>
           {p.status === "posted" && p.amount - allocated > 0 && can(p.direction === "in" ? "sales.post" : "purchase.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
           {p.status === "posted" && can(p.direction === "in" ? "sales.void" : "purchase.void") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}

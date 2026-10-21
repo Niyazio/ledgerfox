@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
+import { HistoryButton } from "../components/History";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
 import { isQueued, postOrQueue, randomKey } from "../lib/offline";
@@ -214,6 +215,7 @@ export function JournalView() {
     <>
       <PageHeader title={e.entry_number ?? "Draft journal"} subtitle={e.memo} back={{ to: `/app/${id}/journals`, label: "Journals" }}
         actions={<>
+          <HistoryButton type="journal" id={e.id} />
           <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
           {e.status === "draft" && can("journal.create") && <LinkButton variant="secondary" to={`/app/${id}/journals/${e.id}/edit`}>Edit</LinkButton>}
           {e.status === "draft" && can("journal.post") && <Button onClick={async () => { try { await api.post(path(`/journals/${e.id}/post`)); toast("success", "Posted"); reload(); } catch (err) { toast("error", (err as Error).message); } }}>Post</Button>}

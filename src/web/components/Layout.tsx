@@ -1,12 +1,14 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useNavigate, useParams, Link } from "react-router";
+import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
 import { Button, cx, Modal, Spinner } from "./ui";
+import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -57,56 +59,74 @@ export function useTheme() {
   return { dark, toggle };
 }
 
-interface NavItem { to: string; label: string; icon: ReactNode; perm?: string }
+interface NavItem { to: string; label: string; icon: ReactNode; perm?: Permission | Permission[] }
 interface NavGroup { label: string; items: NavItem[] }
 
 const NAV: NavGroup[] = [
-  { label: "", items: [{ to: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }] },
-  { label: "Sales", items: [
-    { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" /> },
-    { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" /> },
-    { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" /> },
-    { to: "sales/invoice", label: "Invoices", icon: <FileText className="h-4 w-4" /> },
-    { to: "sales/credit_note", label: "Credit notes", icon: <FileText className="h-4 w-4" /> },
-    { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" /> },
+  { label: "", items: [
+    { to: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, perm: "reports.read" },
+    { to: "daybook", label: "Daybook", icon: <CalendarDays className="h-4 w-4" />, perm: "daybook.read" },
+  ] },
+  { label: "Sales & billing", items: [
+    { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/invoice", label: "Invoices / bills", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/credit_note", label: "Sales returns", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" />, perm: "sales.view" },
   ] },
   { label: "Purchases", items: [
-    { to: "suppliers", label: "Suppliers", icon: <Users className="h-4 w-4" /> },
-    { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" /> },
-    { to: "purchases/bill", label: "Bills", icon: <ShoppingCart className="h-4 w-4" /> },
-    { to: "purchases/debit_note", label: "Debit notes", icon: <ShoppingCart className="h-4 w-4" /> },
-    { to: "payments/out", label: "Payments", icon: <Wallet className="h-4 w-4" /> },
-    { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" /> },
+    { to: "suppliers", label: "Suppliers", icon: <Users className="h-4 w-4" />, perm: "purchase.view" },
+    { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
+    { to: "purchases/bill", label: "Supplier bills", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
+    { to: "purchases/debit_note", label: "Purchase returns", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
+    { to: "payments/out", label: "Supplier payments", icon: <Wallet className="h-4 w-4" />, perm: "purchase.view" },
+  ] },
+  { label: "Inventory", items: [
+    { to: "inventory", label: "Products & stock", icon: <Package className="h-4 w-4" />, perm: "inventory.view" },
+    { to: "inventory?tab=transfers", label: "Stock transfers", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "inventory.transfer" },
+    { to: "labels", label: "Product labels / QR", icon: <QrCode className="h-4 w-4" />, perm: "labels.print" },
   ] },
   { label: "Accounting", items: [
-    { to: "banking", label: "Banking", icon: <Landmark className="h-4 w-4" /> },
-    { to: "journals", label: "Journals", icon: <BookOpen className="h-4 w-4" /> },
-    { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" /> },
-    { to: "inventory", label: "Inventory", icon: <Package className="h-4 w-4" /> },
-    { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" /> },
+    { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
+    { to: "banking", label: "Banking", icon: <Landmark className="h-4 w-4" />, perm: "bank.reconcile" },
+    { to: "journals", label: "Journals & ledgers", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
+    { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
+    { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" />, perm: "assets.manage" },
   ] },
   { label: "People", items: [
     { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
   ] },
-  { label: "Insight", items: [
-    { to: "reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
-    { to: "insights", label: "Insights", icon: <Lightbulb className="h-4 w-4" /> },
+  { label: "Reports & control", items: [
+    { to: "reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" />, perm: "reports.read" },
+    { to: "insights", label: "Insights", icon: <Lightbulb className="h-4 w-4" />, perm: "reports.read" },
+    { to: "settings?tab=audit", label: "Audit log", icon: <ShieldCheck className="h-4 w-4" />, perm: "audit.read" },
+  ] },
+  { label: "Administration", items: [
+    { to: "settings?tab=members", label: "Users & permissions", icon: <UserCog className="h-4 w-4" />, perm: "org.manage" },
+    { to: "settings?tab=dimensions", label: "Branches", icon: <GitBranch className="h-4 w-4" />, perm: "branches.manage" },
     { to: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
   ] },
 ];
 
+/** Modules the member may use; the server enforces the same permissions on every request. */
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { companyId } = useParams();
+  const { can, settings } = useCompany();
+  const location = useLocation();
+  const allowed = (it: NavItem) => !it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm));
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
+  const here = `${location.pathname.replace(`/app/${companyId}/`, "")}${location.search}`;
   return (
     <nav aria-label="Main" className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
-      {NAV.map((g, i) => (
+      {groups.map((g, i) => (
         <div key={i}>
           {g.label && <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider muted">{g.label}</p>}
           <ul className="space-y-0.5">
             {g.items.map((it) => (
               <li key={it.to}>
                 <NavLink to={`/app/${companyId}/${it.to}`} onClick={onNavigate}
-                  className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", isActive ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
+                  className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to))) ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
                   {it.icon}{it.label}
                 </NavLink>
               </li>
@@ -116,6 +136,30 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       ))}
       <ProductCredit className="px-3 pb-4 pt-2" />
     </nav>
+  );
+}
+
+/** Branch in use, financial year, and the signed-in user's role, shown in the header. */
+function WorkContext() {
+  const { settings, branches, branch, setBranch } = useCompany();
+  const { me } = useSession();
+  if (!settings) return null;
+  const startMonth = settings.company.fiscal_year_start_month;
+  const now = new Date();
+  const fyStart = now.getMonth() + 1 >= startMonth ? now.getFullYear() : now.getFullYear() - 1;
+  const fy = startMonth === 1 ? `FY ${fyStart}` : `FY ${fyStart}-${String(fyStart + 1).slice(2)}`;
+  const all = settings.branch_scope?.all ?? true;
+  return (
+    <div className="hidden items-center gap-2 text-xs md:flex">
+      {branches.length > 0 && (
+        <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch" className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs">
+          {all && <option value="">All branches</option>}
+          {branches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code}){b.is_active ? "" : " · inactive"}</option>)}
+        </select>
+      )}
+      <span className="rounded bg-[var(--surface-2)] px-2 py-1">{fy}</span>
+      <span className="rounded bg-[var(--surface-2)] px-2 py-1" title={me?.user?.name}>{ROLE_LABELS[settings.role as Role] ?? settings.role}</span>
+    </div>
   );
 }
 
@@ -229,6 +273,7 @@ function Shell() {
           <div className="flex min-w-0 items-center gap-1">
             <button className="rounded p-2 hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
             <CompanySwitcher />
+            <WorkContext />
           </div>
           <div className="flex items-center gap-1">
             <OfflineStatus companyId={companyId} />

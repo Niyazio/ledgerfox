@@ -103,9 +103,9 @@ function Loading({ r }: { r: { loading: boolean; error: string | null; data: unk
 }
 
 export function TrialBalance() {
-  const { path, money, settings } = useCompany();
+  const { path, money, settings, branchQuery } = useCompany();
   const { from, to, controls } = useRange();
-  const r = useApi<any>(path(`/reports/trial-balance?from=${from}&to=${to}`));
+  const r = useApi<any>(path(`/reports/trial-balance?from=${from}&to=${to}${branchQuery}`));
   const cur = settings?.company.base_currency ?? "INR";
   const d = r.data;
   return (
@@ -125,10 +125,10 @@ export function TrialBalance() {
 }
 
 export function ProfitLoss() {
-  const { path, money, settings } = useCompany();
+  const { path, money, settings, branchQuery } = useCompany();
   const { from, to, controls, params, set } = useRange();
   const dims = ["department_id", "project_id", "cost_centre_id", "branch_id"].map((k) => params.get(k) ? `&${k}=${params.get(k)}` : "").join("");
-  const r = useApi<any>(path(`/reports/profit-loss?from=${from}&to=${to}${dims}`));
+  const r = useApi<any>(path(`/reports/profit-loss?from=${from}&to=${to}${dims}${params.get("branch_id") ? "" : branchQuery}`));
   const cur = settings?.company.base_currency ?? "INR";
   const d = r.data;
   const Row = ({ label, value, strong }: { label: string; value: number; strong?: boolean }) => <tr className={strong ? "font-semibold" : ""}><td>{label}</td><td className="num">{money(value)}</td></tr>;
@@ -169,9 +169,9 @@ export function ProfitLoss() {
 }
 
 export function BalanceSheet() {
-  const { path, money, settings } = useCompany();
+  const { path, money, settings, branchQuery } = useCompany();
   const { asOf, controls } = useRange("asof");
-  const r = useApi<any>(path(`/reports/balance-sheet?as_of=${asOf}`));
+  const r = useApi<any>(path(`/reports/balance-sheet?as_of=${asOf}${branchQuery}`));
   const d = r.data;
   const cur = settings?.company.base_currency ?? "INR";
   const Section = ({ title, s }: { title: string; s: any }) => (
@@ -331,9 +331,9 @@ export function Statement() {
 }
 
 export function SimpleTotals({ kind }: { kind: "sales-by-customer" | "purchases-by-supplier" }) {
-  const { path, money, settings } = useCompany();
+  const { path, money, settings, branchQuery } = useCompany();
   const { from, to, controls } = useRange();
-  const r = useApi<any>(path(`/reports/${kind}?from=${from}&to=${to}`));
+  const r = useApi<any>(path(`/reports/${kind}?from=${from}&to=${to}${branchQuery}`));
   const cur = settings?.company.base_currency ?? "INR";
   const sales = kind === "sales-by-customer";
   return (

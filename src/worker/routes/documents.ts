@@ -121,6 +121,7 @@ documents.get("/", async (c) => {
   }
   const bf = branchFilter(c, "d.branch_id");
   if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
+  if (c.req.query("branch_id")) { where.push("d.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
   if (status === "outstanding") where.push("d.status = 'posted' AND d.total > d.amount_settled");
   else if (status === "overdue") { where.push("d.status = 'posted' AND d.total > d.amount_settled AND d.due_date < ?"); params.push(todayIso()); }
   else if (status) { where.push("d.status = ?"); params.push(status); }
@@ -142,9 +143,13 @@ documents.get("/:id", async (c) => {
   const doc = await first(c.env.DB,
     `SELECT d.*, ct.name AS contact_name, ct.email AS contact_email, ct.tax_id AS contact_tax_id, ct.billing_address AS contact_address,
             ct.shipping_address AS contact_shipping_address, ct.state_code AS contact_state_code, ct.phone AS contact_phone,
-            rd.number AS related_number, rd.doc_type AS related_type, je.entry_number AS journal_number
+            rd.number AS related_number, rd.doc_type AS related_type, je.entry_number AS journal_number,
+            b.name AS branch_name, cu.name AS created_by_name, pu.name AS posted_by_name,
+            da.requested_at AS approval_requested_at, ru.name AS approval_requested_by, da.approved_at, au.name AS approved_by_name
      FROM documents d JOIN contacts ct ON ct.id = d.contact_id LEFT JOIN documents rd ON rd.id = d.related_doc_id
-     LEFT JOIN journal_entries je ON je.id = d.journal_entry_id
+     LEFT JOIN journal_entries je ON je.id = d.journal_entry_id LEFT JOIN branches b ON b.id = d.branch_id
+     LEFT JOIN users cu ON cu.id = d.created_by LEFT JOIN users pu ON pu.id = d.posted_by
+     LEFT JOIN document_approvals da ON da.document_id = d.id LEFT JOIN users ru ON ru.id = da.requested_by LEFT JOIN users au ON au.id = da.approved_by
      WHERE d.id = ? AND d.company_id = ?`, id, company.id);
   if (!doc) throw notFound("Document");
   const lines = await all(c.env.DB,

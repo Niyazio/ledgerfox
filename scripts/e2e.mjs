@@ -20,18 +20,20 @@ try {
   await page.locator("h1").first().waitFor();
   await page.waitForTimeout(500);
   if (new URL(page.url()).pathname === "/login") {
-    // Desktop edition: first sign-in with admin / admin, then a new password is required.
+    // Desktop edition: first sign-in with the random one-time password shown on this computer, then a new password is required.
     await page.getByText("First time?").waitFor();
+    const oneTime = (await page.locator("b.font-mono").first().textContent()).trim();
+    if (!/^[A-Za-z2-9]{5}-[A-Za-z2-9]{5}-[A-Za-z2-9]{5}$/.test(oneTime)) throw new Error(`unexpected one-time password "${oneTime}"`);
     await page.getByLabel("Username or email").fill("admin");
-    await page.getByLabel("Password", { exact: true }).fill("admin");
+    await page.getByLabel("Password", { exact: true }).fill(oneTime);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.getByText("Choose your own password").waitFor();
     await page.getByLabel("Username", { exact: true }).fill("asha");
-    await page.getByLabel(/Current/).fill("admin");
+    await page.getByLabel(/Current/).fill(oneTime);
     await page.getByLabel(/^New password/).fill("correct horse battery");
     await page.getByLabel(/Confirm new/).fill("correct horse battery");
     await page.getByRole("button", { name: "Save and continue" }).click();
-    step("desktop edition: admin / admin sign-in, forced password change");
+    step("desktop edition: one-time password sign-in, forced password change");
   } else {
     await shot("01-landing");
     step("landing page");
