@@ -12,8 +12,9 @@ import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { INDIA_STATES } from "@shared/tax";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
+import { PlanBillingTab } from "./Billing";
 
-type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
+type Tab = "billing" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -372,6 +373,7 @@ export default function Settings() {
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
+        ...(me?.edition === "cloud" ? [{ value: "billing" as Tab, label: "Plan & billing" }] : []),
       ]} />
       {tab === "company" && <CompanyTab />}
       {tab === "members" && <MembersTab />}
@@ -384,6 +386,7 @@ export default function Settings() {
       {tab === "data" && <DataTab />}
       {tab === "account" && <AccountTab />}
       {tab === "backup" && <CloudBackupTab />}
+      {tab === "billing" && <PlanBillingTab />}
     </>
   );
 }

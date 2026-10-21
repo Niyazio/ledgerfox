@@ -33,6 +33,9 @@ const GstReturns = lazy(() => import("./pages/GstReturns"));
 const ImportPage = lazy(() => import("./pages/Import"));
 const Recurring = lazy(() => import("./pages/Recurring"));
 const Pos = lazy(() => import("./pages/Pos"));
+const CheckoutPage = lazy(() => named(import("./pages/Billing"), "CheckoutPage"));
+const BillingInvoice = lazy(() => named(import("./pages/Billing"), "BillingInvoice"));
+const VendorAdmin = lazy(() => named(import("./pages/Billing"), "VendorAdmin"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Assets = lazy(() => import("./pages/Assets"));
@@ -74,6 +77,9 @@ function App() {
       <Route path="/download" element={<Download />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/verify/:token" element={<Verify />} />
+      <Route path="/billing/:orgId/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
+      <Route path="/billing/:orgId/invoice/:paymentId" element={<RequireAuth><BillingInvoice /></RequireAuth>} />
+      <Route path="/vendor" element={<RequireAuth><VendorAdmin /></RequireAuth>} />
       <Route path="/print/:companyId/:kind/:id" element={<RequireAuth><PrintPage /></RequireAuth>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />

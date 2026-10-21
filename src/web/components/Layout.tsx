@@ -10,6 +10,7 @@ import { CompanyProvider, useCompany } from "../lib/company";
 import { Button, cx, Modal, Spinner } from "./ui";
 import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { useRecurringAutoRun } from "../pages/Recurring";
+import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -299,6 +300,7 @@ function Shell() {
         </header>
         {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
         {settings && me?.edition !== "offline" && <RecurringRunner />}
+        {settings && me?.edition === "cloud" && <PlanBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>

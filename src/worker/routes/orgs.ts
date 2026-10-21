@@ -8,6 +8,7 @@ import { body, reqText, shortText, currencyCode } from "../lib/validate";
 import { hashPassword, newId, randomToken, sha256Hex, temporaryPassword } from "../lib/crypto";
 import { iterations, usernameSchema } from "./auth";
 import { audit, orgPermissions, requireAuth } from "../lib/auth";
+import { requireCapacity } from "../services/billing";
 import { ALL_PERMISSIONS, ROLES, canAssignRole, defaultPermissions, effectivePermissions, type Permission, type Role } from "@shared/permissions";
 import { companySetupStatements } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
@@ -126,6 +127,7 @@ orgs.post("/:orgId/companies", async (c) => {
   await requireOrgPerm(c, orgId, "company.manage");
   const input = await body(c, companySchema);
   validateCompanyInput(input);
+  if (!input.is_demo) await requireCapacity(c, orgId, "companies");
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
   if ((n?.n ?? 0) >= 25) throw forbidden("Company limit reached for this organisation");
   const setup = companySetupStatements(c.env.DB, { ...input, email: input.email || null, org_id: orgId }, todayIso());
@@ -196,6 +198,7 @@ orgs.post("/:orgId/invitations", async (c) => {
   const already = await first(c.env.DB,
     `SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND u.email = ?`, orgId, input.email);
   if (already) throw new AppError(409, "ALREADY_MEMBER", "This person is already a member");
+  await requireCapacity(c, orgId, "users");
   const token = randomToken(24);
   const id = newId();
   const expires = new Date(Date.now() + 7 * 86400_000).toISOString();
@@ -222,6 +225,7 @@ orgs.post("/:orgId/users", async (c) => {
   }));
   if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
   if (await first(c.env.DB, `SELECT 1 FROM users WHERE username = ?`, input.username)) throw new AppError(409, "USERNAME_TAKEN", "That username is already taken");
+  await requireCapacity(c, orgId, "users");
   const id = newId();
   const password = temporaryPassword();
   const h = await hashPassword(password, iterations(c.env));

@@ -6,6 +6,7 @@ import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, reqText, shortText, isoDate, rate, percentBp, minor } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, requirePerm } from "../lib/auth";
+import { requireCapacity } from "../services/billing";
 import { companySchema, validateCompanyInput } from "./orgs";
 import { fiscalYearStatements, monthlyPeriods } from "../services/setup";
 import { currencyExponent, isCurrency } from "@shared/currencies";
@@ -89,6 +90,7 @@ for (const [path, table] of Object.entries(DIMENSIONS)) {
   settings.post(`/${path}`, async (c) => {
     requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
+    if (table === "branches") await requireCapacity(c, c.get("company").org_id, "branches", c.get("company").id);
     const id = newId();
     const company = c.get("company");
     const s = table === "branches"
