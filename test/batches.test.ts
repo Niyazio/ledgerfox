@@ -31,6 +31,8 @@ describe("batches and expiry", () => {
     expect((await W.owner.post(W.c(`/documents/${inv.json.id}/issue`))).status).toBe(200);
     expect(await batches()).toMatchObject({ "B-LATE": [8, "ok"], "B-OLD": [4, "expired"] });
     expect((await batches())["B-SOON"]).toBeUndefined();
+    // The invoice line records the batches that went out, earliest expiry shown, for the printed bill.
+    expect((await W.owner.get(W.c(`/documents/${inv.json.id}`))).json.lines[0]).toMatchObject({ batch_no: "B-SOON, B-LATE", expiry_date: SOON });
     // Explicitly choosing the expired batch is refused; asking for more than unexpired stock explains why.
     const exp = await W.owner.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: d(-14), lines: [{ item_id: item, description: "Para", quantity: "1", unit_price: "30", batch_no: "B-OLD" }] });
     expect((await W.owner.post(W.c(`/documents/${exp.json.id}/issue`))).json.error.code).toBe("BATCH_EXPIRED");

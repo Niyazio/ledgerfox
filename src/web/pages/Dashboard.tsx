@@ -126,6 +126,14 @@ function FinancialDashboard() {
               ))}
             </ul>
           ) : <p className="p-4 text-sm muted">No items at or below their reorder level.</p>}
+          {(data.expiry?.expired > 0 || data.expiry?.expiring > 0) && (
+            <Link to={`${base}/inventory?tab=batches`} className="flex items-center gap-2 border-t border-[var(--border)] px-4 py-2.5 text-sm hover:underline">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              {data.expiry.expired > 0 && <span>{data.expiry.expired} expired batch{data.expiry.expired === 1 ? "" : "es"} in stock</span>}
+              {data.expiry.expired > 0 && data.expiry.expiring > 0 && <span className="muted">·</span>}
+              {data.expiry.expiring > 0 && <span>{data.expiry.expiring} expiring within 30 days</span>}
+            </Link>
+          )}
         </Card>
         <Card title="Recent entries" padded={false}>
           {data.recent.length ? (

@@ -66,6 +66,8 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Customer credit limit: warning on draft, blocked on issue unless a manager confirms (recorded in history) | ✅ Done | |
 | Cash book / bank book with running balance; share customer/supplier statements | ✅ Done | |
 
+| Two-factor sign-in (authenticator apps, RFC 6238), recovery codes as the second step, replay protection; owner can require it for everyone | ✅ Done | No SMS/email codes |
+| Batch numbers and expiry dates per item: batch required on purchases, first-expiry-first-out on sales, expired stock refused (except write-off / purchase return), batches kept through voids and transfers, batch and expiry printed on bills, expiry report + dashboard alert, import columns | ✅ Done | Costing stays moving-average per item (not per batch); no serial numbers |
 | Subscriptions (hosted edition): Free/Starter/Business/Multi-branch plans, 14-day trial, limits and features enforced on the server, Razorpay checkout with signature verification and webhook, subscription tax invoices, vendor admin page | ✅ Built, **off by default** | Needs your Razorpay account and keys (BILLING.md); not tested with a real payment |
 
 ## Incomplete, partial or not implemented (honest list)
@@ -97,8 +99,6 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 ## Next highest-priority tasks
 
 1. Production deploy + custom domain + first real backup (database is ready; needs your GitHub repo and the Cloudflare dashboard steps).
-2. GSTR-1 / GSTR-3B summary exports in the portal's JSON/Excel layouts (data is already captured per line).
-3. TOTP multi-factor authentication.
 4. Unrealised FX revaluation and cross-currency payment allocation.
 5. Scheduled jobs via a free Cron Trigger (recurring expenses, depreciation reminders).
 6. Accessibility audit (axe) and keyboard-shortcut layer for power users.

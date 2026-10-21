@@ -136,6 +136,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         {lines.map((l) => (
           <div key={l.id} className="mb-1">
             <p className="font-semibold">{l.description}</p>
+            {l.batch_no && <p>Batch {l.batch_no}{l.expiry_date ? ` Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</p>}
             <p className="flex justify-between"><span>{fmtQty(l.qty_milli)} × {money(l.unit_price, cur)}</span><span>{money(l.line_total, cur)}</span></p>
           </div>
         ))}
@@ -205,7 +206,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
             {lines.map((l, i) => (
               <tr key={l.id} className={classic ? "" : i % 2 ? "bg-slate-50" : ""}>
                 <Td c={classic}>{l.line_no}</Td>
-                <Td c={classic}><span className="font-medium">{l.description}</span></Td>
+                <Td c={classic}><span className="font-medium">{l.description}</span>{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
                 {india && <Td c={classic}><span className="font-mono text-[11px]">{l.hsn_sac}</span></Td>}
                 <Td c={classic} r>{fmtQty(l.qty_milli)} {l.unit ?? ""}</Td>
                 <Td c={classic} r>{money(l.unit_price, cur)}</Td>
@@ -388,7 +389,8 @@ function PrintInner() {
   const { settings, path } = useCompany();
   const branding = useApi<{ logo: string | null; payment_qr: string | null }>(path("/settings/branding"));
   const def = (settings?.company.print_template as Format | undefined) ?? "modern";
-  const format = (params.get("format") as Format | null) ?? (kind === "payment" ? "a5" : def in FORMATS ? def : "modern");
+  const asked = params.get("format");
+  const format: Format = asked && asked in FORMATS ? (asked as Format) : kind === "payment" ? "a5" : def in FORMATS ? def : "modern";
   const [showQr, setShowQr] = useState(true);
   const set = (f: Format) => setParams((p) => { p.set("format", f); return p; }, { replace: true });
   const shareText = useMemo(() => `${document.title}\n${location.href}`, []);

@@ -246,13 +246,19 @@ reports.get("/dashboard", async (c) => {
     `SELECT i.id, i.name, i.unit, i.reorder_level_milli, COALESCE((SELECT SUM(qty_milli) FROM stock_moves s WHERE s.item_id = i.id),0) AS qty_milli
      FROM items i WHERE i.company_id = ? AND i.track_inventory = 1 AND i.is_active = 1 AND i.reorder_level_milli > 0
        AND COALESCE((SELECT SUM(qty_milli) FROM stock_moves s WHERE s.item_id = i.id),0) <= i.reorder_level_milli LIMIT 20`, company.id);
+  // Batches with stock that are expired or expire within 30 days (only companies that track batches have any).
+  const soon = new Date(Date.parse(today) + 30 * 86_400_000).toISOString().slice(0, 10);
+  const expiry = await first<{ expired: number; expiring: number }>(c.env.DB,
+    `SELECT COALESCE(SUM(exp < ?),0) AS expired, COALESCE(SUM(exp >= ? AND exp <= ?),0) AS expiring
+     FROM (SELECT MAX(expiry_date) AS exp FROM stock_moves WHERE company_id = ? AND batch_no IS NOT NULL GROUP BY item_id, warehouse_id, batch_no HAVING SUM(qty_milli) > 0)`,
+    today, today, soon, company.id);
   const pending = await first<{ drafts: number; expenses: number; unmatched: number }>(c.env.DB,
     `SELECT (SELECT COUNT(*) FROM journal_entries WHERE company_id = ? AND status = 'draft'${db_}) AS drafts,
             (SELECT COUNT(*) FROM expenses WHERE company_id = ? AND status = 'submitted'${db_}) AS expenses,
             (SELECT COUNT(*) FROM bank_statement_lines WHERE company_id = ? AND status = 'unmatched') AS unmatched`, company.id, ...bp, company.id, ...bp, company.id);
   const recent = await all(c.env.DB,
     `SELECT id, entry_number, entry_date, memo, total, kind FROM journal_entries WHERE company_id = ? AND status = 'posted'${db_} ORDER BY posted_at DESC LIMIT 8`, company.id, ...bp);
-  return c.json({ cash, receivables: arap, months, reorder: branch ? [] : reorder, pending, recent, branch_id: branch });
+  return c.json({ cash, receivables: arap, months, reorder: branch ? [] : reorder, expiry: branch ? null : expiry, pending, recent, branch_id: branch });
 });
 
 reports.get("/insights", async (c) => {

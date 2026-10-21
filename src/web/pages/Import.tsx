@@ -17,9 +17,9 @@ const TEMPLATES: Record<Kind, { head: string[]; sample: string[][]; help: string
     help: "Type is Customer, Supplier or Both (default: Customer). State can be the name or the 2-digit GST code; it is taken from the GSTIN when blank. Rows whose name or GSTIN already exists are skipped.",
   },
   items: {
-    head: ["Name", "Type", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "SKU", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level"],
+    head: ["Name", "Type", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "SKU", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level", "Batch", "Expiry"],
     sample: [["Basmati Rice 5kg", "Goods", "1006", "5", "bag", "650", "520", "RICE5", "8901000000011", "10", "", "", "5"], ["Delivery charge", "Service", "996812", "18", "nos", "50", "", "", "", "", "", "", ""]],
-    help: "GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Existing names or SKUs are skipped.",
+    help: "GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Existing names or SKUs are skipped. Batch and Expiry (e.g. 06/2027) switch on batch tracking and record the opening batch; add further batches with Adjust stock.",
   },
 };
 

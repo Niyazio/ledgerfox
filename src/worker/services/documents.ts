@@ -269,7 +269,11 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
     const picks = pickBatches(await batchStock(l.item_id!), -qty, doc.issue_date, name, l.batch_no, doc.doc_type === "debit_note");
     const values = splitValue(value, picks);
     picks.forEach((p, i) => stockMoves.push({ item_id: l.item_id!, qty_milli: -p.qty_milli, value: values[i], batch_no: p.batch_no, expiry_date: p.expiry_date }));
+    // The printed bill shows which batches went out (a pharmacy invoice must name batch and expiry).
+    const expiries = picks.map((p) => p.expiry_date).filter(Boolean).sort();
+    lineBatches.push({ id: l.id, batch_no: picks.map((p) => p.batch_no).join(", "), expiry_date: expiries[0] ?? null });
   };
+  const lineBatches: { id: string; batch_no: string; expiry_date: string | null }[] = [];
   const cogs: { amount: number }[] = [];
 
   // Inventory planning for issues (invoice / debit note) — costed at moving average.
@@ -346,6 +350,8 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
   // Order: number the document, insert the journal header, label it with the number, then lines + post.
   const [header, ...rest] = built.stmts;
   const stmts: D1PreparedStatement[] = [
+    // While the document is still a draft (posted lines are locked by a trigger).
+    ...lineBatches.map((lb) => stmt(db, `UPDATE document_lines SET batch_no = ?, expiry_date = ? WHERE id = ?`, lb.batch_no, lb.expiry_date, lb.id)),
     ...numberStmts,
     stmt(db, `UPDATE documents SET number = ${seqNumberExpr()} WHERE id = ? AND company_id = ? AND status = 'draft'`, company.id, seqKey, id, company.id),
     header,
