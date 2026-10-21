@@ -22,6 +22,8 @@ describe.skipIf(!process.env.PERF)("performance", () => {
       await W.owner.post(W.c(`/documents/${d.json.id}/issue`));
     }
     console.log(`seeded in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    // PERF_DUMP=<file> keeps a copy of the seeded database for query-plan analysis (desktop engine only).
+    if (process.env.PERF_DUMP) await W.env.DB.prepare(`VACUUM INTO '${process.env.PERF_DUMP.replace(/'/g, "''")}'`).run();
     const endpoints = [
       "/reports/dashboard", "/documents?doc_type=invoice&limit=50", "/documents?doc_type=invoice&limit=50&q=INV-01", "/items?active=1&limit=500",
       "/contacts?kind=customer&active=1&limit=500", "/reports/trial-balance?from=2026-04-01&to=2026-12-31", "/reports/profit-loss?from=2026-04-01&to=2026-12-31",

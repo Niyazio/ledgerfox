@@ -160,9 +160,11 @@ reports.get("/dashboard", async (c) => {
   const db_ = branch ? " AND branch_id = ?" : "";
   const bp = branch ? [branch] : [];
   const cash = await all(c.env.DB,
-    `SELECT a.id, a.name, a.subtype, COALESCE(SUM(l.debit - l.credit),0) AS balance FROM accounts a
-     LEFT JOIN journal_lines l ON l.account_id = a.id AND l.entry_id IN (SELECT id FROM journal_entries WHERE company_id = ? AND status = 'posted')${lb}
-     WHERE a.company_id = ? AND a.subtype IN ('cash','bank') AND a.is_group = 0 AND a.is_active = 1 GROUP BY a.id ORDER BY a.code`, company.id, ...bp, company.id);
+    `SELECT a.id, a.name, a.subtype, COALESCE(s.balance,0) AS balance FROM accounts a
+     LEFT JOIN (SELECT l.account_id, SUM(l.debit - l.credit) AS balance FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+                WHERE e.company_id = ? AND e.status = 'posted'${lb} AND l.account_id IN (SELECT id FROM accounts WHERE company_id = ? AND subtype IN ('cash','bank'))
+                GROUP BY l.account_id) s ON s.account_id = a.id
+     WHERE a.company_id = ? AND a.subtype IN ('cash','bank') AND a.is_group = 0 AND a.is_active = 1 ORDER BY a.code`, company.id, ...bp, company.id, company.id);
   const arap = await first<{ ar: number; ap: number; overdue_ar: number; overdue_ap: number; overdue_inv: number; overdue_bills: number }>(c.env.DB,
     `SELECT
        COALESCE(SUM(CASE WHEN doc_type = 'invoice' THEN (total_base * (total - amount_settled)) / total END),0) AS ar,
@@ -176,12 +178,15 @@ reports.get("/dashboard", async (c) => {
   const start = new Date(`${today.slice(0, 7)}-01T00:00:00Z`);
   start.setUTCMonth(start.getUTCMonth() - 5);
   const series = await all<{ month: string; income: number; expense: number }>(c.env.DB,
-    `SELECT substr(e.entry_date, 1, 7) AS month,
-       COALESCE(SUM(CASE WHEN a.type = 'income' THEN l.credit - l.debit END),0) AS income,
-       COALESCE(SUM(CASE WHEN a.type = 'expense' THEN l.debit - l.credit END),0) AS expense
-     FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id JOIN accounts a ON a.id = l.account_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date >= ? AND a.type IN ('income','expense')${lb}
-     GROUP BY month ORDER BY month`, company.id, start.toISOString().slice(0, 10), ...bp);
+    `SELECT s.month,
+       COALESCE(SUM(CASE WHEN a.type = 'income' THEN s.credit - s.debit END),0) AS income,
+       COALESCE(SUM(CASE WHEN a.type = 'expense' THEN s.debit - s.credit END),0) AS expense
+     FROM (SELECT substr(e.entry_date, 1, 7) AS month, l.account_id, SUM(l.debit) AS debit, SUM(l.credit) AS credit
+           FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+           WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date >= ?${lb}
+           GROUP BY month, l.account_id) s
+     JOIN accounts a ON a.id = s.account_id AND a.type IN ('income','expense')
+     GROUP BY s.month ORDER BY s.month`, company.id, start.toISOString().slice(0, 10), ...bp);
   const months: { month: string; income: number; expense: number }[] = [];
   for (let i = 0; i < 6; i++) {
     const d = new Date(start); d.setUTCMonth(start.getUTCMonth() + i);

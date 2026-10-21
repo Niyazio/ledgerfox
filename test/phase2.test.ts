@@ -98,6 +98,15 @@ describe("roles, branches and approvals through the API", () => {
     expect(all).toEqual(expect.arrayContaining([blrInvoice, mysInvoice]));
   });
 
+  it("customer balances in the contact list follow branch access", async () => {
+    const owned = (await W.owner.get(W.c("/contacts?kind=customer"))).json.contacts.find((x: any) => x.id === cust);
+    const blrOnly = (await billing.get(W.c("/contacts?kind=customer"))).json.contacts.find((x: any) => x.id === cust);
+    const mysOnly = (await billingMys.get(W.c("/contacts?kind=customer"))).json.contacts.find((x: any) => x.id === cust);
+    expect(blrOnly.receivable).toBe(20000); // BLR invoice: 2 × 100.00
+    expect(mysOnly.receivable).toBe(8000);  // MYS invoice: 1 × 80.00
+    expect(owned.receivable).toBe(28000);
+  });
+
   it("billing staff cannot see purchases, journals or purchase costs", async () => {
     expect((await billing.get(W.c("/documents?type=bill"))).status).toBe(403);
     expect((await billing.get(W.c("/journals"))).status).toBe(403);

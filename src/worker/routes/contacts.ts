@@ -61,13 +61,20 @@ contacts.get("/", async (c) => {
   if (kind === "supplier" || (!cust && kind !== "customer")) { if (!supp) requireAnyPerm(c, "purchase.view"); where.push("ct.kind IN ('supplier','both')"); }
   if (c.req.query("active") === "1") where.push("ct.is_active = 1");
   if (q) { where.push("(ct.name LIKE ? OR ct.email LIKE ? OR ct.tax_id LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  // Open balances are summed once per company (outstanding documents only) and joined, rather than per contact;
+  // branch-limited members only see their branches' documents in these totals.
+  const bf = branchFilter(c, "branch_id");
   const rows = await all(
     c.env.DB,
-    `SELECT ct.*,
-       (SELECT COALESCE(SUM(CASE WHEN d.doc_type = 'invoice' THEN d.total - d.amount_settled ELSE 0 END),0) FROM documents d WHERE d.contact_id = ct.id AND d.status = 'posted') AS receivable,
-       (SELECT COALESCE(SUM(CASE WHEN d.doc_type = 'bill' THEN d.total - d.amount_settled ELSE 0 END),0) FROM documents d WHERE d.contact_id = ct.id AND d.status = 'posted') AS payable
-     FROM contacts ct WHERE ${where.join(" AND ")} ORDER BY ct.name LIMIT ? OFFSET ?`,
-    ...params, limit, offset,
+    `SELECT ct.*, COALESCE(b.receivable,0) AS receivable, COALESCE(b.payable,0) AS payable
+     FROM contacts ct
+     LEFT JOIN (SELECT contact_id,
+                  SUM(CASE WHEN doc_type = 'invoice' THEN total - amount_settled ELSE 0 END) AS receivable,
+                  SUM(CASE WHEN doc_type = 'bill' THEN total - amount_settled ELSE 0 END) AS payable
+                FROM documents WHERE company_id = ? AND status = 'posted' AND doc_type IN ('invoice','bill') AND total > amount_settled${bf.sql}
+                GROUP BY contact_id) b ON b.contact_id = ct.id
+     WHERE ${where.join(" AND ")} ORDER BY ct.name LIMIT ? OFFSET ?`,
+    company.id, ...bf.params, ...params, limit, offset,
   );
   const total = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM contacts ct WHERE ${where.join(" AND ")}`, ...params);
   return c.json({ contacts: rows, total: total?.n ?? 0 });
