@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, QrCode } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
 import { AccountSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, qty, today, toInput } from "../lib/format";
@@ -18,7 +18,7 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
   const [v, setV] = useState({
     kind: initial?.kind ?? "goods", name: initial?.name ?? "", sku: initial?.sku ?? "", unit: initial?.unit ?? "nos", hsn_sac: initial?.hsn_sac ?? "", description: initial?.description ?? "",
     sale_price: initial ? toInput(initial.sale_price, base) : "", purchase_price: initial ? toInput(initial.purchase_price, base) : "", tax_code_id: initial?.tax_code_id ?? "",
-    income_account_id: initial?.income_account_id ?? "", expense_account_id: initial?.expense_account_id ?? "", track_inventory: initial ? Boolean(initial.track_inventory) : false,
+    income_account_id: initial?.income_account_id ?? "", expense_account_id: initial?.expense_account_id ?? "", track_inventory: initial ? Boolean(initial.track_inventory) : false, track_batches: initial ? Boolean(initial.track_batches) : false,
     reorder_level: initial ? qty(initial.reorder_level_milli) : "0", is_active: initial ? Boolean(initial.is_active) : true,
     code: initial?.code ?? "", barcode: initial?.barcode ?? "",
   });
@@ -45,6 +45,7 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
         <Field label="Income account" hint="Default: Sales / Service income">{(id) => <AccountSelect id={id} value={v.income_account_id} onChange={(a) => set("income_account_id", a)} filter={(a) => a.type === "income"} placeholder="Default" />}</Field>
         {!v.track_inventory && <Field label="Expense account" hint="Default: Purchases">{(id) => <AccountSelect id={id} value={v.expense_account_id} onChange={(a) => set("expense_account_id", a)} filter={(a) => a.type === "expense" || a.type === "asset"} placeholder="Default" />}</Field>}
         {v.kind === "goods" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_inventory} disabled={Boolean(initial)} onChange={(e) => set("track_inventory", e.target.checked)} /> Track stock (perpetual inventory, moving average cost){initial && <span className="muted"> — fixed after creation</span>}</label>}
+        {v.track_inventory && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_batches} onChange={(e) => set("track_batches", e.target.checked)} /> Track batch numbers &amp; expiry dates (medicines, food){initial && <span className="muted"> — can only change while stock is zero</span>}</label>}
         {v.track_inventory && <Field label="Reorder level">{(id) => <Input id={id} inputMode="decimal" value={v.reorder_level} onChange={(e) => set("reorder_level", e.target.value)} />}</Field>}
         <Field label="Description" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.description} onChange={(e) => set("description", e.target.value)} />}</Field>
         {initial && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_active} onChange={(e) => set("is_active", e.target.checked)} /> Active</label>}
@@ -57,15 +58,18 @@ function StockModal({ kind, items, onClose }: { kind: "adjust" | "transfer"; ite
   const { path, settings } = useCompany();
   const toast = useToast();
   const whs = (settings?.warehouses ?? []).filter((w: any) => w.is_active);
-  const [v, setV] = useState({ item_id: "", warehouse_id: whs[0]?.id ?? "", to_warehouse_id: whs[1]?.id ?? "", date: today(), quantity: "", unit_cost: "", reason: "adjustment", memo: "" });
+  const [v, setV] = useState({ item_id: "", warehouse_id: whs[0]?.id ?? "", to_warehouse_id: whs[1]?.id ?? "", date: today(), quantity: "", unit_cost: "", reason: "adjustment", memo: "", batch_no: "", expiry_date: "" });
   const { busy, error, run } = useAction();
   const tracked = items.filter((i) => i.track_inventory);
+  const batched = Boolean(tracked.find((i) => i.id === v.item_id)?.track_batches);
+  const adding = kind === "adjust" && parseFloat(v.quantity) > 0;
+  const batchFields = batched ? { batch_no: v.batch_no || null, expiry_date: adding ? v.expiry_date || null : undefined } : {};
   return (
     <Modal open onClose={() => onClose(false)} title={kind === "adjust" ? "Stock adjustment" : "Transfer between warehouses"}
       footer={<><Button variant="secondary" onClick={() => onClose(false)}>Cancel</Button><Button loading={busy} onClick={async () => {
         const r = await run(() => kind === "adjust"
-          ? api.post(path("/items/adjustments"), { item_id: v.item_id, warehouse_id: v.warehouse_id, date: v.date, quantity: v.quantity, unit_cost: v.unit_cost || null, reason: v.reason, memo: v.memo || null })
-          : api.post(path("/items/transfers"), { item_id: v.item_id, from_warehouse_id: v.warehouse_id, to_warehouse_id: v.to_warehouse_id, date: v.date, quantity: v.quantity, memo: v.memo || null }));
+          ? api.post(path("/items/adjustments"), { item_id: v.item_id, warehouse_id: v.warehouse_id, date: v.date, quantity: v.quantity, unit_cost: v.unit_cost || null, reason: v.reason, memo: v.memo || null, ...batchFields })
+          : api.post(path("/items/transfers"), { item_id: v.item_id, from_warehouse_id: v.warehouse_id, to_warehouse_id: v.to_warehouse_id, date: v.date, quantity: v.quantity, memo: v.memo || null, ...batchFields }));
         if (r) { toast("success", "Recorded"); onClose(true); }
       }}>Save</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -79,13 +83,122 @@ function StockModal({ kind, items, onClose }: { kind: "adjust" | "transfer"; ite
           <Field label="Reason">{(id) => <Select id={id} value={v.reason} onChange={(e) => setV({ ...v, reason: e.target.value })}><option value="adjustment">Adjustment (count difference, damage)</option><option value="opening">Opening stock</option></Select>}</Field>
           <Field label="Unit cost (increases only)" hint="Leave blank to use the current average cost.">{(id) => <MoneyInput id={id} value={v.unit_cost} onChange={(e) => setV({ ...v, unit_cost: e.target.value })} />}</Field>
         </>}
+        {batched && <Field label="Batch no." hint={adding ? "Required when adding stock" : "Blank = earliest expiry first"}>{(id) => <Input id={id} className="uppercase" value={v.batch_no} onChange={(e) => setV({ ...v, batch_no: e.target.value })} />}</Field>}
+        {batched && adding && <Field label="Expiry date">{(id) => <Input id={id} type="date" value={v.expiry_date} onChange={(e) => setV({ ...v, expiry_date: e.target.value })} />}</Field>}
         <Field label="Memo" className="sm:col-span-2">{(id) => <Input id={id} value={v.memo} onChange={(e) => setV({ ...v, memo: e.target.value })} />}</Field>
       </div>
     </Modal>
   );
 }
 
-type InvTab = "items" | "stock" | "movements" | "transfers" | "warehouses";
+type InvTab = "items" | "stock" | "batches" | "prices" | "movements" | "transfers" | "warehouses";
+
+/** Price lists: a % on selling prices, plus own prices per product with optional quantity breaks. */
+function PriceListsTab({ items }: { items: any[] }) {
+  const { path, money, can, settings } = useCompany();
+  const toast = useToast();
+  const base = settings?.company.base_currency ?? "INR";
+  const lists = useApi<{ price_lists: any[] }>(path("/price-lists"));
+  const [sel, setSel] = useState<string | null>(null);
+  const [head, setHead] = useState({ name: "", adjust_percent: "" });
+  const detail = useApi<{ price_list: any; prices: any[] }>(sel ? path(`/price-lists/${sel}/prices`) : null);
+  const [rows, setRows] = useState<{ item_id: string; min_qty: string; price: string }[]>([]);
+  const [edit, setEdit] = useState({ name: "", adjust_percent: "", is_active: true });
+  useEffect(() => {
+    if (!detail.data) return;
+    const l = detail.data.price_list;
+    setEdit({ name: l.name, adjust_percent: String(l.adjust_bp / 100), is_active: Boolean(l.is_active) });
+    setRows(detail.data.prices.map((p) => ({ item_id: p.item_id, min_qty: p.min_qty_milli ? qty(p.min_qty_milli) : "", price: toInput(p.price, base) })));
+  }, [detail.data, base]);
+  const writable = can("items.write");
+  const goods = items.filter((i) => i.is_active);
+  const call = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); toast("success", ok); lists.reload(); detail.reload(); return true; } catch (e) { toast("error", errorMessage(e)); return false; } };
+  return (
+    <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+      <Card padded={false}>
+        <ul className="divide-y divide-[var(--border)]">
+          {(lists.data?.price_lists ?? []).map((l) => (
+            <li key={l.id}><button className={`w-full px-4 py-3 text-left text-sm hover:bg-[var(--surface-2)] ${sel === l.id ? "bg-[var(--surface-2)]" : ""}`} onClick={() => setSel(l.id)}>
+              <span className="font-medium">{l.name}</span> {!l.is_active && <Badge>off</Badge>}
+              <span className="block text-xs muted">{l.adjust_bp ? `${l.adjust_bp > 0 ? "+" : ""}${l.adjust_bp / 100}% on selling price · ` : ""}{l.prices} own price{l.prices === 1 ? "" : "s"} · {l.customers} customer{l.customers === 1 ? "" : "s"}</span>
+            </button></li>
+          ))}
+          {!lists.data?.price_lists.length && <li className="p-4 text-sm muted">No price lists yet. Make one for wholesale or dealer rates, then choose it on the customer.</li>}
+        </ul>
+        {writable && <div className="space-y-2 border-t border-[var(--border)] p-3">
+          <Input placeholder="New list, e.g. Wholesale" value={head.name} onChange={(e) => setHead({ ...head, name: e.target.value })} aria-label="New price list name" />
+          <Input placeholder="% on selling price, e.g. -10" value={head.adjust_percent} onChange={(e) => setHead({ ...head, adjust_percent: e.target.value })} aria-label="Percentage on selling price" />
+          <Button size="sm" disabled={!head.name.trim()} onClick={async () => { if (await call(async () => { const r = await api.post(path("/price-lists"), head); setSel(r.id); }, "Price list added")) setHead({ name: "", adjust_percent: "" }); }}><Plus className="h-4 w-4" />Add list</Button>
+        </div>}
+      </Card>
+      {sel && detail.data ? (
+        <Card>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Name">{(id) => <Input id={id} value={edit.name} disabled={!writable} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />}</Field>
+            <Field label="% on selling price" hint="For products without their own price. −10 = 10% off">{(id) => <Input id={id} className="w-28" value={edit.adjust_percent} disabled={!writable} onChange={(e) => setEdit({ ...edit, adjust_percent: e.target.value })} />}</Field>
+            <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.is_active} disabled={!writable} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} /> In use</label>
+            {writable && <ConfirmButton label="Delete" title="Delete this price list?" body="Lists given to customers cannot be deleted; switch them off instead." confirmLabel="Delete" onConfirm={async () => { if (await call(() => api.del(path(`/price-lists/${sel}`)), "Deleted")) setSel(null); }} />}
+          </div>
+          <TableWrap><table className="table mt-4">
+            <thead><tr><th>Product</th><th className="num">Selling price</th><th className="num w-32">From quantity</th><th className="num w-36">List price</th><th /></tr></thead>
+            <tbody>{rows.map((r, i) => {
+              const it = items.find((x) => x.id === r.item_id);
+              const upd = (patch: Partial<typeof r>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              return (
+                <tr key={i}>
+                  <td><Select value={r.item_id} disabled={!writable} onChange={(e) => upd({ item_id: e.target.value })} aria-label="Product"><option value="">Select…</option>{goods.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</Select></td>
+                  <td className="num muted">{it ? money(it.sale_price) : ""}</td>
+                  <td><Input className="num" inputMode="decimal" placeholder="any" value={r.min_qty} disabled={!writable} onChange={(e) => upd({ min_qty: e.target.value })} aria-label="From quantity" /></td>
+                  <td><MoneyInput value={r.price} disabled={!writable} onChange={(e) => upd({ price: e.target.value })} aria-label="List price" /></td>
+                  <td>{writable && <Button size="sm" variant="ghost" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove row">×</Button>}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></TableWrap>
+          {writable && <div className="mt-3 flex flex-wrap justify-between gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setRows([...rows, { item_id: "", min_qty: "", price: "" }])}><Plus className="h-4 w-4" />Add price</Button>
+            <Button onClick={() => call(async () => {
+              await api.put(path(`/price-lists/${sel}`), edit);
+              await api.put(path(`/price-lists/${sel}/prices`), { rows: rows.filter((r) => r.item_id && r.price !== "") });
+            }, "Price list saved")}>Save</Button>
+          </div>}
+          <p className="mt-3 text-xs muted">A product can have several rows: e.g. from quantity blank → ₹90, from 10 → ₹85. The highest break not above the quantity applies.</p>
+        </Card>
+      ) : <Card><p className="text-sm muted">Choose a price list.</p></Card>}
+    </div>
+  );
+}
+
+const BATCH_COLOR = { expired: "red", expiring: "amber", ok: "green" } as const;
+
+/** Stock by batch with expiry status, filterable, downloadable. */
+function BatchesTab() {
+  const { path, settings } = useCompany();
+  const [days, setDays] = useState("30");
+  const [only, setOnly] = useState("");
+  const r = useApi<{ batches: any[]; counts: { expired: number; expiring: number } }>(path(`/items/batches/report?days=${Number(days) || 30}`));
+  const rows = (r.data?.batches ?? []).filter((b) => !only || b.status === only);
+  const df = settings?.company.date_format;
+  const csv = () => {
+    const out = [["Item", "Code", "Warehouse", "Batch", "Expiry", "Quantity", "Unit", "Status"], ...rows.map((b) => [b.name, b.code ?? "", b.warehouse_name, b.batch_no, b.expiry_date ?? "", qty(b.qty_milli), b.unit, b.status])];
+    const blob = new Blob(["\uFEFF" + out.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `batches-expiry-${today()}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
+  return (
+    <Card padded={false}>
+      <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
+        <Field label="Expiring within (days)">{(id) => <Input id={id} inputMode="numeric" className="w-28" value={days} onChange={(e) => setDays(e.target.value)} />}</Field>
+        <Field label="Show">{(id) => <Select id={id} value={only} onChange={(e) => setOnly(e.target.value)}><option value="">All batches</option><option value="expired">Expired</option><option value="expiring">Expiring soon</option><option value="ok">Fine</option></Select>}</Field>
+        {r.data && <p className="text-sm"><Badge color="red">{r.data.counts.expired} expired</Badge> <Badge color="amber">{r.data.counts.expiring} expiring</Badge></p>}
+        <Button variant="secondary" size="sm" className="ml-auto" disabled={!rows.length} onClick={csv}>Download CSV</Button>
+      </div>
+      {r.loading && !r.data ? <Spinner /> : !rows.length ? <EmptyState title="No batches" body="Tick “Track batch numbers & expiry” on an item, then enter the batch on purchase bills." /> : (
+        <TableWrap><table className="table"><thead><tr><th>Item</th><th>Warehouse</th><th>Batch</th><th>Expiry</th><th className="num">Quantity</th><th>Status</th></tr></thead>
+          <tbody>{rows.map((b, i) => <tr key={i}><td>{b.name} <span className="font-mono text-xs muted">{b.code}</span></td><td>{b.warehouse_name}</td><td className="font-mono">{b.batch_no}</td><td>{b.expiry_date ? fmtDate(b.expiry_date, df) : "—"}</td><td className="num">{qty(b.qty_milli)} {b.unit}</td><td><Badge color={BATCH_COLOR[b.status as keyof typeof BATCH_COLOR]}>{b.status}</Badge></td></tr>)}</tbody></table></TableWrap>
+      )}
+    </Card>
+  );
+}
 
 export default function Inventory() {
   const { path, money, settings, can, reload: reloadSettings, branchQuery } = useCompany();
@@ -112,7 +225,7 @@ export default function Inventory() {
           {can("labels.print") && <LinkButton variant="secondary" to={`/app/${settings?.company.id}/labels`}><QrCode className="h-4 w-4" />Labels</LinkButton>}
           {can("items.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New item</Button>}
         </>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "items", label: "Items" }, { value: "stock", label: "Stock by warehouse" }, { value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "items", label: "Items" }, { value: "stock", label: "Stock by warehouse" }, { value: "batches", label: "Batches & expiry" }, { value: "prices", label: "Price lists" }, { value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }]} />
       {tab === "items" && (
         <Card padded={false}>
           <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
@@ -127,6 +240,7 @@ export default function Inventory() {
               <tbody>{items.data.items.map((i) => (
                 <tr key={i.id} className={i.is_active ? "" : "opacity-60"}>
                   <td className="font-medium">{i.name} {i.kind === "service" ? <Badge color="blue">service</Badge> : i.track_inventory ? <Badge color="green">stock</Badge> : <Badge>non-stock</Badge>}
+                    {i.track_batches ? <span className="ml-1"><Badge color="blue">batches</Badge></span> : null}
                     {i.track_inventory && i.reorder_level_milli > 0 && i.stock_qty_milli <= i.reorder_level_milli && <span className="ml-1"><Badge color="amber">reorder</Badge></span>}</td>
                   <td className="font-mono text-xs">{i.code}</td><td className="font-mono text-xs">{i.sku}{i.sku && i.barcode ? <br /> : null}{i.barcode}</td><td className="font-mono text-xs">{i.hsn_sac}</td>
                   <td className="num">{money(i.sale_price)}</td>
@@ -145,10 +259,12 @@ export default function Inventory() {
             <tbody>{stock.data.stock.map((s, idx) => <tr key={idx}><td>{s.name}</td><td>{s.warehouse_name}</td><td className="num">{qty(s.qty_milli)} {s.unit}</td><td className="num">{money(s.value)}</td></tr>)}</tbody></table></TableWrap>
         ) : <EmptyState title="No stock movements yet" body="Stock arrives through posted bills or opening-stock adjustments." />}</Card>
       )}
+      {tab === "batches" && <BatchesTab />}
+      {tab === "prices" && items.data && <PriceListsTab items={items.data.items} />}
       {tab === "movements" && (
         <Card padded={false}>{moves.data?.movements.length ? (
           <TableWrap><table className="table"><thead><tr><th>Date</th><th>Item</th><th>Warehouse</th><th>Type</th><th className="num">Qty</th><th className="num">Value</th></tr></thead>
-            <tbody>{moves.data.movements.map((m) => <tr key={m.id}><td>{fmtDate(m.move_date, df)}</td><td>{m.item_name}</td><td>{m.warehouse_name}</td><td><Badge>{m.kind.replace("_", " ")}</Badge></td><td className={`num ${m.qty_milli < 0 ? "text-red-600" : ""}`}>{qty(m.qty_milli)}</td><td className="num">{money(m.value)}</td></tr>)}</tbody></table></TableWrap>
+            <tbody>{moves.data.movements.map((m) => <tr key={m.id}><td>{fmtDate(m.move_date, df)}</td><td>{m.item_name}{m.batch_no && <span className="block font-mono text-xs muted">{m.batch_no}</span>}</td><td>{m.warehouse_name}</td><td><Badge>{m.kind.replace("_", " ")}</Badge></td><td className={`num ${m.qty_milli < 0 ? "text-red-600" : ""}`}>{qty(m.qty_milli)}</td><td className="num">{money(m.value)}</td></tr>)}</tbody></table></TableWrap>
         ) : <EmptyState title="No movements" />}</Card>
       )}
       {tab === "transfers" && (

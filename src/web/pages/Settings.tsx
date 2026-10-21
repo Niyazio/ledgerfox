@@ -12,8 +12,10 @@ import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { INDIA_STATES } from "@shared/tax";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
+import { PlanBillingTab } from "./Billing";
+import { TwoFactorCard } from "../components/TwoFactor";
 
-type Tab = "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
+type Tab = "billing" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -342,6 +344,7 @@ function AccountTab() {
           <Button onClick={async () => { try { await api.post("/api/auth/change-password", pw); setPw({ current_password: "", new_password: "" }); toast("success", "Password changed"); } catch (e) { toast("error", errorMessage(e)); } }}>Update password</Button>
         </div>
       </Card>
+      <TwoFactorCard />
       <Card title="Recovery codes">
         <p className="mb-3 text-sm muted">Generating new codes invalidates the old ones.</p>
         {codes ? <div className="grid grid-cols-2 gap-2 rounded-lg bg-[var(--surface-2)] p-3 font-mono text-sm">{codes.map((c) => <span key={c}>{c}</span>)}</div> : (
@@ -372,6 +375,7 @@ export default function Settings() {
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
+        ...(me?.edition === "cloud" ? [{ value: "billing" as Tab, label: "Plan & billing" }] : []),
       ]} />
       {tab === "company" && <CompanyTab />}
       {tab === "members" && <MembersTab />}
@@ -384,6 +388,7 @@ export default function Settings() {
       {tab === "data" && <DataTab />}
       {tab === "account" && <AccountTab />}
       {tab === "backup" && <CloudBackupTab />}
+      {tab === "billing" && <PlanBillingTab />}
     </>
   );
 }

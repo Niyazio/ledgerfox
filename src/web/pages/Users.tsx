@@ -129,7 +129,7 @@ export function MembersTab() {
             const mine = m.branches.filter((b) => b.company_id === companyId);
             return (
               <tr key={m.id}><td>{m.name}{m.id === me?.user?.id && <span className="ml-2"><Badge>you</Badge></span>}</td>
-                <td>{m.username ? <><b>{m.username}</b>{m.must_change_password ? <span className="ml-2"><Badge>temporary password</Badge></span> : null}</> : m.email}</td>
+                <td>{m.username ? <><b>{m.username}</b>{m.must_change_password ? <span className="ml-2"><Badge>temporary password</Badge></span> : null}</> : m.email}{(m as Member & { totp_enabled?: number }).totp_enabled ? <span className="ml-2"><Badge color="green">2FA</Badge></span> : null}</td>
                 <td>{editable ? (
                   <Select value={m.role} className="max-w-[13rem]" aria-label="Role" onChange={async (e) => { try { await api.patch(`/api/orgs/${orgId}/members/${m.id}`, { role: e.target.value }); org.reload(); toast("success", "Role updated"); } catch (err) { toast("error", errorMessage(err)); } }}>
                     {[...assignable, ...(assignable.includes(m.role) ? [] : [m.role])].map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
@@ -173,6 +173,18 @@ export function MembersTab() {
             <TableWrap><table className="table mt-4 text-sm"><thead><tr><th>Pending invitation</th><th>Role</th><th>Expires</th><th /></tr></thead>
               <tbody>{org.data.invitations.filter((i: any) => !i.accepted_at && !i.revoked_at).map((i: any) => <tr key={i.id}><td>{i.email}</td><td>{ROLE_LABELS[i.role as Role]}</td><td>{fmtDateTime(i.expires_at)}</td><td className="text-right"><Button size="sm" variant="ghost" onClick={async () => { await api.del(`/api/orgs/${orgId}/invitations/${i.id}`); org.reload(); }}>Revoke</Button></td></tr>)}</tbody></table></TableWrap>
           )}
+        </Card>
+      )}
+      {myRole === "owner" && (
+        <Card title="Security">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={Boolean(org.data?.organisation?.require_2fa)} onChange={async (e) => {
+              try { await api.patch(`/api/orgs/${orgId}`, { name: org.data.organisation.name, require_2fa: e.target.checked }); org.reload(); toast("success", e.target.checked ? "Everyone must now use two-factor sign-in" : "Two-factor sign-in is optional"); }
+              catch (err) { toast("error", errorMessage(err)); }
+            }} />
+            Require two-factor sign-in for everyone in this organisation
+          </label>
+          <p className="mt-1 text-xs muted">People without it are asked to set it up before they can open any company. If someone loses their phone, give them a new one-time password above — that switches their two-factor sign-in off so they can set it up again.</p>
         </Card>
       )}
       {myPerms.includes("roles.manage") && <RoleEditor orgId={orgId} />}

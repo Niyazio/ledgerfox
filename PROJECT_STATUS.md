@@ -56,9 +56,25 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Phase 2 rollout | ⏳ Awaiting your approval | Branch `feature/multi-branch`. Migrations 0006 and 0007 are not applied to the live database; nothing is deployed |
 | Installable app + offline mode | ✅ Done | App opens without internet; pages already opened are shown from the device; new customers/suppliers, invoices/bills/other documents, receipts/payments, expenses and journals made offline are queued on the device and sent once on reconnect |
 
+| GSTR-1 (B2B, B2CL, B2CS, credit notes, nil/exempt, HSN, documents issued) and GSTR-3B preparation; JSON for the GST offline tool and CSV sheets, per GSTIN | ✅ Done | Not filed from LedgerFox; exports (EXP), amendments, reverse charge and GSTR-2B matching not included |
+| Import customers, suppliers and products (with opening stock) from Excel .xlsx or CSV | ✅ Done | Built-in reader; old .xls must be saved as .xlsx |
+| Share invoices, quotes and receipts via WhatsApp / email / copy; payment reminders; customer link with full invoice and UPI pay button + QR | ✅ Done | Free: opens your own WhatsApp/email. Desktop edition sends text without a link |
+
+| POS counter billing: scan/tap products, cash/UPI/card/split, change, hold bills, auto thermal print, walk-in customer, F2/F9 shortcuts | ✅ Done | Prices locked for staff without discount rights |
+| Proforma invoices and delivery challans (own number series, convert to invoice) | ✅ Done | Delivery challans do not move stock |
+| Recurring invoices (weekly/monthly/quarterly/yearly; draft or auto-issue; catches up missed periods) | ✅ Done | Run when someone opens the app (daily) or with “Create due invoices now”; no background job |
+| Customer credit limit: warning on draft, blocked on issue unless a manager confirms (recorded in history) | ✅ Done | |
+| Cash book / bank book with running balance; share customer/supplier statements | ✅ Done | |
+
+| Two-factor sign-in (authenticator apps, RFC 6238), recovery codes as the second step, replay protection; owner can require it for everyone | ✅ Done | No SMS/email codes |
+| Batch numbers and expiry dates per item: batch required on purchases, first-expiry-first-out on sales, expired stock refused (except write-off / purchase return), batches kept through voids and transfers, batch and expiry printed on bills, expiry report + dashboard alert, import columns | ✅ Done | Costing stays moving-average per item (not per batch); no serial numbers |
+| GST e-invoice JSON (IRP schema 1.1: B2B invoices and credit notes) and e-way bill JSON (invoices, delivery challans, sales returns), with checks before upload; IRN, ack, signed QR and e-way bill number recorded back and printed (QR on A4 and thermal) | ✅ Done (offline upload) | Not connected to the IRP / EWB APIs (needs a GSP); exports/SEZ, cess and Part-B updates not covered; not yet tried against the live portals |
+| Price lists (wholesale/dealer/retail): % on selling price and own prices with quantity breaks; given to customers; applied on invoices/quotes and at the POS, where staff without discount rights can only use the list rate | ✅ Done | No date-limited offers or "buy X get Y free" schemes |
+| Subscriptions (hosted edition): Free/Starter/Business/Multi-branch plans, 14-day trial, limits and features enforced on the server, Razorpay checkout with signature verification and webhook, subscription tax invoices, vendor admin page | ✅ Built, **off by default** | Needs your Razorpay account and keys (BILLING.md); not tested with a real payment |
+
 ## Incomplete, partial or not implemented (honest list)
 
-- **GST compliance:** no GSTR-1/3B export, e-invoicing (IRN/QR), e-way bills, TDS/TCS, reverse-charge postings, cess.
+- **GST compliance:** GSTR-1/3B, e-invoice and e-way bill files are prepared for upload but nothing is filed or generated from LedgerFox (no GSP connection); no TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
 - **Optional local LLM adapter:** reserved in config (`LOCAL_LLM_URL`) but **not implemented**; no AI model is called.
 - **No email** (invitations, invoices, reminders, password resets are all copy-link/manual).
 - **No MFA**; no email verification.
@@ -85,8 +101,6 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 ## Next highest-priority tasks
 
 1. Production deploy + custom domain + first real backup (database is ready; needs your GitHub repo and the Cloudflare dashboard steps).
-2. GSTR-1 / GSTR-3B summary exports in the portal's JSON/Excel layouts (data is already captured per line).
-3. TOTP multi-factor authentication.
 4. Unrealised FX revaluation and cross-currency payment allocation.
 5. Scheduled jobs via a free Cron Trigger (recurring expenses, depreciation reminders).
 6. Accessibility audit (axe) and keyboard-shortcut layer for power users.

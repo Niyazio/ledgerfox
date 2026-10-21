@@ -5,12 +5,13 @@ import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams, dateRange } from "../lib/validate";
 import { audit, changes, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
-import { docFamily, type Permission } from "@shared/permissions";
+import { DOC_VARIANTS, docFamily, type Permission } from "@shared/permissions";
 import type { Context } from "hono";
-import { currencyExponent } from "@shared/currencies";
+import { currencyExponent, formatMoney } from "@shared/currencies";
 import { prepareDraft, issueDocument, voidDocument, loadDoc, POSTING_TYPES, type DocType, type DraftInput } from "../services/documents";
 import { applyCredit } from "../services/payments";
 import { duplicateBillCheck } from "../services/insights";
+import { einvoiceJson, ewayJson } from "../services/einvoice";
 
 const documents = new Hono<AppEnv>();
 
@@ -33,6 +34,9 @@ function checkDiscounts(c: Context<AppEnv>, docType: string, lines: { discount_b
   if (lines.some((l) => l.discount_bp > limit)) throw new AppError(403, "DISCOUNT_LIMIT", `Discounts above ${limit / 100}% need a manager's approval`);
 }
 const DOC_TYPES = ["quote", "sales_order", "invoice", "credit_note", "purchase_order", "bill", "debit_note"] as const;
+/** Types the API accepts: the stored ones plus the variants (proforma → quote, delivery_challan → sales_order). */
+const API_TYPES = [...DOC_TYPES, "proforma", "delivery_challan"] as const;
+const stored = (t: string) => DOC_VARIANTS[t] ?? { doc_type: t as (typeof DOC_TYPES)[number], variant: null };
 
 const lineSchema = z.object({
   item_id: optId,
@@ -46,10 +50,12 @@ const lineSchema = z.object({
   department_id: optId,
   project_id: optId,
   cost_centre_id: optId,
+  batch_no: z.string().trim().max(40).nullish(),
+  expiry_date: isoDate.nullish().or(z.literal("")),
 });
 
 const docSchema = z.object({
-  doc_type: z.enum(DOC_TYPES),
+  doc_type: z.enum(API_TYPES),
   contact_id: z.string().min(1),
   issue_date: isoDate,
   due_date: isoDate.nullish(),
@@ -72,8 +78,10 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
     currency = ct?.currency ?? companyBase;
   }
   const exp = currencyExponent(currency);
+  const st = stored(input.doc_type);
   return {
-    doc_type: input.doc_type,
+    doc_type: st.doc_type,
+    variant: st.variant,
     contact_id: input.contact_id,
     issue_date: input.issue_date,
     due_date: input.due_date ?? null,
@@ -97,6 +105,7 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
         item_id: l.item_id ?? null, description: l.description, hsn_sac: l.hsn_sac || null, qty_milli: q, unit_price: price, discount_bp: disc,
         account_id: l.account_id ?? null, tax_code_id: l.tax_code_id ?? null, department_id: l.department_id ?? null,
         project_id: l.project_id ?? null, cost_centre_id: l.cost_centre_id ?? null,
+        batch_no: l.batch_no?.toUpperCase() || null, expiry_date: l.expiry_date || null,
       };
     }),
   };
@@ -111,9 +120,13 @@ documents.get("/", async (c) => {
   const contactId = c.req.query("contact_id");
   const where = ["d.company_id = ?"];
   const params: (string | number)[] = [company.id];
-  if (type && (DOC_TYPES as readonly string[]).includes(type)) {
+  if (type && (API_TYPES as readonly string[]).includes(type)) {
     requirePerm(c, famPerm(type, "view"));
-    where.push("d.doc_type = ?"); params.push(type);
+    const st = stored(type);
+    where.push("d.doc_type = ?"); params.push(st.doc_type);
+    // Quotations and sales orders lists exclude their proforma / delivery challan variants, and vice versa.
+    if (st.variant) { where.push("d.variant = ?"); params.push(st.variant); }
+    else if (type === "quote" || type === "sales_order") where.push("d.variant IS NULL");
   } else {
     const visible = DOC_TYPES.filter((t) => hasPerm(c, famPerm(t, "view")));
     if (!visible.length) requirePerm(c, "sales.view");
@@ -130,7 +143,7 @@ documents.get("/", async (c) => {
   const dr = dateRange(c, "d.issue_date");
   where.push(...dr.sql); params.push(...dr.params);
   const rows = await all(c.env.DB,
-    `SELECT d.id, d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
+    `SELECT d.id, d.doc_type, d.variant, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
             d.contact_id, ct.name AS contact_name
      FROM documents d JOIN contacts ct ON ct.id = d.contact_id
      WHERE ${where.join(" AND ")} ORDER BY d.issue_date DESC, d.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
@@ -170,7 +183,8 @@ documents.get("/:id", async (c) => {
      FROM allocations a LEFT JOIN payments p ON p.id = a.payment_id LEFT JOIN documents n ON n.id = a.note_id LEFT JOIN documents t ON t.id = a.document_id
      WHERE a.document_id = ? OR a.note_id = ? ORDER BY a.created_at`, id, id);
   const children = await all(c.env.DB, `SELECT id, doc_type, number, status FROM documents WHERE related_doc_id = ? AND company_id = ?`, id, company.id);
-  return c.json({ document: doc, lines, allocations, related: children });
+  const gstRefs = await first(c.env.DB, `SELECT irn, ack_no, ack_date, signed_qr, irn_cancelled, ewb_no, ewb_date, ewb_valid_until, updated_at FROM document_gst_refs WHERE document_id = ? AND company_id = ?`, id, company.id);
+  return c.json({ document: doc, lines, allocations, related: children, gst_refs: gstRefs ?? null });
 });
 
 documents.post("/", async (c) => {
@@ -182,6 +196,7 @@ documents.post("/", async (c) => {
   const prepared = await prepareDraft(c, draft);
   await batch(c.env.DB, [...prepared.stmts, audit(c, `${input.doc_type}.create`, "document", prepared.id, { total: prepared.totals.total })]);
   const warnings = input.doc_type === "bill" ? await duplicateBillCheck(c.env.DB, company.id, input.contact_id, input.reference ?? null, prepared.totals.total, prepared.id) : [];
+  if (input.doc_type === "invoice") { const p = await creditLimitProblem(c, input.contact_id, prepared.id, prepared.totals.total); if (p) warnings.push(p); }
   return c.json({ id: prepared.id, totals: prepared.totals, warnings }, 201);
 });
 
@@ -191,7 +206,7 @@ documents.put("/:id", async (c) => {
   const id = c.req.param("id");
   const existing = await access(c, id, "create");
   if (existing.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be edited");
-  if (existing.doc_type !== input.doc_type) throw badRequest("Document type cannot change");
+  if (existing.doc_type !== stored(input.doc_type).doc_type) throw badRequest("Document type cannot change");
   const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
   checkDiscounts(c, input.doc_type, draft.lines);
   const before = await first<Record<string, unknown>>(c.env.DB, `SELECT contact_id, issue_date, due_date, reference, currency, total, branch_id FROM documents WHERE id = ?`, id);
@@ -214,6 +229,24 @@ documents.delete("/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Credit limit: the customer's open balance plus this invoice must stay within their limit (in the customer's
+ * currency, or the base currency when none is set). Returns a message when it would be exceeded.
+ */
+async function creditLimitProblem(c: Context<AppEnv>, contactId: string, docId: string | null, amount: number): Promise<string | null> {
+  const company = c.get("company");
+  const ct = await first<{ name: string; credit_limit: number | null; currency: string | null }>(c.env.DB, `SELECT name, credit_limit, currency FROM contacts WHERE id = ? AND company_id = ?`, contactId, company.id);
+  if (!ct?.credit_limit) return null;
+  const cur = ct.currency ?? company.base_currency;
+  const open = await first<{ due: number }>(c.env.DB,
+    `SELECT COALESCE(SUM(CASE WHEN doc_type = 'invoice' THEN total - amount_settled ELSE -(total - amount_settled) END),0) AS due FROM documents
+     WHERE company_id = ? AND contact_id = ? AND status = 'posted' AND doc_type IN ('invoice','credit_note') AND currency = ? AND id IS NOT ?`, company.id, contactId, cur, docId);
+  const after = (open?.due ?? 0) + amount;
+  if (after <= ct.credit_limit) return null;
+  const f = (n: number) => formatMoney(n, cur);
+  return `${ct.name} has a credit limit of ${f(ct.credit_limit)}; open balance ${f(open?.due ?? 0)} plus this invoice makes ${f(after)}.`;
+}
+
 documents.post("/:id/issue", async (c) => {
   const company = c.get("company");
   const id = c.req.param("id");
@@ -224,6 +257,17 @@ documents.post("/:id/issue", async (c) => {
   if (docFamily(d.doc_type) === "purchase" && POSTING_TYPES.includes(d.doc_type) && limit !== null && limit !== undefined && d.total_base > limit && !hasPerm(c, "purchase.approve")) {
     const ok = await first(c.env.DB, `SELECT 1 FROM document_approvals WHERE document_id = ? AND approved_at IS NOT NULL`, id);
     if (!ok) throw new AppError(403, "APPROVAL_REQUIRED", "This purchase is above the approval limit. Request approval first.");
+  }
+  if (d.doc_type === "invoice") {
+    const doc = await first<{ contact_id: string; total: number; currency: string }>(c.env.DB, `SELECT contact_id, total, currency FROM documents WHERE id = ?`, id);
+    const problem = await creditLimitProblem(c, doc!.contact_id, id, doc!.total);
+    if (problem) {
+      const override = (await c.req.json().catch(() => ({}))) as { override_credit_limit?: boolean };
+      if (!override.override_credit_limit || !hasPerm(c, "sales.credit_override")) {
+        throw new AppError(409, "CREDIT_LIMIT", `${problem} ${hasPerm(c, "sales.credit_override") ? "Confirm to issue anyway." : "Ask a manager to approve, or take payment first."}`);
+      }
+      await batch(c.env.DB, [audit(c, "invoice.credit_override", "document", id, { reason: problem })]);
+    }
   }
   const number = await issueDocument(c, id);
   return c.json({ ok: true, number });
@@ -320,6 +364,59 @@ documents.post("/:id/approve", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB, `UPDATE document_approvals SET approved_by = ?, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE document_id = ?`, c.get("user").id, id),
     audit(c, `${d.doc_type}.approved`, "document", id),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ── GST e-invoice / e-way bill: JSON to upload on the government portals, and the numbers they give back ──
+const party = z.object({ addr1: z.string().max(120).nullish(), addr2: z.string().max(120).nullish(), loc: z.string().max(50).nullish(), pin: z.string().max(10).nullish() }).partial();
+const overrides = z.object({ seller: party.optional(), buyer: party.optional() });
+
+documents.post("/:id/gst/einvoice", async (c) => {
+  const id = c.req.param("id");
+  await access(c, id, "view");
+  return c.json(await einvoiceJson(c.env.DB, c.get("company"), id, await body(c, overrides)));
+});
+
+documents.post("/:id/gst/eway", async (c) => {
+  const id = c.req.param("id");
+  await access(c, id, "view");
+  const input = await body(c, overrides.extend({
+    sub_supply_type: z.number().int().refine((n) => [1, 4, 5, 7, 8, 10, 11, 12].includes(n)).nullish(), sub_supply_desc: z.string().max(20).nullish(),
+    trans_mode: z.enum(["1", "2", "3", "4"]).nullish(), distance_km: z.number().int().min(0).max(4000).nullish(),
+    transporter_id: z.string().max(15).nullish(), transporter_name: z.string().max(100).nullish(), trans_doc_no: z.string().max(15).nullish(),
+    trans_doc_date: isoDate.nullish(), vehicle_no: z.string().max(15).nullish(),
+  }));
+  return c.json(await ewayJson(c.env.DB, c.get("company"), id, input));
+});
+
+const blankToNull = (v: unknown) => (typeof v === "string" && !v.trim() ? null : typeof v === "string" ? v.trim() : v);
+documents.put("/:id/gst/refs", async (c) => {
+  const id = c.req.param("id");
+  const d = await access(c, id, "post");
+  if (d.status === "draft") throw badRequest("Issue the document first");
+  const s = (re: RegExp, msg: string, max = 40) => z.preprocess(blankToNull, z.string().max(max).regex(re, msg).nullish());
+  const input = await body(c, z.object({
+    irn: s(/^[0-9a-fA-F]{64}$/, "IRN is 64 letters/digits", 64),
+    ack_no: s(/^\d{1,20}$/, "Ack no. is digits only"),
+    ack_date: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "Ack date as YYYY-MM-DD HH:MM:SS"),
+    signed_qr: s(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/, "Paste the full signed QR code text from the portal", 4000),
+    irn_cancelled: z.boolean().optional(),
+    ewb_no: s(/^\d{12}$/, "e-way bill number is 12 digits"),
+    ewb_date: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "e-way bill date as YYYY-MM-DD"),
+    ewb_valid_until: s(/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/, "Valid-until as YYYY-MM-DD"),
+  }));
+  const company = c.get("company");
+  const v = { ...input, irn: input.irn?.toLowerCase() ?? null };
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `INSERT INTO document_gst_refs (document_id, company_id, irn, ack_no, ack_date, signed_qr, irn_cancelled, ewb_no, ewb_date, ewb_valid_until, updated_by, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT (document_id) DO UPDATE SET irn = excluded.irn, ack_no = excluded.ack_no, ack_date = excluded.ack_date, signed_qr = excluded.signed_qr,
+         irn_cancelled = excluded.irn_cancelled, ewb_no = excluded.ewb_no, ewb_date = excluded.ewb_date, ewb_valid_until = excluded.ewb_valid_until,
+         updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      id, company.id, v.irn, v.ack_no ?? null, v.ack_date ?? null, v.signed_qr ?? null, v.irn_cancelled ? 1 : 0, v.ewb_no ?? null, v.ewb_date ?? null, v.ewb_valid_until ?? null,
+      c.get("user").id, new Date().toISOString()),
+    audit(c, "document.gst_refs", "document", id, { irn: v.irn, ack_no: v.ack_no, irn_cancelled: Boolean(v.irn_cancelled), ewb_no: v.ewb_no }),
   ]);
   return c.json({ ok: true });
 });

@@ -55,3 +55,26 @@ describe("daily report and date filters", () => {
     expect((await W.owner.get(W.c("/documents?type=invoice&from=2026-13-01"))).status).toBe(400);
   });
 });
+
+describe("cash book and bank book", () => {
+  it("lists receipts and payments with running balance", async () => {
+    const { world, contact } = await import("./helpers");
+    const W = await world();
+    const cust = await contact(W, "customer");
+    const supp = await contact(W, "supplier");
+    await W.owner.post(W.c("/journals"), { entry_date: "2026-05-01", memo: "Owner capital", post: true, lines: [{ account_id: W.acc.CASH, debit: "5000" }, { account_id: W.acc.OPENING_EQUITY, credit: "5000" }] });
+    await W.owner.post(W.c("/payments"), { direction: "in", contact_id: cust, payment_date: "2026-05-03", account_id: W.acc.CASH, amount: "700" });
+    await W.owner.post(W.c("/payments"), { direction: "out", contact_id: supp, payment_date: "2026-05-04", account_id: W.acc.CASH, amount: "200" });
+    await W.owner.post(W.c("/payments"), { direction: "in", contact_id: cust, payment_date: "2026-05-04", account_id: W.acc.BANK, amount: "999" });
+    const r = (await W.owner.get(W.c("/reports/cash-book?kind=cash&from=2026-05-02&to=2026-05-31"))).json;
+    expect(r.opening).toBe(500_000);
+    expect(r.entries.map((e: any) => [e.date, e.voucher.slice(0, 4), e.receipt, e.payment, e.balance])).toEqual([
+      ["2026-05-03", "RCPT", 70_000, 0, 570_000],
+      ["2026-05-04", "PAY-", 0, 20_000, 550_000],
+    ]);
+    expect(r.entries[0].particulars).toMatch(/customer/);
+    expect([r.receipts, r.payments, r.closing]).toEqual([70_000, 20_000, 550_000]);
+    const bank = (await W.owner.get(W.c("/reports/cash-book?kind=bank&from=2026-05-01&to=2026-05-31"))).json;
+    expect([bank.opening, bank.receipts, bank.closing]).toEqual([0, 99_900, 99_900]);
+  });
+});

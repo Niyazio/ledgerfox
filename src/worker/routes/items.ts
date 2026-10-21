@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { all, batch, first, stmt } from "../lib/db";
+import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, reqText, shortText, optId, minor, qty, isoDate, pageParams } from "../lib/validate";
 import type { Context } from "hono";
@@ -9,7 +9,7 @@ import { newId } from "../lib/crypto";
 import { assertBranchVisible, audit, branchFilter, hasPerm, requireAnyPerm, requirePerm } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
 import { buildJournal, systemAccounts, assertOpenPeriod } from "../services/ledger";
-import { companyPosition, issueCost, stockMoveStmt, warehouseQty } from "../services/inventory";
+import { batchBalances, companyPosition, issueCost, pickBatches, splitValue, stockMoveStmt, warehouseQty } from "../services/inventory";
 
 const items = new Hono<AppEnv>();
 items.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "inventory.view", "sales.create", "purchase.create"); await next(); });
@@ -27,6 +27,7 @@ const itemSchema = z.object({
   income_account_id: optId,
   expense_account_id: optId,
   track_inventory: z.boolean().default(false),
+  track_batches: z.boolean().optional(),
   reorder_level: z.union([z.string(), z.number()]).default("0"),
   is_active: z.boolean().optional(),
   // Internal product code (encoded in the product QR) and the manufacturer's barcode (EAN/UPC/Code 128).
@@ -121,6 +122,23 @@ items.get("/movements", async (c) => {
   return c.json({ movements: rows.map((r) => hideCost(c, r as Record<string, unknown>)) });
 });
 
+/** Stock by batch with expiry status: expired, expiring within `days` (default 30), or fine. */
+items.get("/batches/report", async (c) => {
+  const company = c.get("company");
+  const days = Math.min(Math.max(parseInt(c.req.query("days") ?? "30", 10) || 30, 1), 730);
+  const bf = branchFilter(c, "w.branch_id");
+  const rows = await all<{ item_id: string; name: string; code: string | null; unit: string; warehouse_name: string; batch_no: string; expiry_date: string | null; qty_milli: number }>(c.env.DB,
+    `SELECT i.id AS item_id, i.name, i.code, i.unit, w.name AS warehouse_name, s.batch_no, MAX(s.expiry_date) AS expiry_date, SUM(s.qty_milli) AS qty_milli
+     FROM stock_moves s JOIN items i ON i.id = s.item_id JOIN warehouses w ON w.id = s.warehouse_id
+     WHERE s.company_id = ? AND s.batch_no IS NOT NULL${bf.sql}
+     GROUP BY s.item_id, s.warehouse_id, s.batch_no HAVING SUM(s.qty_milli) > 0
+     ORDER BY MAX(s.expiry_date) IS NULL, MAX(s.expiry_date), i.name`, company.id, ...bf.params);
+  const today = todayIso();
+  const soon = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+  const batches = rows.map((r) => ({ ...r, status: r.expiry_date && r.expiry_date < today ? "expired" : r.expiry_date && r.expiry_date <= soon ? "expiring" : "ok" }));
+  return c.json({ days, batches, counts: { expired: batches.filter((b) => b.status === "expired").length, expiring: batches.filter((b) => b.status === "expiring").length } });
+});
+
 items.get("/:id", async (c) => {
   const company = c.get("company");
   const item = await first(c.env.DB, `SELECT * FROM items WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
@@ -142,11 +160,11 @@ items.post("/", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id,
-         income_account_id, expense_account_id, track_inventory, reorder_level_milli, code, barcode) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         income_account_id, expense_account_id, track_inventory, reorder_level_milli, code, barcode, track_batches) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, input.kind, input.name, input.sku || null, input.unit, input.hsn_sac || null, input.description ?? null,
       minor(input.sale_price, exp, "sale price"), minor(input.purchase_price ?? "0", exp, "purchase price"), input.tax_code_id ?? null,
       input.income_account_id ?? null, input.expense_account_id ?? null, input.track_inventory ? 1 : 0, qty(input.reorder_level, "reorder level"),
-      code, input.barcode || null),
+      code, input.barcode || null, input.track_inventory && input.track_batches ? 1 : 0),
     audit(c, "item.create", "item", id, { name: input.name, code }),
   ]);
   return c.json({ id, code }, 201);
@@ -157,9 +175,15 @@ items.put("/:id", async (c) => {
   const input = await body(c, itemSchema);
   const company = c.get("company");
   const id = c.req.param("id");
-  const existing = await first<{ track_inventory: number; kind: string; purchase_price: number; code: string | null; barcode: string | null; name: string; sale_price: number }>(
-    c.env.DB, `SELECT track_inventory, kind, purchase_price, code, barcode, name, sale_price FROM items WHERE id = ? AND company_id = ?`, id, company.id);
+  const existing = await first<{ track_inventory: number; kind: string; purchase_price: number; code: string | null; barcode: string | null; name: string; sale_price: number; track_batches: number }>(
+    c.env.DB, `SELECT track_inventory, kind, purchase_price, code, barcode, name, sale_price, track_batches FROM items WHERE id = ? AND company_id = ?`, id, company.id);
   if (!existing) throw notFound("Item");
+  const batches = input.track_batches === undefined ? Boolean(existing.track_batches) : input.track_batches && input.track_inventory;
+  if (batches !== Boolean(existing.track_batches)) {
+    // Batch tracking can only be switched while the item has no stock, so every unit on hand has a batch (or none).
+    const onHand = await first<{ q: number }>(c.env.DB, `SELECT COALESCE(SUM(qty_milli),0) AS q FROM stock_moves WHERE item_id = ?`, id);
+    if (onHand?.q) throw conflict("ITEM_HAS_STOCK", "Batch tracking can be switched on or off only when the item has no stock");
+  }
   if (Boolean(existing.track_inventory) !== input.track_inventory || existing.kind !== input.kind) {
     const moved = await first(c.env.DB, `SELECT 1 FROM stock_moves WHERE item_id = ? UNION ALL SELECT 1 FROM document_lines WHERE item_id = ? LIMIT 1`, id, id);
     if (moved) throw conflict("ITEM_IN_USE", "Inventory tracking and item kind cannot change after the item has been used");
@@ -176,11 +200,11 @@ items.put("/:id", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `UPDATE items SET kind = ?, name = ?, sku = ?, unit = ?, hsn_sac = ?, description = ?, sale_price = ?, purchase_price = ?, tax_code_id = ?,
-         income_account_id = ?, expense_account_id = ?, track_inventory = ?, reorder_level_milli = ?, is_active = ?, code = ?, barcode = ? WHERE id = ? AND company_id = ?`,
+         income_account_id = ?, expense_account_id = ?, track_inventory = ?, reorder_level_milli = ?, is_active = ?, code = ?, barcode = ?, track_batches = ? WHERE id = ? AND company_id = ?`,
       input.kind, input.name, input.sku || null, input.unit, input.hsn_sac || null, input.description ?? null,
       salePrice, purchasePrice, input.tax_code_id ?? null,
       input.income_account_id ?? null, input.expense_account_id ?? null, input.track_inventory ? 1 : 0, qty(input.reorder_level, "reorder level"),
-      input.is_active === false ? 0 : 1, code, barcode, id, company.id),
+      input.is_active === false ? 0 : 1, code, barcode, batches ? 1 : 0, id, company.id),
     audit(c, "item.update", "item", id, {
       name: input.name,
       changes: Object.fromEntries(Object.entries({ name: [existing.name, input.name], sale_price: [existing.sale_price, salePrice], purchase_price: [existing.purchase_price, purchasePrice], code: [existing.code, code], barcode: [existing.barcode, barcode] })
@@ -216,7 +240,7 @@ items.patch("/warehouses/:id", async (c) => {
 });
 
 async function trackedItem(db: D1Database, companyId: string, itemId: string) {
-  const it = await first<{ id: string; name: string; track_inventory: number }>(db, `SELECT id, name, track_inventory FROM items WHERE id = ? AND company_id = ?`, itemId, companyId);
+  const it = await first<{ id: string; name: string; track_inventory: number; track_batches: number }>(db, `SELECT id, name, track_inventory, track_batches FROM items WHERE id = ? AND company_id = ?`, itemId, companyId);
   if (!it) throw notFound("Item");
   if (!it.track_inventory) throw unprocessable("NOT_TRACKED", "This item does not track inventory");
   return it;
@@ -242,6 +266,8 @@ items.post("/adjustments", async (c) => {
     unit_cost: z.union([z.string(), z.number()]).nullish(),
     reason: z.enum(["adjustment", "opening"]).default("adjustment"),
     memo: shortText(300).nullish(),
+    batch_no: z.string().trim().max(40).nullish(),
+    expiry_date: isoDate.nullish().or(z.literal("")),
   }));
   const company = c.get("company");
   const user = c.get("user");
@@ -279,10 +305,20 @@ items.post("/adjustments", async (c) => {
     journalId = built.id;
     stmts.push(...built.stmts);
   }
-  stmts.push(stockMoveStmt(c.env.DB, {
-    company_id: company.id, item_id: item.id, warehouse_id: input.warehouse_id, move_date: input.date, qty_milli: q, value,
-    kind: input.reason === "opening" ? "opening" : "adjustment", journal_entry_id: journalId, memo: input.memo, created_by: user.id,
-  }));
+  const kind = input.reason === "opening" ? "opening" : "adjustment";
+  const batchNo = input.batch_no?.toUpperCase() || null;
+  if (item.track_batches && q > 0) {
+    if (!batchNo) throw badRequest(`Enter the batch number for "${item.name}"`);
+    const known = (await batchBalances(c.env.DB, company.id, item.id, input.warehouse_id)).find((b) => b.batch_no === batchNo);
+    stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.warehouse_id, move_date: input.date, qty_milli: q, value, kind, journal_entry_id: journalId, memo: input.memo, created_by: user.id, batch_no: batchNo, expiry_date: input.expiry_date || known?.expiry_date || null }));
+  } else if (item.track_batches) {
+    // Write-offs may take expired batches (that is usually why stock is being written off).
+    const picks = pickBatches(await batchBalances(c.env.DB, company.id, item.id, input.warehouse_id), -q, input.date, item.name, batchNo, true);
+    const values = splitValue(value, picks);
+    picks.forEach((p, i) => stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.warehouse_id, move_date: input.date, qty_milli: -p.qty_milli, value: values[i], kind, journal_entry_id: journalId, memo: input.memo, created_by: user.id, batch_no: p.batch_no, expiry_date: p.expiry_date })));
+  } else {
+    stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.warehouse_id, move_date: input.date, qty_milli: q, value, kind, journal_entry_id: journalId, memo: input.memo, created_by: user.id }));
+  }
   stmts.push(audit(c, "stock.adjust", "item", item.id, { qty_milli: q, value }));
   await batch(c.env.DB, stmts);
   return c.json({ ok: true, value, journal_id: journalId }, 201);
@@ -291,7 +327,7 @@ items.post("/adjustments", async (c) => {
 /** Transfer between warehouses at moving-average cost; no ledger impact (same inventory account). */
 items.post("/transfers", async (c) => {
   requirePerm(c, "inventory.transfer");
-  const input = await body(c, z.object({ item_id: z.string(), from_warehouse_id: z.string(), to_warehouse_id: z.string(), date: isoDate, quantity: z.union([z.string(), z.number()]), memo: shortText(300).nullish() }));
+  const input = await body(c, z.object({ item_id: z.string(), from_warehouse_id: z.string(), to_warehouse_id: z.string(), date: isoDate, quantity: z.union([z.string(), z.number()]), memo: shortText(300).nullish(), batch_no: z.string().trim().max(40).nullish() }));
   const company = c.get("company");
   const user = c.get("user");
   if (input.from_warehouse_id === input.to_warehouse_id) throw badRequest("Choose two different warehouses");
@@ -308,8 +344,20 @@ items.post("/transfers", async (c) => {
   const value = q >= pos.qty_milli ? pos.value : issueCost(pos, q);
   const ref = newId();
   await batch(c.env.DB, [
-    stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.from_warehouse_id, move_date: input.date, qty_milli: -q, value: -value, kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id }),
-    stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.to_warehouse_id, move_date: input.date, qty_milli: q, value, kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id }),
+    // Batch-tracked stock moves batch by batch (first expiry first unless a batch is named), keeping each expiry date.
+    ...(item.track_batches
+      ? await (async () => {
+        const picks = pickBatches(await batchBalances(c.env.DB, company.id, item.id, input.from_warehouse_id), q, input.date, item.name, input.batch_no, true);
+        const values = splitValue(value, picks);
+        return picks.flatMap((p, i) => [
+          stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.from_warehouse_id, move_date: input.date, qty_milli: -p.qty_milli, value: -values[i], kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id, batch_no: p.batch_no, expiry_date: p.expiry_date }),
+          stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.to_warehouse_id, move_date: input.date, qty_milli: p.qty_milli, value: values[i], kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id, batch_no: p.batch_no, expiry_date: p.expiry_date }),
+        ]);
+      })()
+      : [
+        stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.from_warehouse_id, move_date: input.date, qty_milli: -q, value: -value, kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id }),
+        stockMoveStmt(c.env.DB, { company_id: company.id, item_id: item.id, warehouse_id: input.to_warehouse_id, move_date: input.date, qty_milli: q, value, kind: "transfer", source_type: "transfer", source_id: ref, memo: input.memo, created_by: user.id }),
+      ]),
     stmt(c.env.DB, `INSERT INTO stock_transfers (id, company_id, item_id, qty_milli, value, from_warehouse_id, to_warehouse_id, from_branch_id, to_branch_id, transfer_date, memo, created_by)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, ref, company.id, item.id, q, value, input.from_warehouse_id, input.to_warehouse_id, fromBranch, toBranch, input.date, input.memo ?? null, user.id),
     audit(c, "stock.transfer", "item", item.id, { qty_milli: q, from: input.from_warehouse_id, to: input.to_warehouse_id, from_branch: fromBranch, to_branch: toBranch }),

@@ -3,12 +3,14 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
-  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
 import { Button, cx, Modal, Spinner } from "./ui";
 import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
+import { useRecurringAutoRun } from "../pages/Recurring";
+import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -68,10 +70,14 @@ const NAV: NavGroup[] = [
     { to: "daybook", label: "Daybook", icon: <CalendarDays className="h-4 w-4" />, perm: "daybook.read" },
   ] },
   { label: "Sales & billing", items: [
+    { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/delivery_challan", label: "Delivery challans", icon: <Truck className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/invoice", label: "Invoices / bills", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "recurring", label: "Recurring invoices", icon: <Repeat className="h-4 w-4" />, perm: "sales.create" },
     { to: "sales/credit_note", label: "Sales returns", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" />, perm: "sales.view" },
   ] },
@@ -98,9 +104,11 @@ const NAV: NavGroup[] = [
     { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
   ] },
   { label: "Reports & control", items: [
+    { to: "reports/cash-book", label: "Cash / bank book", icon: <BookOpen className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/daily", label: "Daily report", icon: <CalendarRange className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/profit-loss", label: "Profit & loss", icon: <TrendingUp className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/balance-sheet", label: "Balance sheet", icon: <Scale className="h-4 w-4" />, perm: "reports.read" },
+    { to: "reports/gst-returns", label: "GST returns", icon: <Landmark className="h-4 w-4" />, perm: "reports.export" },
     { to: "reports", label: "All reports", icon: <BarChart3 className="h-4 w-4" />, perm: "reports.read" },
     { to: "insights", label: "Insights", icon: <Lightbulb className="h-4 w-4" />, perm: "reports.read" },
     { to: "settings?tab=audit", label: "Audit log", icon: <ShieldCheck className="h-4 w-4" />, perm: "audit.read" },
@@ -108,6 +116,7 @@ const NAV: NavGroup[] = [
   { label: "Administration", items: [
     { to: "settings?tab=members", label: "Users & permissions", icon: <UserCog className="h-4 w-4" />, perm: "org.manage" },
     { to: "settings?tab=dimensions", label: "Branches", icon: <GitBranch className="h-4 w-4" />, perm: "branches.manage" },
+    { to: "import", label: "Import from Excel", icon: <FileUp className="h-4 w-4" />, perm: ["items.write", "customers.write", "suppliers.write"] },
     { to: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
   ] },
 ];
@@ -238,6 +247,8 @@ function OfflineStatus({ companyId }: { companyId: string }) {
   );
 }
 
+function RecurringRunner() { useRecurringAutoRun(); return null; }
+
 function Shell() {
   const { me, logout } = useSession();
   const { settings, id: companyId } = useCompany();
@@ -288,6 +299,8 @@ function Shell() {
           </div>
         </header>
         {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
+        {settings && me?.edition !== "offline" && <RecurringRunner />}
+        {settings && me?.edition === "cloud" && <PlanBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>

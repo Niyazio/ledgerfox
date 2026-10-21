@@ -8,6 +8,7 @@ import { body, reqText, shortText, currencyCode } from "../lib/validate";
 import { hashPassword, newId, randomToken, sha256Hex, temporaryPassword } from "../lib/crypto";
 import { iterations, usernameSchema } from "./auth";
 import { audit, orgPermissions, requireAuth } from "../lib/auth";
+import { requireCapacity } from "../services/billing";
 import { ALL_PERMISSIONS, ROLES, canAssignRole, defaultPermissions, effectivePermissions, type Permission, type Role } from "@shared/permissions";
 import { companySetupStatements } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
@@ -126,6 +127,7 @@ orgs.post("/:orgId/companies", async (c) => {
   await requireOrgPerm(c, orgId, "company.manage");
   const input = await body(c, companySchema);
   validateCompanyInput(input);
+  if (!input.is_demo) await requireCapacity(c, orgId, "companies");
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
   if ((n?.n ?? 0) >= 25) throw forbidden("Company limit reached for this organisation");
   const setup = companySetupStatements(c.env.DB, { ...input, email: input.email || null, org_id: orgId }, todayIso());
@@ -155,10 +157,10 @@ orgs.delete("/:orgId/companies/:companyId", async (c) => {
 orgs.get("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
   const { role, perms } = await membership(c, orgId);
-  const org = await first(c.env.DB, `SELECT id, name, owner_user_id, created_at FROM organisations WHERE id = ?`, orgId);
+  const org = await first(c.env.DB, `SELECT id, name, owner_user_id, created_at, require_2fa FROM organisations WHERE id = ?`, orgId);
   const members = await all(
     c.env.DB,
-    `SELECT u.id, u.name, u.email, u.username, u.must_change_password, m.role, m.all_branches, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
+    `SELECT u.id, u.name, u.email, u.username, u.must_change_password, u.totp_enabled, m.role, m.all_branches, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.created_at`,
     orgId,
   );
   const assignments = perms.includes("org.manage")
@@ -177,9 +179,14 @@ orgs.get("/:orgId", async (c) => {
 orgs.patch("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
   await requireOrgPerm(c, orgId, "org.manage");
-  const input = await body(c, z.object({ name: reqText(160) }));
+  const input = await body(c, z.object({ name: reqText(160), require_2fa: z.boolean().optional() }));
+  if (input.require_2fa !== undefined) {
+    const me = await first<{ role: Role; totp_enabled: number }>(c.env.DB, `SELECT m.role, u.totp_enabled FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND m.user_id = ?`, orgId, c.get("user").id);
+    if (me?.role !== "owner") throw forbidden("Only the owner can change this");
+    if (input.require_2fa && !me.totp_enabled) throw badRequest("Turn on two-factor sign-in for your own account first");
+  }
   await batch(c.env.DB, [
-    stmt(c.env.DB, `UPDATE organisations SET name = ? WHERE id = ?`, input.name, orgId),
+    stmt(c.env.DB, `UPDATE organisations SET name = ?, require_2fa = COALESCE(?, require_2fa) WHERE id = ?`, input.name, input.require_2fa === undefined ? null : input.require_2fa ? 1 : 0, orgId),
     audit(c, "org.update", "organisation", orgId, input, { orgId, companyId: null }),
   ]);
   return c.json({ ok: true });
@@ -196,6 +203,7 @@ orgs.post("/:orgId/invitations", async (c) => {
   const already = await first(c.env.DB,
     `SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? AND u.email = ?`, orgId, input.email);
   if (already) throw new AppError(409, "ALREADY_MEMBER", "This person is already a member");
+  await requireCapacity(c, orgId, "users");
   const token = randomToken(24);
   const id = newId();
   const expires = new Date(Date.now() + 7 * 86400_000).toISOString();
@@ -222,6 +230,7 @@ orgs.post("/:orgId/users", async (c) => {
   }));
   if (!canAssignRole(role, input.role)) throw forbidden("You cannot grant this role");
   if (await first(c.env.DB, `SELECT 1 FROM users WHERE username = ?`, input.username)) throw new AppError(409, "USERNAME_TAKEN", "That username is already taken");
+  await requireCapacity(c, orgId, "users");
   const id = newId();
   const password = temporaryPassword();
   const h = await hashPassword(password, iterations(c.env));
@@ -251,7 +260,8 @@ orgs.post("/:orgId/members/:userId/temporary-password", async (c) => {
   const password = temporaryPassword();
   const h = await hashPassword(password, iterations(c.env));
   await batch(c.env.DB, [
-    stmt(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, must_change_password = 1 WHERE id = ?`, h.hash, h.salt, h.iterations, targetId),
+    // A lost phone is the usual reason for a reset, so two-factor sign-in is switched off too (they set it up again).
+    stmt(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, must_change_password = 1, totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL WHERE id = ?`, h.hash, h.salt, h.iterations, targetId),
     stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ?`, targetId),
     audit(c, "member.temporary_password", "user", targetId, undefined, { orgId, companyId: null }),
   ]);

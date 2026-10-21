@@ -28,7 +28,13 @@ const schema = z.object({
   credit_limit: z.union([z.string(), z.number()]).nullish(),
   notes: shortText(2000).nullish(),
   is_active: z.boolean().optional(),
+  price_list_id: z.string().max(64).nullish(),
 });
+
+/** A price list given for a contact must be one of this company's. */
+async function checkPriceList(db: D1Database, companyId: string, id: string | null | undefined) {
+  if (id && !(await first(db, `SELECT 1 FROM price_lists WHERE id = ? AND company_id = ?`, id, companyId))) throw badRequest("Unknown price list");
+}
 
 function validate(input: z.infer<typeof schema>, companyCountry: string) {
   if (input.currency && !isCurrency(input.currency)) throw badRequest("Unsupported currency");
@@ -104,15 +110,16 @@ contacts.post("/", async (c) => {
   requireKindWrite(c, input.kind);
   const company = c.get("company");
   validate(input, company.country);
+  await checkPriceList(c.env.DB, company.id, input.price_list_id);
   const id = newId();
   const limitMinor = input.credit_limit ? minor(input.credit_limit, currencyExponent(input.currency ?? company.base_currency), "credit limit") : null;
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `INSERT INTO contacts (id, company_id, kind, name, email, phone, tax_id, pan, state_code, country, billing_address, shipping_address,
-         currency, payment_terms_days, credit_limit, notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         currency, payment_terms_days, credit_limit, notes, price_list_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, input.kind, input.name, input.email || null, input.phone ?? null, input.tax_id?.toUpperCase() ?? null, input.pan ?? null,
       input.state_code ?? null, input.country ?? company.country, input.billing_address ?? null, input.shipping_address ?? null,
-      input.currency ?? null, input.payment_terms_days, limitMinor, input.notes ?? null),
+      input.currency ?? null, input.payment_terms_days, limitMinor, input.notes ?? null, input.price_list_id || null),
     audit(c, "contact.create", "contact", id, { name: input.name, kind: input.kind }),
   ]);
   return c.json({ id }, 201);
@@ -123,6 +130,7 @@ contacts.put("/:id", async (c) => {
   const company = c.get("company");
   const id = c.req.param("id");
   validate(input, company.country);
+  await checkPriceList(c.env.DB, company.id, input.price_list_id);
   const existing = await first<{ currency: string | null; kind: string }>(c.env.DB, `SELECT currency, kind FROM contacts WHERE id = ? AND company_id = ?`, id, company.id);
   if (!existing) throw notFound("Contact");
   requireKindWrite(c, existing.kind);
@@ -135,10 +143,12 @@ contacts.put("/:id", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `UPDATE contacts SET kind = ?, name = ?, email = ?, phone = ?, tax_id = ?, pan = ?, state_code = ?, country = ?, billing_address = ?,
-         shipping_address = ?, currency = ?, payment_terms_days = ?, credit_limit = ?, notes = ?, is_active = ? WHERE id = ? AND company_id = ?`,
+         shipping_address = ?, currency = ?, payment_terms_days = ?, credit_limit = ?, notes = ?, is_active = ?,
+         price_list_id = CASE WHEN ? THEN ? ELSE price_list_id END WHERE id = ? AND company_id = ?`,
       input.kind, input.name, input.email || null, input.phone ?? null, input.tax_id?.toUpperCase() ?? null, input.pan ?? null, input.state_code ?? null,
       input.country ?? company.country, input.billing_address ?? null, input.shipping_address ?? null, input.currency ?? null,
-      input.payment_terms_days, limitMinor, input.notes ?? null, input.is_active === false ? 0 : 1, id, company.id),
+      input.payment_terms_days, limitMinor, input.notes ?? null, input.is_active === false ? 0 : 1,
+      input.price_list_id === undefined ? 0 : 1, input.price_list_id || null, id, company.id),
     audit(c, "contact.update", "contact", id, { name: input.name }),
   ]);
   return c.json({ ok: true });

@@ -62,6 +62,8 @@ export const DOC_LABELS: Record<string, { one: string; many: string; prefix: str
   purchase_order: { one: "Purchase order", many: "Purchase orders", prefix: "PO" },
   bill: { one: "Bill", many: "Bills", prefix: "BILL" },
   debit_note: { one: "Debit note", many: "Debit notes", prefix: "DN" },
+  proforma: { one: "Proforma invoice", many: "Proforma invoices", prefix: "PRF" },
+  delivery_challan: { one: "Delivery challan", many: "Delivery challans", prefix: "DC" },
 };
 
-export const SALES_DOCS = ["quote", "sales_order", "invoice", "credit_note"];
+export const SALES_DOCS = ["quote", "sales_order", "invoice", "credit_note", "proforma", "delivery_challan"];

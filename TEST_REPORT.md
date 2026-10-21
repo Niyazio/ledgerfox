@@ -1,5 +1,25 @@
 # Test report
 
+## Feature-pack run (branch `feature/gst-import-share`, 21 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck` | ✅ 0 problems / 0 errors |
+| `npm test` (Miniflare D1) | ✅ **196 passed**, 1 skipped (opt-in performance benchmark), 26 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **196 passed**, 1 skipped |
+| `test/gstr.test.ts` | GSTR-1 sections (B2B, B2CL over ₹1 lakh inter-state, B2CS, CDNR/CDNUR, nil/exempt, HSN, documents issued) and GSTR-3B figures checked against hand calculations, per GSTIN |
+| `test/import.test.ts`, `test/sheet.test.ts` | customer/product import with loose headers, dry run, skipped duplicates, opening stock journal; a real `.xlsx` fixture read by the built-in reader |
+| `test/share.test.ts` | WhatsApp/email/UPI links and messages |
+| `test/sales-extras.test.ts` | proforma/challan series, credit-limit warning and block with audited override, recurring invoices (catch-up, claim-once), POS sale with change, discount and price locks |
+| `test/billing.test.ts` | plans, trial, limits (402), features, checkout/webhook signatures, paid-twice idempotency, invoice numbering, vendor admin hidden from others |
+| `test/totp.test.ts`, `test/twofactor.test.ts` | RFC 6238 test vectors; enable/disable, code and recovery-code sign-in, replay refused, owner-required 2FA, reset clears it |
+| `test/batches.test.ts` | batch required on bills; FEFO skips expired stock; choosing an expired batch refused; "short by X; Y more is expired"; invoice line records the batches sold; void restores the same batches; write-off of an expired batch; transfers keep batch and expiry; valuation still reconciles; switching tracking with stock refused; import with batch/expiry and spreadsheet dates |
+| `test/einvoice.test.ts` | address splitting; IRP JSON per line: UnitPrice × Qty = TotAmt, TotAmt − Discount = AssAmt, AssAmt + taxes = TotItemVal; totals + round-off = invoice total; IGST between states; credit note refers to its invoice; problems listed (B2C, missing address/PIN/HSN, draft); corrections apply to the file only; e-way bill outward and sales-return inward, vehicle-number check; IRN/QR/e-way bill number saved, validated, and refused for a viewer |
+| `test/pricelists.test.ts` | quantity-break and percentage rules; duplicate rows refused; customer linking kept when a form omits it; POS for billing staff at the list rate (₹1,110 for 12 + 2), own rate refused, walk-in pays the selling price; switched-off list stops applying; list in use cannot be deleted; staff cannot edit lists |
+| Browser checks (Chromium, desktop server) | price list made in the new tab → invoice line re-priced when the customer is chosen (₹40 → ₹36) and at the 12+ break (₹34); POS shows the list rate; e-invoice dialog flags the missing PIN → fixed → JSON downloaded → a portal-style response pasted fills IRN/Ack/QR → saved → A4 print shows IRN, Ack, e-way bill no. and the QR; POS sale ₹300 with ₹200 change and print; share links on phone and desktop; 2FA end to end; batch item form → bill with batch/expiry → "Batches & expiry" tab → dashboard alert → invoice view and A4/thermal print show the batch. Found and fixed: an unknown `?format=` on the print page showed a blank page |
+
+Not covered: a real Razorpay payment; uploading the GSTR, e-invoice or e-way bill JSON to the government portals (the IRN in the browser check was a made-up sample); camera scanning on a phone.
+
 ## Phase 2 run (branch `feature/multi-branch`, 21 Oct 2026)
 
 | Command | Result |

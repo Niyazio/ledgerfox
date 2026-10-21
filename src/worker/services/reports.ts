@@ -254,8 +254,8 @@ export async function aging(db: D1Database, company: CompanyRow, kind: "receivab
 
 /** Customer/supplier statement from the ledger (AR/AP control lines carrying the contact), base currency. */
 export async function contactStatement(db: D1Database, company: CompanyRow, contactId: string, from: string, to: string) {
-  const contact = await first<{ id: string; name: string; kind: string; billing_address: string | null; tax_id: string | null; email: string | null }>(
-    db, `SELECT id, name, kind, billing_address, tax_id, email FROM contacts WHERE id = ? AND company_id = ?`, contactId, company.id);
+  const contact = await first<{ id: string; name: string; kind: string; billing_address: string | null; tax_id: string | null; email: string | null; phone: string | null }>(
+    db, `SELECT id, name, kind, billing_address, tax_id, email, phone FROM contacts WHERE id = ? AND company_id = ?`, contactId, company.id);
   if (!contact) return null;
   const op = await first<{ b: number }>(db,
     `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
@@ -417,5 +417,41 @@ export async function dailyReport(db: D1Database, company: CompanyRow, from: str
       cash_in: total("cash_in"), cash_out: total("cash_out"),
     },
     notes: "Opening and closing balances are cash + bank accounts. Income and expenses come from posted ledger entries (accrual basis), so a sale on credit counts as income on the invoice date and as money received on the receipt date.",
+  };
+}
+
+/**
+ * Cash book / bank book: every receipt and payment through cash or bank accounts with a running balance.
+ * `accountId` limits it to one account; otherwise all cash (or all bank) accounts together.
+ */
+export async function cashBook(db: D1Database, company: CompanyRow, opts: { from: string; to: string; kind: "cash" | "bank" | "all"; accountId?: string | null; branchId?: string | null }) {
+  const accounts = await all<{ id: string; code: string; name: string; subtype: string }>(db,
+    `SELECT id, code, name, subtype FROM accounts WHERE company_id = ? AND is_group = 0 AND subtype IN ('cash','bank') ORDER BY code`, company.id);
+  const ids = accounts.filter((a) => (opts.accountId ? a.id === opts.accountId : opts.kind === "all" || a.subtype === opts.kind)).map((a) => a.id);
+  if (!ids.length) return { ...opts, accounts, opening: 0, closing: 0, receipts: 0, payments: 0, entries: [] };
+  const inList = ids.map(() => "?").join(",");
+  const lb = opts.branchId ? " AND l.branch_id = ?" : "";
+  const bp = opts.branchId ? [opts.branchId] : [];
+  const opening = (await first<{ b: number }>(db,
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date < ? AND l.account_id IN (${inList})${lb}`, company.id, opts.from, ...ids, ...bp))?.b ?? 0;
+  // One row per entry and account; "particulars" is the other side (customer/supplier, or the memo).
+  const rows = await all<{ entry_id: string; entry_date: string; entry_number: string; memo: string | null; source_type: string | null; source_id: string | null; account: string; debit: number; credit: number; party: string | null; doc_number: string | null; pay_number: string | null; exp_number: string | null }>(db,
+    `SELECT e.id AS entry_id, e.entry_date, e.entry_number, e.memo, e.source_type, e.source_id, a.name AS account, SUM(l.debit) AS debit, SUM(l.credit) AS credit,
+       (SELECT ct.name FROM journal_lines l2 JOIN contacts ct ON ct.id = l2.contact_id WHERE l2.entry_id = e.id AND l2.contact_id IS NOT NULL LIMIT 1) AS party,
+       d.number AS doc_number, p.number AS pay_number, x.number AS exp_number
+     FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id JOIN accounts a ON a.id = l.account_id
+     LEFT JOIN documents d ON d.id = e.source_id LEFT JOIN payments p ON p.id = e.source_id LEFT JOIN expenses x ON x.id = e.source_id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date BETWEEN ? AND ? AND l.account_id IN (${inList})${lb}
+     GROUP BY e.id, a.id ORDER BY e.entry_date, e.posted_at, e.entry_number LIMIT 10000`, company.id, opts.from, opts.to, ...ids, ...bp);
+  let running = opening;
+  const entries = rows.map((r) => {
+    running += r.debit - r.credit;
+    return { date: r.entry_date, voucher: r.pay_number ?? r.doc_number ?? r.exp_number ?? r.entry_number, entry_id: r.entry_id, source_type: r.source_type, source_id: r.source_id,
+      account: r.account, particulars: r.party ?? r.memo ?? "", receipt: r.debit > r.credit ? r.debit - r.credit : 0, payment: r.credit > r.debit ? r.credit - r.debit : 0, balance: running };
+  });
+  return {
+    ...opts, accounts, opening, closing: running,
+    receipts: entries.reduce((t, e) => t + e.receipt, 0), payments: entries.reduce((t, e) => t + e.payment, 0), entries, truncated: rows.length >= 10000,
   };
 }

@@ -56,7 +56,7 @@ payments.get("/:id", async (c) => {
   await access(c, c.req.param("id"), "view");
   const company = c.get("company");
   const p = await first(c.env.DB,
-    `SELECT p.*, ct.name AS contact_name, a.name AS account_name, je.entry_number AS journal_number
+    `SELECT p.*, ct.name AS contact_name, ct.phone AS contact_phone, ct.email AS contact_email, a.name AS account_name, je.entry_number AS journal_number
      FROM payments p JOIN contacts ct ON ct.id = p.contact_id JOIN accounts a ON a.id = p.account_id LEFT JOIN journal_entries je ON je.id = p.journal_entry_id
      WHERE p.id = ? AND p.company_id = ?`, c.req.param("id"), company.id);
   if (!p) throw notFound("Payment");
