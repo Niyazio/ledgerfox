@@ -33,6 +33,8 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Fixed assets: register, SLM/WDV, depreciation journals, disposal | ✅ Done | |
 | Reports: TB, P&L, BS, cash flow, GL, AR/AP ageing, statements, sales/purchases by party, expenses, inventory valuation, GST summary, budget vs actual | ✅ Done | CSV + print on all |
 | Dashboard | ✅ Done | All figures from the ledger |
+| Daily report (opening/closing cash + bank, income, expenses, received from customers, paid to suppliers, sales and purchases invoiced) for any date range, per branch; CSV and print/PDF | ✅ Done | |
+| From–to date filters with period presets and totals on invoices, bills, returns, receipts, payments and expenses; full filtered download (CSV) | ✅ Done | |
 | Rule-based insights | ✅ Done | Category suggestions, duplicate bills, anomalies, bank match, cash projection, P&L explanation |
 | Data export | ✅ Done | Per-company JSON (owner/admin); DB-level backup script |
 | Light/dark theme, responsive layout | ✅ Done | |

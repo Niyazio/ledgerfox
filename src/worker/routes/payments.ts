@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, first, todayIso } from "../lib/db";
 import { notFound } from "../lib/errors";
-import { body, isoDate, shortText, minor, rate, pageParams } from "../lib/validate";
+import { body, isoDate, shortText, minor, rate, pageParams, dateRange } from "../lib/validate";
 import { requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
 import type { Context } from "hono";
 import type { Permission } from "@shared/permissions";
@@ -40,13 +40,16 @@ payments.get("/", async (c) => {
   if (c.req.query("branch_id")) { where.push("p.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
   const contactId = c.req.query("contact_id");
   if (contactId) { where.push("p.contact_id = ?"); params.push(contactId); }
+  const dr = dateRange(c, "p.payment_date");
+  where.push(...dr.sql); params.push(...dr.params);
   const rows = await all(c.env.DB,
     `SELECT p.*, ct.name AS contact_name, a.name AS account_name,
        (SELECT COALESCE(SUM(amount),0) FROM allocations WHERE payment_id = p.id) AS allocated
      FROM payments p JOIN contacts ct ON ct.id = p.contact_id JOIN accounts a ON a.id = p.account_id
      WHERE ${where.join(" AND ")} ORDER BY p.payment_date DESC, p.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
-  const total = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM payments p WHERE ${where.join(" AND ")}`, ...params);
-  return c.json({ payments: rows, total: total?.n ?? 0 });
+  const total = await first<{ n: number; amount: number }>(c.env.DB,
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN p.status = 'posted' THEN p.amount_base END),0) AS amount FROM payments p WHERE ${where.join(" AND ")}`, ...params);
+  return c.json({ payments: rows, total: total?.n ?? 0, summary: { count: total?.n ?? 0, amount: total?.amount ?? 0 } });
 });
 
 payments.get("/:id", async (c) => {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { AppError, badRequest, conflict, notFound } from "../lib/errors";
-import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams } from "../lib/validate";
+import { body, isoDate, shortText, optId, minor, qty, rate, percentBp, pageParams, dateRange } from "../lib/validate";
 import { audit, changes, requirePerm, hasPerm, resolveBranch, assertBranchVisible, branchFilter } from "../lib/auth";
 import { docFamily, type Permission } from "@shared/permissions";
 import type { Context } from "hono";
@@ -127,13 +127,21 @@ documents.get("/", async (c) => {
   else if (status) { where.push("d.status = ?"); params.push(status); }
   if (contactId) { where.push("d.contact_id = ?"); params.push(contactId); }
   if (q) { where.push("(d.number LIKE ? OR d.reference LIKE ? OR ct.name LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  const dr = dateRange(c, "d.issue_date");
+  where.push(...dr.sql); params.push(...dr.params);
   const rows = await all(c.env.DB,
     `SELECT d.id, d.doc_type, d.number, d.issue_date, d.due_date, d.status, d.currency, d.total, d.total_base, d.amount_settled, d.reference, d.branch_id,
             d.contact_id, ct.name AS contact_name
      FROM documents d JOIN contacts ct ON ct.id = d.contact_id
      WHERE ${where.join(" AND ")} ORDER BY d.issue_date DESC, d.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
-  const total = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE ${where.join(" AND ")}`, ...params);
-  return c.json({ documents: rows, total: total?.n ?? 0 });
+  // Totals of everything matching the filters (not just this page), in base currency; drafts and voided excluded.
+  const total = await first<{ n: number; amount: number; settled: number; outstanding: number }>(c.env.DB,
+    `SELECT COUNT(*) AS n,
+       COALESCE(SUM(CASE WHEN d.status NOT IN ('draft','void') THEN d.total_base END),0) AS amount,
+       COALESCE(SUM(CASE WHEN d.status = 'posted' AND d.total > 0 THEN (d.total_base * d.amount_settled) / d.total END),0) AS settled,
+       COALESCE(SUM(CASE WHEN d.status = 'posted' AND d.total > 0 THEN (d.total_base * (d.total - d.amount_settled)) / d.total END),0) AS outstanding
+     FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE ${where.join(" AND ")}`, ...params);
+  return c.json({ documents: rows, total: total?.n ?? 0, summary: { count: total?.n ?? 0, amount: total?.amount ?? 0, settled: Math.round(total?.settled ?? 0), outstanding: Math.round(total?.outstanding ?? 0) } });
 });
 
 documents.get("/:id", async (c) => {

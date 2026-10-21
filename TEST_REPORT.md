@@ -9,6 +9,8 @@
 | `npm test` (Miniflare D1) | ✅ **158 passed**, 1 skipped (the opt-in performance benchmark), 14 files |
 | `npm run test:desktop` (Node SQLite) | ✅ **158 passed**, 1 skipped |
 | `test/phase2.test.ts` (15 tests) | one-time passwords unique and random; effective permissions in settings; billing staff limited to their branch with branch numbering (`BLR-INV-…`); lists/details/void of other branches → 404; billing cannot see bills, journals or purchase cost; scanner lookup by QR payload, barcode, code and SKU; duplicate barcode → 409; discount limit; purchase approval limit with self-approval refused; auditor read-only; inventory transfer records both branches and cannot start from another branch; owner customises and resets a role; daybook contents and scoping; record history with previous → new values; contact balances per branch |
+| `test/daily.test.ts` | hand-computed daily report (opening ₹10,000 → closing ₹10,150 with income, expenses, received, paid per day), agreement with the bank and cash ledgers, date-filtered list totals |
+| Pop-up form typing bug | reproduced in Chromium on the old code (the dialog closed while typing a name), fixed, re-checked |
 | `test/barcode.test.ts` | Code 128 symbol widths, start/stop patterns, mod-103 checksum, invalid characters |
 | One-time password generator | 2,000 generated: all 3×5 characters from the unambiguous alphabet, all distinct (this test caught a real bug: the alphabet had 54 characters, not 55, so a character could be dropped) |
 | Browser e2e against the desktop server | ✅ passed (now reads the random one-time password from the sign-in page) |

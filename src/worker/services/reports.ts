@@ -339,3 +339,83 @@ export async function budgetVsActual(db: D1Database, company: CompanyRow, budget
   });
   return { budget: b, rows };
 }
+
+export interface DailyRow {
+  date: string;
+  opening: number;            // cash + bank at the start of the day
+  income: number;             // income accounts (sales and other income), net of returns
+  expenses: number;           // expense accounts (including cost of goods sold)
+  sales_invoiced: number;     // invoices issued that day less credit notes
+  purchases_billed: number;   // supplier bills that day less debit notes
+  received: number;           // receipts from customers
+  paid: number;               // payments to suppliers
+  cash_in: number;            // every increase in cash and bank (receipts, cash sales, capital, …)
+  cash_out: number;           // every decrease (supplier payments, cash expenses, salaries, …)
+  closing: number;            // opening + cash_in − cash_out
+}
+
+/**
+ * Day-by-day summary for a date range (at most 366 days): cash & bank opening/closing, income and expenses from the
+ * ledger, sales and purchases invoiced, money received from customers and paid to suppliers. Base currency; optional branch.
+ */
+export async function dailyReport(db: D1Database, company: CompanyRow, from: string, to: string, branchId: string | null) {
+  const lb = branchId ? " AND l.branch_id = ?" : "";
+  const bp = branchId ? [branchId] : [];
+  const cashAccounts = `SELECT id FROM accounts WHERE company_id = ? AND subtype IN ('cash','bank')`;
+  const opening = (await first<{ b: number }>(db,
+    `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+     WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date < ?${lb} AND l.account_id IN (${cashAccounts})`, company.id, from, ...bp, company.id))?.b ?? 0;
+  const ledger = await all<{ day: string; type: string; subtype: string; debit: number; credit: number }>(db,
+    `SELECT s.day, a.type, a.subtype, SUM(s.debit) AS debit, SUM(s.credit) AS credit
+     FROM (SELECT e.entry_date AS day, l.account_id, SUM(l.debit) AS debit, SUM(l.credit) AS credit
+           FROM journal_entries e JOIN journal_lines l ON l.entry_id = e.id
+           WHERE e.company_id = ? AND e.status = 'posted' AND e.entry_date BETWEEN ? AND ?${lb}
+           GROUP BY e.entry_date, l.account_id) s
+     JOIN accounts a ON a.id = s.account_id
+     WHERE a.type IN ('income','expense') OR a.subtype IN ('cash','bank')
+     GROUP BY s.day, a.type, a.subtype`, company.id, from, to, ...bp);
+  const pays = await all<{ day: string; direction: string; amount: number }>(db,
+    `SELECT payment_date AS day, direction, SUM(amount_base) AS amount FROM payments
+     WHERE company_id = ? AND status = 'posted' AND payment_date BETWEEN ? AND ?${branchId ? " AND branch_id = ?" : ""}
+     GROUP BY payment_date, direction`, company.id, from, to, ...bp);
+  const docs = await all<{ day: string; doc_type: string; amount: number }>(db,
+    `SELECT issue_date AS day, doc_type, SUM(total_base) AS amount FROM documents
+     WHERE company_id = ? AND status = 'posted' AND doc_type IN ('invoice','credit_note','bill','debit_note') AND issue_date BETWEEN ? AND ?${branchId ? " AND branch_id = ?" : ""}
+     GROUP BY issue_date, doc_type`, company.id, from, to, ...bp);
+  const rows: DailyRow[] = [];
+  let running = opening;
+  for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = d.toISOString().slice(0, 10);
+    const lg = ledger.filter((r) => r.day === day);
+    const sum = (f: (r: (typeof lg)[number]) => number) => lg.reduce((t, r) => t + f(r), 0);
+    const cash = lg.filter((r) => r.subtype === "cash" || r.subtype === "bank");
+    const doc = (t: string) => docs.find((x) => x.day === day && x.doc_type === t)?.amount ?? 0;
+    const row: DailyRow = {
+      date: day,
+      opening: running,
+      income: sum((r) => (r.type === "income" ? r.credit - r.debit : 0)),
+      expenses: sum((r) => (r.type === "expense" ? r.debit - r.credit : 0)),
+      sales_invoiced: doc("invoice") - doc("credit_note"),
+      purchases_billed: doc("bill") - doc("debit_note"),
+      received: pays.find((p) => p.day === day && p.direction === "in")?.amount ?? 0,
+      paid: pays.find((p) => p.day === day && p.direction === "out")?.amount ?? 0,
+      cash_in: cash.reduce((t, r) => t + r.debit, 0),
+      cash_out: cash.reduce((t, r) => t + r.credit, 0),
+      closing: 0,
+    };
+    row.closing = row.opening + row.cash_in - row.cash_out;
+    running = row.closing;
+    rows.push(row);
+  }
+  const total = (k: keyof DailyRow) => rows.reduce((t, r) => t + (r[k] as number), 0);
+  return {
+    from, to, branch_id: branchId,
+    rows,
+    totals: {
+      opening, closing: running, income: total("income"), expenses: total("expenses"), profit: total("income") - total("expenses"),
+      sales_invoiced: total("sales_invoiced"), purchases_billed: total("purchases_billed"), received: total("received"), paid: total("paid"),
+      cash_in: total("cash_in"), cash_out: total("cash_out"),
+    },
+    notes: "Opening and closing balances are cash + bank accounts. Income and expenses come from posted ledger entries (accrual basis), so a sale on credit counts as income on the invoice date and as money received on the receipt date.",
+  };
+}

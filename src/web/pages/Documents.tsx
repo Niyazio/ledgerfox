@@ -14,6 +14,7 @@ import { CURRENCIES } from "@shared/currencies";
 import { downloadCsv } from "../lib/csv";
 import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
+import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
 import { ContactForm } from "./Contacts";
 
@@ -23,29 +24,47 @@ export function DocumentList() {
   const { docType = "invoice" } = useParams();
   const { path, money, id, settings, can, branchQuery } = useCompany();
   const fam = docFamily(docType);
-  const [params, setParams] = useSearchParams();
+  const dates = useDateParams();
+  const { params, setParams } = dates;
   const status = params.get("status") ?? "";
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const label = DOC_LABELS[docType];
-  const { data, loading, error } = useApi<{ documents: any[]; total: number }>(path(`/documents?type=${docType}&limit=50&offset=${offset}&status=${status}&q=${encodeURIComponent(q)}${branchQuery}`));
+  const filters = `/documents?type=${docType}&status=${status}&q=${encodeURIComponent(q)}${branchQuery}${dates.query}`;
+  const { data, loading, error } = useApi<{ documents: any[]; total: number; summary?: { count: number; amount: number; settled: number; outstanding: number } }>(path(`${filters}&limit=50&offset=${offset}`));
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows = await fetchAllRows<any>(path(filters), "documents");
+      downloadCsv(`${label.many.toLowerCase()}${dates.from ? `-${dates.from}` : ""}${dates.to ? `-to-${dates.to}` : ""}.csv`, ["Date", "Number", "Contact", "Status", "Currency", "Total", "Balance", "Due"],
+        rows.map((d) => [d.issue_date, d.number ?? "Draft", d.contact_name, d.status, d.currency, toInput(d.total, d.currency), d.status === "posted" ? toInput(d.total - d.amount_settled, d.currency) : "", d.due_date]));
+    } finally { setExporting(false); }
+  };
   const settles = docType === "invoice" || docType === "bill";
+  const sales = SALES_DOCS.includes(docType);
   const df = settings?.company.date_format;
   return (
     <>
       <PageHeader title={label.many} actions={<>
-        {data && <Button variant="secondary" onClick={() => downloadCsv(`${label.many.toLowerCase()}.csv`, ["Date", "Number", "Contact", "Status", "Currency", "Total", "Balance", "Due"], data.documents.map((d) => [d.issue_date, d.number ?? "Draft", d.contact_name, d.status, d.currency, toInput(d.total, d.currency), d.status === "posted" ? toInput(d.total - d.amount_settled, d.currency) : "", d.due_date]))}><Download className="h-4 w-4" />CSV</Button>}
+        {data && <Button variant="secondary" loading={exporting} onClick={exportCsv} title="Download every row matching the filters (opens in Excel)"><Download className="h-4 w-4" />Download CSV</Button>}
         {can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}><Plus className="h-4 w-4" />New {label.one.toLowerCase()}</LinkButton>}
       </>} />
       <Card padded={false}>
-        <div className="flex flex-wrap gap-3 border-b border-[var(--border)] p-3">
+        <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
+          <DateRangeFilter from={dates.from} to={dates.to} onChange={(f, t) => { dates.set(f, t); setOffset(0); }} />
           <Input placeholder="Search number, reference, contact…" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} className="max-w-xs" aria-label="Search" />
-          <Select className="max-w-[12rem]" value={status} onChange={(e) => { setParams(e.target.value ? { status: e.target.value } : {}); setOffset(0); }} aria-label="Status filter">
+          <Select className="max-w-[12rem]" value={status} onChange={(e) => { const n = new URLSearchParams(params); if (e.target.value) n.set("status", e.target.value); else n.delete("status"); setParams(n, { replace: true }); setOffset(0); }} aria-label="Status filter">
             <option value="">All</option><option value="draft">Draft</option>
             {settles ? <><option value="outstanding">Outstanding</option><option value="overdue">Overdue</option><option value="posted">Posted</option></> : <><option value="posted">Posted</option><option value="open">Open</option><option value="converted">Converted</option></>}
             <option value="void">Void</option>
           </Select>
         </div>
+        {data?.summary && <SummaryBar items={[
+          [label.many, String(data.summary.count)],
+          ["Total", money(data.summary.amount)],
+          ...(settles ? [[sales ? "Received" : "Paid", money(data.summary.settled)], ["Balance due", money(data.summary.outstanding)]] as [string, string][] : []),
+        ]} />}
         {error && <Alert className="m-3">{error}</Alert>}
         {loading && !data ? <Spinner /> : data && !data.documents.length ? (
           <EmptyState title={`No ${label.many.toLowerCase()}`} action={can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}>Create {label.one.toLowerCase()}</LinkButton>} />

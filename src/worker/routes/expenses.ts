@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../env";
 import { all, batch, bumpSequence, first, seqNumberExpr, stmt, nowIso, todayIso } from "../lib/db";
 import { badRequest, conflict, forbidden, notFound, unprocessable } from "../lib/errors";
-import { body, isoDate, optId, minor, rate, pageParams, reqText } from "../lib/validate";
+import { body, isoDate, optId, minor, rate, pageParams, reqText, dateRange } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { assertBranchVisible, audit, changes, branchFilter, hasPerm, requireAnyPerm, requirePerm, resolveBranch } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
@@ -87,14 +87,17 @@ expenses.get("/", async (c) => {
   const bf = branchFilter(c, "e.branch_id");
   if (bf.sql) { where.push(bf.sql.replace(/^ AND /, "")); params.push(...bf.params); }
   if (c.req.query("branch_id")) { where.push("e.branch_id = ?"); params.push(resolveBranch(c, c.req.query("branch_id"))!); }
+  const dr = dateRange(c, "e.expense_date");
+  where.push(...dr.sql); params.push(...dr.params);
   const rows = await all(c.env.DB,
     `SELECT e.*, a.name AS category_name, pa.name AS paid_from_name, ct.name AS contact_name, u.name AS created_by_name,
        (SELECT COUNT(*) FROM attachments at WHERE at.entity_type = 'expense' AND at.entity_id = e.id) AS attachment_count
      FROM expenses e JOIN accounts a ON a.id = e.category_account_id JOIN accounts pa ON pa.id = e.paid_from_account_id
      LEFT JOIN contacts ct ON ct.id = e.contact_id LEFT JOIN users u ON u.id = e.created_by
      WHERE ${where.join(" AND ")} ORDER BY e.expense_date DESC, e.created_at DESC LIMIT ? OFFSET ?`, ...params, limit, offset);
-  const total = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM expenses e WHERE ${where.join(" AND ")}`, ...params);
-  return c.json({ expenses: rows, total: total?.n ?? 0 });
+  const total = await first<{ n: number; amount: number }>(c.env.DB,
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.status = 'posted' THEN (SELECT je.total FROM journal_entries je WHERE je.id = e.journal_entry_id) END),0) AS amount FROM expenses e WHERE ${where.join(" AND ")}`, ...params);
+  return c.json({ expenses: rows, total: total?.n ?? 0, summary: { count: total?.n ?? 0, amount: Math.round(total?.amount ?? 0) } });
 });
 
 expenses.get("/suggest-category", async (c) => {
