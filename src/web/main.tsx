@@ -29,6 +29,7 @@ const PaymentView = lazy(() => named(import("./pages/Payments"), "PaymentView"))
 const Expenses = lazy(() => import("./pages/Expenses"));
 const Daybook = lazy(() => import("./pages/Daybook"));
 const Labels = lazy(() => import("./pages/Labels"));
+const Production = lazy(() => import("./pages/Production"));
 const GstReturns = lazy(() => import("./pages/GstReturns"));
 const ImportPage = lazy(() => import("./pages/Import"));
 const Recurring = lazy(() => import("./pages/Recurring"));
@@ -93,6 +94,7 @@ function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="daybook" element={<Daybook />} />
         <Route path="labels" element={<Labels />} />
+        <Route path="production" element={<Production />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="recurring" element={<Recurring />} />
         <Route path="pos" element={<Pos />} />

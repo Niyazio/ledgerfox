@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
-  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
@@ -92,6 +92,7 @@ const NAV: NavGroup[] = [
     { to: "inventory", label: "Products & stock", icon: <Package className="h-4 w-4" />, perm: "inventory.view" },
     { to: "inventory?tab=transfers", label: "Stock transfers", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "inventory.transfer" },
     { to: "labels", label: "Product labels / QR", icon: <QrCode className="h-4 w-4" />, perm: "labels.print" },
+    { to: "production", label: "Manufacturing", icon: <Factory className="h-4 w-4" />, perm: "inventory.view" },
   ] },
   { label: "Accounting", items: [
     { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
