@@ -62,3 +62,49 @@ Reproduce: `PERF=1 PERF_INVOICES=5000 PERF_ITEMS=3000 LEDGERFOX_TEST_DB=sqlite n
    inventory; branch stock transfers recording both branches.
 6. Accounts: random one-time passwords for new staff and for the first desktop start.
 7. Performance fixes, measured again with the same script.
+
+## Results (implemented on `feature/multi-branch`)
+
+| Brief item | Delivered |
+|---|---|
+| Multi-branch, owner/branch access, server-validated branch selector | `member_branches` + `all_branches`; `resolveBranch` / `branchFilter` / `assertBranchVisible` on documents, payments, expenses, journals, stock, contact balances, daybook and branch-aware reports; header selector (company, branch, FY, role) |
+| Seven default roles, fine-grained customisable permissions | 39 permissions; owner-only role editor (stored as differences from defaults; Owner locked) |
+| Secure temporary passwords | Random per user and per reset, shown once, hashed, forced change; desktop admin/admin replaced by a random one-time password |
+| Daybook and audit trail | Daybook with created/modified/approved/posted/cancelled by and time; record history panel with previous → new values |
+| Approvals | Purchase approval limit (request/approve, no self-approval), billing discount limit |
+| QR / barcode | Auto product codes, barcodes, labels (QR + Code 128, roll or A4), scanner in invoices/bills, inventory and labels (USB scanner, camera where supported, manual) |
+| Branch transfers | `stock_transfers` records both warehouses and branches |
+| Sidebar by permission | Modules grouped and shown only when the member's permissions allow; staff home for roles without the financial dashboard |
+| Migrations preserving data | 0006 (table rebuilds copy every row) and 0007 (indexes only); verified on a v0.3.0 data file |
+
+### Performance after the fixes
+
+Same script and data as the baseline (desktop engine, 5,000 posted invoices ≈ 25,000 journal lines, 3,000 items).
+Median of 5 requests per endpoint; three separate runs shown as a range, median of the three in bold.
+"Before" is the run on this branch just before the fixes (the original audit baseline is above).
+
+| Endpoint | Before (ms) | After (ms) |
+|---|---|---|
+| /reports/dashboard | 60.7 | 30.7–34.3 (**31.8**) |
+| /contacts (500 customers with balances) | 41.2 | 3.8–6.9 (**5.8**) |
+| /reports/trial-balance | 45.7 | 12.5–14.7 (**13.6**) |
+| /reports/profit-loss | 53.7 | 12.0–13.2 (**12.9**) |
+| /reports/balance-sheet | 64.7 | 22.5–43.4 (**23.9**) |
+| /reports/aging/receivable | 84.6 | 59.8–61.9 (**60.1**) |
+| /reports/gst-summary | 77.6 | 31.6–34.9 (**33.2**) |
+| /documents list / search | 6.0 / 7.3 | 6.0–7.2 / 7.2–7.6 (unchanged) |
+| /items (500) | 9.9 | 10.0–15.4 (unchanged) |
+| /journals | 5.8 | 2.1–2.4 |
+
+What changed: covering indexes `idx_je_posted_cover` and `idx_jl_entry_cover` let ledger sums read only indexes;
+report queries sum per account first and attach account details afterwards; subtype totals use
+`account_id IN (…)`; contact balances are summed once and joined instead of a per-contact scan (the planner had
+been scanning all documents per contact); ageing filters settled documents in SQL. Ageing is still the slowest
+endpoint because it returns every open document (5,000 rows in this test).
+These are desktop-engine timings on this machine; Cloudflare D1 latency will differ and was not measured.
+
+### Not done / limits
+
+- Branch-wise cash flow, general ledger, ageing, GST summary and inventory valuation (refused for branch-limited users).
+- Payroll runs are company-wide (no branch on employees yet).
+- Live D1: migrations 0006 and 0007 are **not applied**; nothing deployed or merged.

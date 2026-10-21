@@ -70,6 +70,14 @@ Posted headers/lines are immutable by trigger; the only permitted change is link
 - Every query filters by `company_id`; composite foreign keys `(company_id, id)` make cross-company references
   impossible at the database level (tests insert cross-tenant rows directly and confirm rejection).
 - D1/SQLite has no row-level security; isolation is enforced in trusted server code plus these constraints.
+- **Permissions (phase 2):** `src/shared/permissions.ts` defines 39 permissions and the defaults of seven roles.
+  `requireCompany` resolves the caller's *effective* permissions (role defaults plus the organisation's overrides in
+  `role_permissions`; Owner is never reduced) and branch scope, and stores them on the request. Routes call
+  `requirePerm` / `requireAnyPerm`; nothing trusts the UI.
+- **Branch scope:** members with `memberships.all_branches = 0` may use only the branches in `member_branches`.
+  `resolveBranch` validates a branch chosen by the client (403 if not allowed; defaults to the member's first
+  branch), `branchFilter` adds `branch_id IN (…)` to list queries, and `assertBranchVisible` returns 404 for records
+  of other branches. Journal lines inherit their entry's branch so branch reports read the ledger directly.
 
 ## Tax rules
 

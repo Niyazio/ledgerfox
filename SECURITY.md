@@ -9,7 +9,7 @@
 | Account recovery | No email dependency: 8 one-time recovery codes (stored hashed) and owner/admin-issued one-time reset links (24 h, hashed; refused for users who belong to other organisations). |
 | CSRF | Mutations require `X-Requested-With: ledgerfox` (forces a CORS preflight that is never approved cross-origin) and a same-host `Origin` when present; plus `SameSite=Lax`. |
 | Tenant isolation | Every company route resolves the company **through the caller's membership**; non-members get 404. All queries filter by `company_id`; composite foreign keys reject cross-company references in the database. Tested by direct cross-tenant inserts. D1 has no row-level security, so isolation relies on server code + constraints. |
-| Authorisation | Five roles with a permission matrix (`src/shared/permissions.ts`), checked server-side on every mutation; admins cannot create admins; segregation of duties for expense approval. |
+| Authorisation | Seven roles and 39 permissions (`src/shared/permissions.ts`), resolved per request with the organisation's customisations and checked server-side on reads and writes; members limited to branches cannot list, open, edit or report on other branches' records; admins cannot create admins; only the owner customises roles; segregation of duties for expense and purchase approval. |
 | Ledger integrity | Database triggers enforce balance, period locks, immutability of posted data, append-only audit log, allocation limits, non-negative stock. |
 | Input validation | Zod schemas on every body; decimal parsing without floats; GSTIN check digit; date validation; size limits. |
 | SQL injection | All queries are parameterised (`prepare().bind()`); dynamic SQL uses fixed table/column whitelists only. Tested. |
@@ -64,10 +64,11 @@
 
 ## Features added in v0.2
 
-- **Default desktop sign-in (admin / admin):** seeded only in the desktop edition, flagged `must_change_password`;
-  every API except changing the password returns `PASSWORD_CHANGE_REQUIRED` until it is changed; it is refused from
-  any address other than the computer itself; "admin" cannot be reused as the new password. The cloud edition has no
-  default account. Staff accounts created by an owner also start with a temporary password that must be changed.
+- **Desktop first sign-in:** (v0.2 used admin / admin; replaced in phase 2) the `admin` account gets a random
+  one-time password at start-up, kept only in memory and shown only to requests from the computer itself (sign-in
+  page, and the console for the headless server). Existing installs that never changed it get a new random one.
+  It is flagged `must_change_password`; every API except changing the password returns `PASSWORD_CHANGE_REQUIRED`;
+  it is refused from any other address. The cloud edition has no default account.
 - **Usernames:** case-insensitive and unique; login accepts username or email with the same rate limits.
 - **QR verification:** 128-bit random tokens per document/payment/payslip, created only by members of that company;
   the public lookup is rate-limited and returns number, date, amount, status, issuer and party name only. Payslip
@@ -100,6 +101,22 @@
   in `company_branding` (not loaded on ordinary requests); shown via `img-src data:`.
 - **Auto-update:** electron-updater downloads from the project's GitHub Releases over HTTPS and checks the published
   SHA-512; installers are unsigned, so publisher identity is not verified by the OS.
+
+## Phase 2 (multi-branch, roles)
+
+- **Staff passwords:** the server generates a different random one-time password for every new user and for each
+  reset (15 characters from a 54-character alphabet without look-alikes, ≈ 86 bits, unbiased rejection sampling).
+  It is returned once to the owner/admin, stored only as a PBKDF2 hash, must be changed at first sign-in, and a reset
+  signs the user out everywhere. Owners/admins never choose or see a member's real password.
+- **Permissions** are enforced on the server for reads as well as writes (e.g. billing staff get 403 on bills and
+  journals; purchase cost and stock value fields are removed from responses for members without cost access).
+- **Branch isolation:** branch IDs sent by the browser are validated against the member's assignments; other
+  branches' records answer 404; contact balances and daybook include only visible branches.
+- **Approvals:** purchases above the limit cannot be posted without an approval by someone else with
+  `purchase.approve` (self-approval refused unless owner); discounts above the limit need `sales.discount_any`.
+- **Audit trail:** updates to documents, journals, expenses and items record previous → new values; the record
+  history shows IP addresses only to members with `audit.read`.
+- **QR codes on product labels** contain only `LF1|P|<product code>` — no prices, costs or other business data.
 
 ## Reporting
 

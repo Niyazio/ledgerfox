@@ -1,5 +1,27 @@
 # Test report
 
+## Phase 2 run (branch `feature/multi-branch`, 21 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint` | ✅ 0 problems |
+| `npm run typecheck` | ✅ 0 errors |
+| `npm test` (Miniflare D1) | ✅ **158 passed**, 1 skipped (the opt-in performance benchmark), 14 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **158 passed**, 1 skipped |
+| `test/phase2.test.ts` (15 tests) | one-time passwords unique and random; effective permissions in settings; billing staff limited to their branch with branch numbering (`BLR-INV-…`); lists/details/void of other branches → 404; billing cannot see bills, journals or purchase cost; scanner lookup by QR payload, barcode, code and SKU; duplicate barcode → 409; discount limit; purchase approval limit with self-approval refused; auditor read-only; inventory transfer records both branches and cannot start from another branch; owner customises and resets a role; daybook contents and scoping; record history with previous → new values; contact balances per branch |
+| `test/barcode.test.ts` | Code 128 symbol widths, start/stop patterns, mod-103 checksum, invalid characters |
+| One-time password generator | 2,000 generated: all 3×5 characters from the unambiguous alphabet, all distinct (this test caught a real bug: the alphabet had 54 characters, not 55, so a character could be dropped) |
+| Browser e2e against the desktop server | ✅ passed (now reads the random one-time password from the sign-in page) |
+| Phase 2 browser walkthrough (Chromium) | ✅ owner adds a billing user → one-time password shown once → user signs in, must change password → staff home and sidebar show only sales modules → branch selector locked to the assigned branch → scanning the same barcode twice adds one line with quantity 2 → daybook and history panel → labels render QR + Code 128 → owner header shows branch, FY and role |
+| Upgrade of a v0.3.0 data file (created with the released code) | ✅ migrations 0006 + 0007 applied; identical row counts and ledger totals; owner signs in; existing items get codes `P000001…`; existing members keep all-branch access |
+| Performance (5,000 invoices, 3,000 items, desktop engine) | see `docs/PHASE2_AUDIT.md` — measured before and after |
+
+Not covered in phase 2: camera scanning on a real device (the browser API is feature-detected; only USB/keyboard entry
+was exercised), printing labels on a physical label printer, and the migrations on the live Cloudflare D1 database
+(not applied — awaiting approval).
+
+## Earlier run
+
 Run date: 20 Oct 2026 · Node 22.22 · all commands run in this repository.
 
 | Command | Result |
