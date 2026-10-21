@@ -16,6 +16,7 @@ import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
 import { ShareButton } from "../components/Share";
 import { GstEDocButtons } from "../components/GstEDocs";
+import { listPrice, type PriceBreak, type PriceList } from "@shared/pricing";
 import { RepeatButton } from "./Recurring";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
@@ -97,7 +98,7 @@ export function DocumentList() {
   );
 }
 
-interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string; batch_no: string; expiry_date: string }
+interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string; batch_no: string; expiry_date: string; auto_price?: boolean }
 let lk = 0;
 const blankLine = (): Line => ({ key: ++lk, item_id: "", description: "", hsn_sac: "", quantity: "1", unit_price: "", discount_percent: "", account_id: "", tax_code_id: "", department_id: "", project_id: "", cost_centre_id: "", batch_no: "", expiry_date: "" });
 
@@ -123,6 +124,21 @@ export function DocumentForm() {
   const items = useApi<{ items: any[] }>(path("/items?active=1&limit=500"));
   const existing = useApi<any>(docId ? path(`/documents/${docId}`) : null);
   const contactRes = useApi<any>(contactId ? path(`/contacts/${contactId}`) : null);
+  // Customers on a price list get its rates (quantity breaks follow the quantity until the rate is typed by hand).
+  const pricing = useApi<{ list: PriceList | null; breaks: PriceBreak[] }>(sales && contactId ? path(`/price-lists/for-contact/${contactId}`) : null);
+  const rateFor = (it: any, qtyText: string) => {
+    const base = (sales ? it.sale_price : it.purchase_price) ?? 0;
+    if (!sales) return base;
+    return listPrice(base, pricing.data?.list ?? null, pricing.data?.breaks ?? [], it.id, tryParse(() => parseQty(qtyText || "1"), 1000));
+  };
+  useEffect(() => {
+    if (!pricing.data) return;
+    setLines((ls) => ls.map((l) => {
+      const it = l.auto_price && l.item_id ? items.data?.items.find((x) => x.id === l.item_id) : null;
+      return it ? { ...l, unit_price: toInput(rateFor(it, l.quantity), base) } : l;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricing.data]);
   useEffect(() => { if (contactRes.data) setContact(contactRes.data.contact); }, [contactRes.data]);
   useEffect(() => {
     const d = existing.data;
@@ -159,13 +175,18 @@ export function DocumentForm() {
   const pickItem = (key: number, itemId: string) => {
     const it = items.data?.items.find((x) => x.id === itemId);
     if (!it) return setLine(key, { item_id: "" });
-    setLine(key, { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput((sales ? it.sale_price : it.purchase_price) ?? 0, base), tax_code_id: it.tax_code_id ?? "" });
+    const qtyText = lines.find((l) => l.key === key)?.quantity ?? "1";
+    setLine(key, { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput(rateFor(it, qtyText), base), tax_code_id: it.tax_code_id ?? "", auto_price: true });
   };
   // A scanned product adds a line, or one more of it if it is already on the document.
   const addScanned = (it: any) => setLines((ls) => {
     const same = ls.find((l) => l.item_id === it.id);
-    if (same) return ls.map((l) => (l.key === same.key ? { ...l, quantity: String((parseFloat(l.quantity) || 0) + 1) } : l));
-    const filled = { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput((sales ? it.sale_price : it.purchase_price) ?? 0, base), tax_code_id: it.tax_code_id ?? "" };
+    if (same) return ls.map((l) => {
+      if (l.key !== same.key) return l;
+      const quantity = String((parseFloat(l.quantity) || 0) + 1);
+      return { ...l, quantity, ...(l.auto_price ? { unit_price: toInput(rateFor(it, quantity), base) } : {}) };
+    });
+    const filled = { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput(rateFor(it, "1"), base), tax_code_id: it.tax_code_id ?? "", auto_price: true };
     const empty = ls.find((l) => !l.description.trim() && !l.item_id);
     return empty ? ls.map((l) => (l.key === empty.key ? { ...l, ...filled } : l)) : [...ls, { ...blankLine(), ...filled }];
   });
@@ -251,8 +272,11 @@ export function DocumentForm() {
                     </div>
                   </td>
                   {showHsn && <td><Input value={l.hsn_sac} maxLength={8} onChange={(e) => setLine(l.key, { hsn_sac: e.target.value })} aria-label="HSN/SAC" /></td>}
-                  <td><Input inputMode="decimal" className="num" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} aria-label="Quantity" /></td>
-                  <td><MoneyInput value={l.unit_price} onChange={(e) => setLine(l.key, { unit_price: e.target.value })} aria-label="Rate" /></td>
+                  <td><Input inputMode="decimal" className="num" value={l.quantity} onChange={(e) => {
+                    const it = l.auto_price ? items.data?.items.find((x) => x.id === l.item_id) : null;
+                    setLine(l.key, { quantity: e.target.value, ...(it ? { unit_price: toInput(rateFor(it, e.target.value), base) } : {}) });
+                  }} aria-label="Quantity" /></td>
+                  <td><MoneyInput value={l.unit_price} onChange={(e) => setLine(l.key, { unit_price: e.target.value, auto_price: false })} aria-label="Rate" /></td>
                   <td><Input inputMode="decimal" className="num" value={l.discount_percent} onChange={(e) => setLine(l.key, { discount_percent: e.target.value })} aria-label="Discount percent" /></td>
                   <td><TaxSelect value={l.tax_code_id} onChange={(v) => setLine(l.key, { tax_code_id: v })} /></td>
                   <td className="num pt-4">{money(preview.lines[i]?.line_total ?? 0)}</td>

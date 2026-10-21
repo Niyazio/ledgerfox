@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { listPrice } from "@shared/pricing";
+import { contactPricing } from "./priceLists";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
@@ -56,14 +58,17 @@ pos.post("/sale", async (c) => {
     `SELECT id, name, hsn_sac, sale_price, tax_code_id, is_active, income_account_id FROM items WHERE company_id = ? AND id IN (${ids.map(() => "?").join(",")})`, company.id, ...ids);
   const byId = new Map(items.map((i) => [i.id, i]));
   const changePrice = hasPerm(c, "sales.discount_any");
+  // The customer's price list sets the counter rate; staff without discount rights may only use that rate.
+  const pricing = await contactPricing(c.env.DB, company.id, input.contact_id);
   const limit = company.billing_discount_limit_bp;
   const lines = input.lines.map((l, n) => {
     const it = byId.get(l.item_id);
     if (!it || !it.is_active) throw badRequest(`Line ${n + 1}: product not found or inactive`);
     const q = qty(l.quantity, `Line ${n + 1} quantity`);
     if (q <= 0) throw badRequest(`Line ${n + 1}: quantity must be positive`);
-    const price = l.unit_price === null || l.unit_price === undefined || l.unit_price === "" ? it.sale_price : minor(l.unit_price, exp, `Line ${n + 1} price`);
-    if (price !== it.sale_price && !changePrice) throw new AppError(403, "PRICE_LOCKED", `${it.name}: you cannot change the selling price`);
+    const listed = listPrice(it.sale_price, pricing.list, pricing.breaks, it.id, q);
+    const price = l.unit_price === null || l.unit_price === undefined || l.unit_price === "" ? listed : minor(l.unit_price, exp, `Line ${n + 1} price`);
+    if (price !== listed && !changePrice) throw new AppError(403, "PRICE_LOCKED", `${it.name}: you cannot change the selling price`);
     const disc = percentBp(l.discount_percent ?? 0, `Line ${n + 1} discount`);
     if (disc < 0 || disc > 10000) throw badRequest(`Line ${n + 1}: discount must be 0–100%`);
     if (limit !== null && limit !== undefined && disc > limit && !hasPerm(c, "sales.discount_any")) throw new AppError(403, "DISCOUNT_LIMIT", `Discounts above ${limit / 100}% need a manager's approval`);

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, QrCode } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
 import { AccountSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, qty, today, toInput } from "../lib/format";
@@ -91,7 +91,83 @@ function StockModal({ kind, items, onClose }: { kind: "adjust" | "transfer"; ite
   );
 }
 
-type InvTab = "items" | "stock" | "batches" | "movements" | "transfers" | "warehouses";
+type InvTab = "items" | "stock" | "batches" | "prices" | "movements" | "transfers" | "warehouses";
+
+/** Price lists: a % on selling prices, plus own prices per product with optional quantity breaks. */
+function PriceListsTab({ items }: { items: any[] }) {
+  const { path, money, can, settings } = useCompany();
+  const toast = useToast();
+  const base = settings?.company.base_currency ?? "INR";
+  const lists = useApi<{ price_lists: any[] }>(path("/price-lists"));
+  const [sel, setSel] = useState<string | null>(null);
+  const [head, setHead] = useState({ name: "", adjust_percent: "" });
+  const detail = useApi<{ price_list: any; prices: any[] }>(sel ? path(`/price-lists/${sel}/prices`) : null);
+  const [rows, setRows] = useState<{ item_id: string; min_qty: string; price: string }[]>([]);
+  const [edit, setEdit] = useState({ name: "", adjust_percent: "", is_active: true });
+  useEffect(() => {
+    if (!detail.data) return;
+    const l = detail.data.price_list;
+    setEdit({ name: l.name, adjust_percent: String(l.adjust_bp / 100), is_active: Boolean(l.is_active) });
+    setRows(detail.data.prices.map((p) => ({ item_id: p.item_id, min_qty: p.min_qty_milli ? qty(p.min_qty_milli) : "", price: toInput(p.price, base) })));
+  }, [detail.data, base]);
+  const writable = can("items.write");
+  const goods = items.filter((i) => i.is_active);
+  const call = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); toast("success", ok); lists.reload(); detail.reload(); return true; } catch (e) { toast("error", errorMessage(e)); return false; } };
+  return (
+    <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+      <Card padded={false}>
+        <ul className="divide-y divide-[var(--border)]">
+          {(lists.data?.price_lists ?? []).map((l) => (
+            <li key={l.id}><button className={`w-full px-4 py-3 text-left text-sm hover:bg-[var(--surface-2)] ${sel === l.id ? "bg-[var(--surface-2)]" : ""}`} onClick={() => setSel(l.id)}>
+              <span className="font-medium">{l.name}</span> {!l.is_active && <Badge>off</Badge>}
+              <span className="block text-xs muted">{l.adjust_bp ? `${l.adjust_bp > 0 ? "+" : ""}${l.adjust_bp / 100}% on selling price · ` : ""}{l.prices} own price{l.prices === 1 ? "" : "s"} · {l.customers} customer{l.customers === 1 ? "" : "s"}</span>
+            </button></li>
+          ))}
+          {!lists.data?.price_lists.length && <li className="p-4 text-sm muted">No price lists yet. Make one for wholesale or dealer rates, then choose it on the customer.</li>}
+        </ul>
+        {writable && <div className="space-y-2 border-t border-[var(--border)] p-3">
+          <Input placeholder="New list, e.g. Wholesale" value={head.name} onChange={(e) => setHead({ ...head, name: e.target.value })} aria-label="New price list name" />
+          <Input placeholder="% on selling price, e.g. -10" value={head.adjust_percent} onChange={(e) => setHead({ ...head, adjust_percent: e.target.value })} aria-label="Percentage on selling price" />
+          <Button size="sm" disabled={!head.name.trim()} onClick={async () => { if (await call(async () => { const r = await api.post(path("/price-lists"), head); setSel(r.id); }, "Price list added")) setHead({ name: "", adjust_percent: "" }); }}><Plus className="h-4 w-4" />Add list</Button>
+        </div>}
+      </Card>
+      {sel && detail.data ? (
+        <Card>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Name">{(id) => <Input id={id} value={edit.name} disabled={!writable} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />}</Field>
+            <Field label="% on selling price" hint="For products without their own price. −10 = 10% off">{(id) => <Input id={id} className="w-28" value={edit.adjust_percent} disabled={!writable} onChange={(e) => setEdit({ ...edit, adjust_percent: e.target.value })} />}</Field>
+            <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.is_active} disabled={!writable} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} /> In use</label>
+            {writable && <ConfirmButton label="Delete" title="Delete this price list?" body="Lists given to customers cannot be deleted; switch them off instead." confirmLabel="Delete" onConfirm={async () => { if (await call(() => api.del(path(`/price-lists/${sel}`)), "Deleted")) setSel(null); }} />}
+          </div>
+          <TableWrap><table className="table mt-4">
+            <thead><tr><th>Product</th><th className="num">Selling price</th><th className="num w-32">From quantity</th><th className="num w-36">List price</th><th /></tr></thead>
+            <tbody>{rows.map((r, i) => {
+              const it = items.find((x) => x.id === r.item_id);
+              const upd = (patch: Partial<typeof r>) => setRows(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              return (
+                <tr key={i}>
+                  <td><Select value={r.item_id} disabled={!writable} onChange={(e) => upd({ item_id: e.target.value })} aria-label="Product"><option value="">Select…</option>{goods.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</Select></td>
+                  <td className="num muted">{it ? money(it.sale_price) : ""}</td>
+                  <td><Input className="num" inputMode="decimal" placeholder="any" value={r.min_qty} disabled={!writable} onChange={(e) => upd({ min_qty: e.target.value })} aria-label="From quantity" /></td>
+                  <td><MoneyInput value={r.price} disabled={!writable} onChange={(e) => upd({ price: e.target.value })} aria-label="List price" /></td>
+                  <td>{writable && <Button size="sm" variant="ghost" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove row">×</Button>}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></TableWrap>
+          {writable && <div className="mt-3 flex flex-wrap justify-between gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setRows([...rows, { item_id: "", min_qty: "", price: "" }])}><Plus className="h-4 w-4" />Add price</Button>
+            <Button onClick={() => call(async () => {
+              await api.put(path(`/price-lists/${sel}`), edit);
+              await api.put(path(`/price-lists/${sel}/prices`), { rows: rows.filter((r) => r.item_id && r.price !== "") });
+            }, "Price list saved")}>Save</Button>
+          </div>}
+          <p className="mt-3 text-xs muted">A product can have several rows: e.g. from quantity blank → ₹90, from 10 → ₹85. The highest break not above the quantity applies.</p>
+        </Card>
+      ) : <Card><p className="text-sm muted">Choose a price list.</p></Card>}
+    </div>
+  );
+}
 
 const BATCH_COLOR = { expired: "red", expiring: "amber", ok: "green" } as const;
 
@@ -149,7 +225,7 @@ export default function Inventory() {
           {can("labels.print") && <LinkButton variant="secondary" to={`/app/${settings?.company.id}/labels`}><QrCode className="h-4 w-4" />Labels</LinkButton>}
           {can("items.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New item</Button>}
         </>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "items", label: "Items" }, { value: "stock", label: "Stock by warehouse" }, { value: "batches", label: "Batches & expiry" }, { value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "items", label: "Items" }, { value: "stock", label: "Stock by warehouse" }, { value: "batches", label: "Batches & expiry" }, { value: "prices", label: "Price lists" }, { value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }]} />
       {tab === "items" && (
         <Card padded={false}>
           <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
@@ -184,6 +260,7 @@ export default function Inventory() {
         ) : <EmptyState title="No stock movements yet" body="Stock arrives through posted bills or opening-stock adjustments." />}</Card>
       )}
       {tab === "batches" && <BatchesTab />}
+      {tab === "prices" && items.data && <PriceListsTab items={items.data.items} />}
       {tab === "movements" && (
         <Card padded={false}>{moves.data?.movements.length ? (
           <TableWrap><table className="table"><thead><tr><th>Date</th><th>Item</th><th>Warehouse</th><th>Type</th><th className="num">Qty</th><th className="num">Value</th></tr></thead>

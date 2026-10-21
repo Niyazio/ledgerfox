@@ -12,21 +12,23 @@ import { DOC_LABELS, fmtDate, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
 
 export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "supplier"; initial?: any; onClose: (id?: string) => void }) {
-  const { path, settings } = useCompany();
+  const { path, settings, can } = useCompany();
   const toast = useToast();
   const [v, setV] = useState({
     kind: initial?.kind ?? kind, name: initial?.name ?? "", email: initial?.email ?? "", phone: initial?.phone ?? "", tax_id: initial?.tax_id ?? "", pan: initial?.pan ?? "",
     state_code: initial?.state_code ?? "", country: initial?.country ?? settings?.company.country ?? "IN", billing_address: initial?.billing_address ?? "",
     shipping_address: initial?.shipping_address ?? "", currency: initial?.currency ?? "", payment_terms_days: initial?.payment_terms_days ?? 30,
     credit_limit: initial?.credit_limit ? toInput(initial.credit_limit, initial.currency ?? settings?.company.base_currency ?? "INR") : "", notes: initial?.notes ?? "", is_active: initial ? Boolean(initial.is_active) : true,
+    price_list_id: initial?.price_list_id ?? "",
   });
+  const priceLists = useApi<{ price_lists: { id: string; name: string; is_active: number }[] }>(can("inventory.view") ? path("/price-lists") : null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const save = async () => {
     setBusy(true); setError(null);
     try {
-      const body = { ...v, payment_terms_days: Number(v.payment_terms_days), currency: v.currency || null, state_code: v.state_code || null, tax_id: v.tax_id || null, credit_limit: v.credit_limit || null };
+      const body = { ...v, payment_terms_days: Number(v.payment_terms_days), currency: v.currency || null, state_code: v.state_code || null, tax_id: v.tax_id || null, credit_limit: v.credit_limit || null, price_list_id: priceLists.data ? v.price_list_id || null : undefined };
       const r = initial ? await api.put(path(`/contacts/${initial.id}`), body) : await postOrQueue(path("/contacts"), body, { label: `${v.kind === "supplier" ? "Supplier" : "Customer"}: ${v.name}` });
       if (isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); onClose(); return; }
       toast("success", initial ? "Saved" : `${v.kind === "supplier" ? "Supplier" : "Customer"} added`);
@@ -57,6 +59,7 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
         {!india && <Field label="Tax ID">{(id) => <Input id={id} value={v.tax_id} onChange={(e) => set("tax_id", e.target.value)} />}</Field>}
         <Field label="Payment terms (days)">{(id) => <Input id={id} type="number" min={0} max={365} value={v.payment_terms_days} onChange={(e) => set("payment_terms_days", e.target.value)} />}</Field>
         <Field label="Credit limit">{(id) => <Input id={id} inputMode="decimal" value={v.credit_limit} onChange={(e) => set("credit_limit", e.target.value)} />}</Field>
+        {v.kind !== "supplier" && Boolean(priceLists.data?.price_lists.length) && <Field label="Price list" hint="Sets this customer's rates on invoices and at the counter">{(id) => <Select id={id} value={v.price_list_id} onChange={(e) => set("price_list_id", e.target.value)}><option value="">Normal selling prices</option>{priceLists.data!.price_lists.filter((l) => l.is_active || l.id === v.price_list_id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</Select>}</Field>}
         <Field label="Billing address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.billing_address} onChange={(e) => set("billing_address", e.target.value)} />}</Field>
         <Field label="Shipping address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.shipping_address} onChange={(e) => set("shipping_address", e.target.value)} />}</Field>
         <Field label="Notes" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>

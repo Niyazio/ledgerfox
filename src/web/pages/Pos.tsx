@@ -9,6 +9,7 @@ import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike } f
 import { parseDecimal, roundToWhole } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";
 import { toInput } from "../lib/format";
+import { listPrice, type PriceBreak, type PriceList } from "@shared/pricing";
 
 interface Item { id: string; name: string; code: string | null; sale_price: number; tax_code_id: string | null; unit: string; stock_qty_milli?: number; track_inventory: number }
 interface CartLine { item: Item; qty: number }
@@ -36,6 +37,10 @@ export default function Pos() {
   const searchRef = useRef<HTMLInputElement>(null);
   const cur = settings?.company.base_currency ?? "INR";
   const exp = currencyExponent(cur);
+  // The customer's price list (wholesale, dealer…) sets the rate; the server applies the same rule.
+  const pricing = useApi<{ list: PriceList | null; breaks: PriceBreak[] }>(customer ? path(`/price-lists/for-contact/${customer}`) : null);
+  const list = customer ? pricing.data?.list ?? null : null;
+  const rate = (l: CartLine) => listPrice(l.item.sale_price, list, pricing.data?.breaks ?? [], l.item.id, Math.round(l.qty * 1000));
 
   const add = (item: Item, n = 1) => {
     setError(null); setLast(null);
@@ -47,10 +52,11 @@ export default function Pos() {
   const totals = useMemo(() => {
     const taxMap = new Map((settings?.tax_codes ?? []).map((t) => [t.id, t as TaxCodeLike]));
     const taxMode = resolveTaxMode(schemeForCountry(settings?.company.country ?? "IN"), settings?.company.state_code, settings?.company.state_code);
-    const t = computeDocument(cart.map((l) => ({ qty_milli: Math.round(l.qty * 1000), unit_price: l.item.sale_price, discount_bp: 0, tax: l.item.tax_code_id ? taxMap.get(l.item.tax_code_id) ?? null : null })), taxMode);
+    const t = computeDocument(cart.map((l) => ({ qty_milli: Math.round(l.qty * 1000), unit_price: rate(l), discount_bp: 0, tax: l.item.tax_code_id ? taxMap.get(l.item.tax_code_id) ?? null : null })), taxMode);
     const round = settings?.company.round_off_invoices ? roundToWhole(t.total_before_round, exp) - t.total_before_round : 0;
     return { ...t, total: t.total_before_round + round, round };
-  }, [cart, settings, exp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, settings, exp, list, pricing.data]);
 
   const parse = (v: string) => { try { return v ? parseDecimal(v, exp) : 0; } catch { return NaN; } };
   const cashGiven = parse(tendered);
@@ -129,15 +135,16 @@ export default function Pos() {
           <option value="">Walk-in customer</option>
           {(customers.data?.contacts ?? []).filter((c) => c.name !== "Walk-in customer").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
+        {list && <p className="-mt-2 mb-2 text-xs text-brand-700 dark:text-brand-300">Price list: {list.name}</p>}
         <ul className="max-h-[40vh] divide-y divide-[var(--border)] overflow-y-auto">
           {!cart.length && <li className="py-6 text-center text-sm muted">Scan or tap products</li>}
           {cart.map((l) => (
             <li key={l.item.id} className="flex items-center gap-2 py-2 text-sm">
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{l.item.name}</p><p className="text-xs muted">{money(l.item.sale_price)} each</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{l.item.name}</p><p className="text-xs muted">{money(rate(l))} each{rate(l) !== l.item.sale_price ? <s className="ml-1">{money(l.item.sale_price)}</s> : null}</p></div>
               <button aria-label="Less" className="rounded border border-[var(--border)] p-1" onClick={() => setQty(l.item.id, l.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
               <input aria-label="Quantity" className="input w-14 px-1 text-center" inputMode="decimal" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value) || 0)} />
               <button aria-label="More" className="rounded border border-[var(--border)] p-1" onClick={() => setQty(l.item.id, l.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
-              <span className="w-20 text-right tabular-nums">{money(Math.round(l.item.sale_price * l.qty))}</span>
+              <span className="w-20 text-right tabular-nums">{money(Math.round(rate(l) * l.qty))}</span>
               <button aria-label="Remove" className="p-1 muted hover:text-red-600" onClick={() => setQty(l.item.id, 0)}><Trash2 className="h-4 w-4" /></button>
             </li>
           ))}
