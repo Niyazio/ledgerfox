@@ -43,6 +43,7 @@ settings.patch("/", async (c) => {
   const company = c.get("company");
   const input = await body(c, companySchema.omit({ country: true, base_currency: true, fiscal_year_start_month: true, is_demo: true, business_type: true }).extend({
     print_template: z.enum(["modern", "classic", "compact"]).optional(),
+    print_language: z.enum(["en", "hi", "ta"]).optional(),
     round_off_invoices: z.boolean().optional(),
     invoice_terms: shortText(2000).nullish(),
     date_format: z.enum(["DD-MM-YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"]).optional(),
@@ -62,7 +63,7 @@ settings.patch("/", async (c) => {
       c.env.DB,
       `UPDATE companies SET name = ?, legal_name = ?, tax_id = ?, state_code = ?, address = ?, city = ?, postal_code = ?, phone = ?, email = ?,
          round_off_invoices = COALESCE(?, round_off_invoices), invoice_terms = ?, date_format = COALESCE(?, date_format), number_locale = COALESCE(?, number_locale),
-         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template),
+         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template), print_language = COALESCE(?, print_language),
          purchase_approval_limit = CASE WHEN ? THEN ? ELSE purchase_approval_limit END,
          billing_discount_limit_bp = CASE WHEN ? THEN ? ELSE billing_discount_limit_bp END
        WHERE id = ?`,
@@ -70,7 +71,7 @@ settings.patch("/", async (c) => {
       input.postal_code ?? null, input.phone ?? null, input.email || null,
       input.round_off_invoices === undefined ? null : input.round_off_invoices ? 1 : 0, input.invoice_terms ?? null,
       input.date_format ?? null, input.number_locale ?? null,
-      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null,
+      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null, input.print_language ?? null,
       limits.purchase === undefined ? 0 : 1, limits.purchase ?? null, limits.discount === undefined ? 0 : 1, limits.discount ?? null, company.id,
     ),
     audit(c, "company.update", "company", company.id, input),

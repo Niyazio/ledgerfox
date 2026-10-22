@@ -9,6 +9,7 @@ import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike } f
 import { parseDecimal, roundToWhole } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";
 import { toInput } from "../lib/format";
+import { useLang } from "../lib/lang";
 import { listPrice, type PriceBreak, type PriceList } from "@shared/pricing";
 
 interface Item { id: string; name: string; code: string | null; sale_price: number; tax_code_id: string | null; unit: string; stock_qty_milli?: number; track_inventory: number }
@@ -22,6 +23,7 @@ const saveHeld = (cid: string, h: Held[]) => { try { localStorage.setItem(heldKe
 /** Counter billing: scan or tap products, take cash/UPI/card (or split), print the thermal bill. F2 search · F9 pay · Esc clear. */
 export default function Pos() {
   const { path, money, settings, id, branch } = useCompany();
+  const { t } = useLang();
   const [q, setQ] = useState("");
   const items = useApi<{ items: Item[] }>(path(`/items?active=1&limit=60${q ? `&q=${encodeURIComponent(q)}` : ""}`));
   const customers = useApi<{ contacts: { id: string; name: string }[] }>(path("/contacts?kind=customer&active=1&limit=500"));
@@ -107,7 +109,7 @@ export default function Pos() {
           <div className="grid gap-3 sm:grid-cols-2">
             <ScanInput label="Scan barcode / QR" autoFocus onItem={(it) => add(it as Item)} onError={setError} />
             <div><label className="mb-1.5 block text-sm font-medium" htmlFor="pos-search">Search (F2)</label>
-              <input id="pos-search" className="input" ref={searchRef} value={q} placeholder="Name, code or SKU" onChange={(e) => setQ(e.target.value)}
+              <input id="pos-search" className="input" ref={searchRef} value={q} placeholder={t("Search products")} onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && items.data?.items[0]) { add(items.data.items[0]); setQ(""); } }} /></div>
           </div>
         </Card>
@@ -129,18 +131,18 @@ export default function Pos() {
 
       <Card className="lg:sticky lg:top-0 lg:self-start">
         <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Bill</h2>
-          <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={hold} disabled={!cart.length}><Pause className="h-4 w-4" />Hold</Button>
-            <Button size="sm" variant="ghost" onClick={reset} disabled={!cart.length}><X className="h-4 w-4" />Clear</Button></div></div>
+          <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={hold} disabled={!cart.length}><Pause className="h-4 w-4" />{t("Hold")}</Button>
+            <Button size="sm" variant="ghost" onClick={reset} disabled={!cart.length}><X className="h-4 w-4" />{t("Clear")}</Button></div></div>
         <Select value={customer} onChange={(e) => setCustomer(e.target.value)} aria-label="Customer" className="mb-3">
-          <option value="">Walk-in customer</option>
+          <option value="">{t("Walk-in customer")}</option>
           {(customers.data?.contacts ?? []).filter((c) => c.name !== "Walk-in customer").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
         {list && <p className="-mt-2 mb-2 text-xs text-brand-700 dark:text-brand-300">Price list: {list.name}</p>}
         <ul className="max-h-[40vh] divide-y divide-[var(--border)] overflow-y-auto">
-          {!cart.length && <li className="py-6 text-center text-sm muted">Scan or tap products</li>}
+          {!cart.length && <li className="py-6 text-center text-sm muted">{t("Scan or tap products")}</li>}
           {cart.map((l) => (
             <li key={l.item.id} className="flex items-center gap-2 py-2 text-sm">
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{l.item.name}</p><p className="text-xs muted">{money(rate(l))} each{rate(l) !== l.item.sale_price ? <s className="ml-1">{money(l.item.sale_price)}</s> : null}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{l.item.name}</p><p className="text-xs muted">{money(rate(l))} {t("each")}{rate(l) !== l.item.sale_price ? <s className="ml-1">{money(l.item.sale_price)}</s> : null}</p></div>
               <button aria-label="Less" className="rounded border border-[var(--border)] p-1" onClick={() => setQty(l.item.id, l.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
               <input aria-label="Quantity" className="input w-14 px-1 text-center" inputMode="decimal" value={l.qty} onChange={(e) => setQty(l.item.id, Number(e.target.value) || 0)} />
               <button aria-label="More" className="rounded border border-[var(--border)] p-1" onClick={() => setQty(l.item.id, l.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
@@ -153,19 +155,19 @@ export default function Pos() {
           <div className="flex justify-between"><dt className="muted">Items</dt><dd>{money(totals.taxable_total)}</dd></div>
           {totals.cgst + totals.sgst + totals.igst + totals.other_tax > 0 && <div className="flex justify-between"><dt className="muted">GST</dt><dd>{money(totals.cgst + totals.sgst + totals.igst + totals.other_tax)}</dd></div>}
           {totals.round !== 0 && <div className="flex justify-between"><dt className="muted">Round off</dt><dd>{money(totals.round)}</dd></div>}
-          <div className="flex justify-between text-2xl font-bold"><dt>Total</dt><dd>{money(totals.total)}</dd></div>
+          <div className="flex justify-between text-2xl font-bold"><dt>{t("Total")}</dt><dd>{money(totals.total)}</dd></div>
         </dl>
         <div className="mt-3 grid grid-cols-4 gap-1">
-          {(["cash", "upi", "card", "split"] as const).map((m) => <Button key={m} size="sm" variant={mode === m ? "primary" : "secondary"} onClick={() => setMode(m)}>{m === "upi" ? "UPI" : m[0].toUpperCase() + m.slice(1)}</Button>)}
+          {(["cash", "upi", "card", "split"] as const).map((m) => <Button key={m} size="sm" variant={mode === m ? "primary" : "secondary"} onClick={() => setMode(m)}>{m === "upi" ? "UPI" : t(m[0].toUpperCase() + m.slice(1))}</Button>)}
         </div>
-        {mode === "cash" && <div className="mt-3 flex items-center gap-2 text-sm"><label htmlFor="tendered" className="muted">Cash given</label>
+        {mode === "cash" && <div className="mt-3 flex items-center gap-2 text-sm"><label htmlFor="tendered" className="muted">{t("Cash given")}</label>
           <Input id="tendered" inputMode="decimal" className="w-32" value={tendered} placeholder={toInput(totals.total, cur)} onChange={(e) => setTendered(e.target.value)} />
-          {change > 0 && <span className="font-semibold">Change {money(change)}</span>}</div>}
+          {change > 0 && <span className="font-semibold">{t("Change")} {money(change)}</span>}</div>}
         {mode === "split" && <div className="mt-3 grid grid-cols-3 gap-2">{(["cash", "upi", "card"] as const).map((m) => (
           <label key={m} className="text-xs muted">{m.toUpperCase()}<Input inputMode="decimal" value={split[m]} onChange={(e) => setSplit({ ...split, [m]: e.target.value })} /></label>))}
           <p className="col-span-3 text-xs muted">Paid {money(paid)} of {money(totals.total)}{paid < totals.total ? ` · ${money(totals.total - paid)} on credit (choose the customer)` : ""}</p></div>}
         {error && <Alert className="mt-3">{error}</Alert>}
-        <Button className="mt-3 w-full py-3 text-base" loading={busy} disabled={!cart.length} onClick={() => void pay()}><Printer className="h-5 w-5" />Pay & print (F9)</Button>
+        <Button className="mt-3 w-full py-3 text-base" loading={busy} disabled={!cart.length} onClick={() => void pay()}><Printer className="h-5 w-5" />{t("Pay & print")} (F9)</Button>
         {last && <p className="mt-2 text-center text-sm text-emerald-700 dark:text-emerald-400">Saved {last.number}{last.change ? ` · give change ${money(last.change)}` : ""}</p>}
       </Card>
     </div>

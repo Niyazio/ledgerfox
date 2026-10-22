@@ -62,6 +62,7 @@ export interface CompanyRow {
   is_demo: number;
   upi_id: string | null;
   print_template: string;
+  print_language?: "en" | "hi" | "ta";
   purchase_approval_limit: number | null;
   billing_discount_limit_bp: number | null;
   created_at: string;

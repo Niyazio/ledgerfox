@@ -10,6 +10,8 @@ import { CompanyProvider, useCompany } from "../lib/company";
 import { Button, cx, Modal, Spinner } from "./ui";
 import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { useRecurringAutoRun } from "../pages/Recurring";
+import { setLang, useLang } from "../lib/lang";
+import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
@@ -122,10 +124,21 @@ const NAV: NavGroup[] = [
   ] },
 ];
 
+function LangPicker() {
+  const { lang, t } = useLang();
+  return (
+    <select aria-label={t("Language")} title={t("Language")} value={lang} onChange={(e) => setLang(e.target.value as Lang)}
+      className="rounded-lg border-0 bg-transparent py-1 pl-1 pr-6 text-sm hover:bg-[var(--surface-2)]">
+      {LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "EN" : l.value === "hi" ? "हि" : "த"}</option>)}
+    </select>
+  );
+}
+
 /** Modules the member may use; the server enforces the same permissions on every request. */
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { companyId } = useParams();
   const { can, settings } = useCompany();
+  const { t } = useLang();
   const location = useLocation();
   const allowed = (it: NavItem) => !it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm));
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
@@ -134,13 +147,13 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <nav aria-label="Main" className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
       {groups.map((g, i) => (
         <div key={i}>
-          {g.label && <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider muted">{g.label}</p>}
+          {g.label && <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider muted">{t(g.label)}</p>}
           <ul className="space-y-0.5">
             {g.items.map((it) => (
               <li key={it.to}>
                 <NavLink to={`/app/${companyId}/${it.to}`} end={it.to === "reports"} onClick={onNavigate}
                   className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to))) ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
-                  {it.icon}{it.label}
+                  {it.icon}{t(it.label)}
                 </NavLink>
               </li>
             ))}
@@ -293,6 +306,7 @@ function Shell() {
           </div>
           <div className="flex items-center gap-1">
             <OfflineStatus companyId={companyId} />
+            <LangPicker />
             <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
