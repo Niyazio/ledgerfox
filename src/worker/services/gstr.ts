@@ -224,16 +224,17 @@ export async function gstr3b(db: D1Database, company: CompanyRow, opts: GstrOpti
     }
   }
   // Inward: supplier bills and debit notes (base currency), and posted expenses with GST.
-  const inward = await all<{ doc_type: string; taxable: number; cgst: number; sgst: number; igst: number; category: string | null; inter: number }>(db,
-    `SELECT d.doc_type, l.taxable, l.cgst, l.sgst, l.igst, t.category, CASE WHEN d.tax_mode = 'inter' THEN 1 ELSE 0 END AS inter
+  const inward = await all<{ doc_type: string; taxable: number; cgst: number; sgst: number; igst: number; category: string | null; inter: number; rcm: number }>(db,
+    `SELECT d.doc_type, d.reverse_charge AS rcm, l.taxable, l.cgst, l.sgst, l.igst, t.category, CASE WHEN d.tax_mode = 'inter' THEN 1 ELSE 0 END AS inter
      FROM documents d JOIN document_lines l ON l.document_id = d.id LEFT JOIN tax_codes t ON t.id = l.tax_code_id LEFT JOIN branches b ON b.id = d.branch_id
      WHERE d.company_id = ? AND d.doc_type IN ('bill','debit_note') AND d.status = 'posted' AND d.currency = ? AND d.issue_date BETWEEN ? AND ?
        AND COALESCE(NULLIF(b.gstin,''), ?) = ?`, company.id, company.base_currency, from, to, company.tax_id ?? "", gstin);
-  const itc = zero(), exemptIn = { inter: 0, intra: 0 };
+  // Reverse-charge bills: the tax is our liability (3.1(d), paid in cash) and, once paid, our credit (4A(3)).
+  const itc = zero(), itcRcm = zero(), isupRev = zero(), exemptIn = { inter: 0, intra: 0 };
   for (const l of inward) {
     const sign = l.doc_type === "debit_note" ? -1 : 1;
     if (l.category && l.category !== "standard") { exemptIn[l.inter ? "inter" : "intra"] += sign * l.taxable; continue; }
-    addTax(itc, l, sign);
+    if (l.rcm) { addTax(isupRev, l, sign); addTax(itcRcm, l, sign); } else addTax(itc, l, sign);
   }
   const exp = await all<{ tax_amount: number; tax_mode: string; amount: number; fx: number }>(db,
     `SELECT e.tax_amount, e.tax_mode, e.amount, e.fx_rate_scaled AS fx FROM expenses e LEFT JOIN branches b ON b.id = e.branch_id
@@ -244,7 +245,7 @@ export async function gstr3b(db: D1Database, company: CompanyRow, opts: GstrOpti
     if (e.tax_mode === "inter") itc.iamt += e.tax_amount;
     else { const half = Math.floor(e.tax_amount / 2); itc.camt += half; itc.samt += e.tax_amount - half; }
   }
-  const payable = { iamt: out.iamt - itc.iamt, camt: out.camt - itc.camt, samt: out.samt - itc.samt };
+  const payable = { iamt: out.iamt - itc.iamt - itcRcm.iamt, camt: out.camt - itc.camt - itcRcm.camt, samt: out.samt - itc.samt - itcRcm.samt };
   const companyName = (await first<{ name: string }>(db, `SELECT COALESCE(legal_name, name) AS name FROM companies WHERE id = ?`, company.id))?.name;
   return {
     period: opts.period, gstin, legal_name: companyName,
@@ -252,16 +253,24 @@ export async function gstr3b(db: D1Database, company: CompanyRow, opts: GstrOpti
       osup_det: rupees(out),
       osup_zero: rupees(zero()),
       osup_nil_exmp: { txval: r(nilOut.nil_exempt) },
-      isup_rev: rupees(zero()),
+      isup_rev: rupees(isupRev),
       osup_nongst: { txval: r(nilOut.non_gst) },
     },
     inter_sup: { unreg_details: [...interUnreg.entries()].map(([pos, e]) => ({ pos, txval: r(e.txval), iamt: r(e.iamt) })) },
-    itc_elg: { itc_avl: [{ ty: "OTH", iamt: r(itc.iamt), camt: r(itc.camt), samt: r(itc.samt), csamt: 0 }], itc_net: { iamt: r(itc.iamt), camt: r(itc.camt), samt: r(itc.samt), csamt: 0 } },
+    itc_elg: {
+      itc_avl: [
+        { ty: "ISRC", iamt: r(itcRcm.iamt), camt: r(itcRcm.camt), samt: r(itcRcm.samt), csamt: 0 },
+        { ty: "OTH", iamt: r(itc.iamt), camt: r(itc.camt), samt: r(itc.samt), csamt: 0 },
+      ],
+      itc_net: { iamt: r(itc.iamt + itcRcm.iamt), camt: r(itc.camt + itcRcm.camt), samt: r(itc.samt + itcRcm.samt), csamt: 0 },
+    },
     inward_sup: { isup_details: [{ ty: "GST", inter: r(exemptIn.inter), intra: r(exemptIn.intra) }] },
     net_payable_before_set_off: { iamt: r(payable.iamt), camt: r(payable.camt), samt: r(payable.samt) },
+    reverse_charge_cash: { iamt: r(isupRev.iamt), camt: r(isupRev.camt), samt: r(isupRev.samt) },
     warnings: [
       ...g1.warnings,
-      "Input tax credit is taken from your bills and expenses. Check it against GSTR-2B before filing; reverse charge, ineligible credit and reversals are not calculated.",
+      "Input tax credit is taken from your bills and expenses. Check it against GSTR-2B before filing; ineligible credit and reversals are not calculated.",
+      ...(isupRev.camt || isupRev.samt || isupRev.iamt ? ["Reverse-charge tax must be paid in cash (it cannot be set off against credit); its credit is shown under 4A(3) and can be claimed once paid."] : []),
       "Net payable is before set-off and before any cash/credit ledger balance; the portal applies the utilisation order.",
     ],
   };

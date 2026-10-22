@@ -6,6 +6,9 @@
  *                            Cr AR unallocated advance (amount @ payment rate)
  *                            ± Exchange gain/loss for the rate difference
  * Payment ("out") mirrors this against AP.
+ *
+ * TDS (India): `amount` is always the cash that moved. TDS deducted on top of it settles the invoice/bill too:
+ * a customer's deduction is Dr TDS Receivable, ours from a supplier is Cr TDS Payable.
  */
 import type { Context } from "hono";
 import type { AppEnv } from "../env";
@@ -13,7 +16,7 @@ import { all, batch, bumpSequence, first, seqNumberExpr, stmt, nowIso } from "..
 import { newId } from "../lib/crypto";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { audit } from "../lib/auth";
-import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, type LineInput } from "./ledger";
+import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, ensureSystemAccount, TDS_PAYABLE_SEED, TDS_RECEIVABLE_SEED, type LineInput } from "./ledger";
 import { convertToBase, RATE_SCALE_NUM } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";
 import { lookupRate } from "./documents";
@@ -32,6 +35,8 @@ export interface PaymentInput {
   idempotency_key?: string | null;
   branch_id?: string | null;
   allocations: { document_id: string; amount: number }[];
+  tds_amount?: number;
+  tds_section?: string | null;
 }
 
 export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
@@ -56,9 +61,13 @@ export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
   if (!fx) throw unprocessable("RATE_REQUIRED", `Enter the ${currency} exchange rate for ${input.payment_date}`);
   fx = Number(fx);
 
+  const tds = input.tds_amount ?? 0;
+  if (!Number.isSafeInteger(tds) || tds < 0) throw badRequest("TDS cannot be negative");
+  if (tds > 0 && currency !== company.base_currency) throw badRequest("TDS can only be recorded on payments in the base currency");
+  const settles = input.amount + tds;
   const docType = input.direction === "in" ? "invoice" : "bill";
   const allocated = input.allocations.reduce((s, a) => s + a.amount, 0);
-  if (allocated > input.amount) throw unprocessable("OVER_ALLOCATED", "Allocations exceed the payment amount");
+  if (allocated > settles) throw unprocessable("OVER_ALLOCATED", tds ? "Allocations exceed the payment plus TDS" : "Allocations exceed the payment amount");
   const seen = new Set<string>();
   const docs: { id: string; fx_rate_scaled: number; amount: number }[] = [];
   for (const a of input.allocations) {
@@ -82,19 +91,25 @@ export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
   const ctrlSide: "debit" | "credit" = input.direction === "in" ? "credit" : "debit";
   const amountBase = convertToBase(input.amount, fx, exp, baseExp);
   const lines: LineInput[] = [{ account_id: input.account_id, [cashSide]: amountBase, currency, fx_rate_scaled: fx, amount_fc: input.amount, description: input.reference ?? null }];
+  if (tds > 0) {
+    const tdsAcc = input.direction === "in"
+      ? await ensureSystemAccount(db, company.id, "TDS_RECEIVABLE", TDS_RECEIVABLE_SEED)
+      : await ensureSystemAccount(db, company.id, "TDS_PAYABLE", TDS_PAYABLE_SEED);
+    lines.push({ account_id: tdsAcc, [cashSide]: tds, contact_id: input.contact_id, description: `TDS${input.tds_section ? ` u/s ${input.tds_section}` : ""}` });
+  }
   let controlBase = 0;
   for (const d of docs) {
     const b = convertToBase(d.amount, d.fx_rate_scaled, exp, baseExp);
     controlBase += b;
     lines.push({ account_id: control, [ctrlSide]: b, contact_id: input.contact_id, currency, fx_rate_scaled: d.fx_rate_scaled, amount_fc: d.amount, description: "Settlement" });
   }
-  const unallocated = input.amount - allocated;
+  const unallocated = settles - allocated;
   if (unallocated > 0) {
     const b = convertToBase(unallocated, fx, exp, baseExp);
     controlBase += b;
     lines.push({ account_id: control, [ctrlSide]: b, contact_id: input.contact_id, currency, fx_rate_scaled: fx, amount_fc: unallocated, description: "Advance / unapplied" });
   }
-  const fxDiff = amountBase - controlBase; // receipt: positive = gain (credit); payment: positive = loss (debit)
+  const fxDiff = amountBase + tds - controlBase; // receipt: positive = gain (credit); payment: positive = loss (debit)
   if (fxDiff !== 0) {
     // A positive difference needs extra on the control side, a negative one on the cash side.
     lines.push(fxDiff > 0
@@ -114,16 +129,17 @@ export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
     ...bumpSequence(db, company.id, seqKey, input.direction === "in" ? "RCPT-" : "PAY-"),
     stmt(db,
       `INSERT INTO payments (id, company_id, direction, number, contact_id, payment_date, account_id, currency, fx_rate_scaled, amount, amount_base,
-         method, reference, notes, status, journal_entry_id, idempotency_key, created_by, branch_id)
-       VALUES (?,?,?,${seqNumberExpr()},?,?,?,?,?,?,?,?,?,?,'posted',?,?,?,?)`,
+         method, reference, notes, status, journal_entry_id, idempotency_key, created_by, branch_id, tds_amount, tds_section)
+       VALUES (?,?,?,${seqNumberExpr()},?,?,?,?,?,?,?,?,?,?,'posted',?,?,?,?,?,?)`,
       id, company.id, input.direction, company.id, seqKey, input.contact_id, input.payment_date, input.account_id, currency, fx, input.amount, amountBase,
-      input.method ?? null, input.reference ?? null, input.notes ?? null, built.id, input.idempotency_key ?? null, user.id, input.branch_id ?? null),
+      input.method ?? null, input.reference ?? null, input.notes ?? null, built.id, input.idempotency_key ?? null, user.id, input.branch_id ?? null,
+      tds, tds > 0 ? input.tds_section ?? null : null),
   ];
   for (const d of docs) {
     stmts.push(stmt(db, `INSERT INTO allocations (id, company_id, source_kind, payment_id, document_id, amount, allocation_date, created_by) VALUES (?,?,?,?,?,?,?,?)`,
       newId(), company.id, "payment", id, d.id, d.amount, input.payment_date, user.id));
   }
-  stmts.push(audit(c, input.direction === "in" ? "receipt.create" : "payment.create", "payment", id, { amount: input.amount, currency, allocations: docs.length }));
+  stmts.push(audit(c, input.direction === "in" ? "receipt.create" : "payment.create", "payment", id, { amount: input.amount, tds, currency, allocations: docs.length }));
   await batch(db, stmts);
   return { id, journal_id: built.id };
 }
@@ -147,13 +163,13 @@ export async function applyCredit(c: Context<AppEnv>, src: { kind: "payment" | "
   let srcCurrency: string;
   let direction: "in" | "out";
   if (src.kind === "payment") {
-    const p = await first<{ id: string; direction: "in" | "out"; contact_id: string; currency: string; fx_rate_scaled: number; amount: number; status: string }>(
+    const p = await first<{ id: string; direction: "in" | "out"; contact_id: string; currency: string; fx_rate_scaled: number; amount: number; tds_amount: number; status: string }>(
       db, `SELECT * FROM payments WHERE id = ? AND company_id = ?`, src.id, company.id,
     );
     if (!p) throw notFound("Payment");
     if (p.status !== "posted") throw conflict("VOID", "Payment is void");
     const used = await first<{ s: number }>(db, `SELECT COALESCE(SUM(amount),0) AS s FROM allocations WHERE payment_id = ?`, p.id);
-    if (amount > p.amount - (used?.s ?? 0)) throw unprocessable("OVER_ALLOCATED", "Amount exceeds the unapplied balance of the payment");
+    if (amount > p.amount + (p.tds_amount ?? 0) - (used?.s ?? 0)) throw unprocessable("OVER_ALLOCATED", "Amount exceeds the unapplied balance of the payment");
     srcRate = p.fx_rate_scaled; srcContact = p.contact_id; srcCurrency = p.currency; direction = p.direction;
   } else {
     const n = await first<{ id: string; doc_type: string; status: string; contact_id: string; currency: string; fx_rate_scaled: number; total: number; amount_settled: number }>(

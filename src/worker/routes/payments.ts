@@ -79,6 +79,8 @@ const paySchema = z.object({
   idempotency_key: z.string().min(8).max(100).nullish(),
   allocations: z.array(z.object({ document_id: z.string(), amount: z.union([z.string(), z.number()]) })).max(100).default([]),
   branch_id: z.string().nullish(),
+  tds_amount: z.union([z.string(), z.number()]).nullish(),
+  tds_section: z.string().trim().max(10).regex(/^[0-9A-Za-z()]+$/, "Section like 194C, 194J, 194Q").nullish(),
 });
 
 payments.post("/", async (c) => {
@@ -96,6 +98,7 @@ payments.post("/", async (c) => {
     fx_rate_scaled: input.fx_rate ? rate(input.fx_rate) : null, amount: minor(input.amount, exp), method: input.method, reference: input.reference,
     notes: input.notes, idempotency_key: input.idempotency_key, branch_id: resolveBranch(c, input.branch_id),
     allocations: input.allocations.filter((a) => a.amount !== "" && a.amount !== 0 && a.amount !== "0").map((a) => ({ document_id: a.document_id, amount: minor(a.amount, exp, "allocation") })),
+    tds_amount: input.tds_amount ? minor(input.tds_amount, exp, "TDS") : 0, tds_section: input.tds_section?.toUpperCase() || null,
   });
   return c.json(result, result.duplicate ? 200 : 201);
 });

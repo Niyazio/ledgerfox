@@ -68,6 +68,7 @@ const docSchema = z.object({
   related_doc_id: optId,
   branch_id: optId,
   warehouse_id: optId,
+  reverse_charge: z.boolean().optional(),
   lines: z.array(lineSchema).min(1).max(200),
 });
 
@@ -94,6 +95,7 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
     related_doc_id: input.related_doc_id ?? null,
     branch_id: input.branch_id ?? null,
     warehouse_id: input.warehouse_id ?? null,
+    reverse_charge: Boolean(input.reverse_charge),
     lines: input.lines.map((l, i) => {
       const q = qty(l.quantity, `Line ${i + 1} quantity`);
       if (q <= 0) throw badRequest(`Line ${i + 1}: quantity must be positive`);

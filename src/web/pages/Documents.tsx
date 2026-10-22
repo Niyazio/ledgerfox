@@ -117,6 +117,7 @@ export function DocumentForm() {
   const [contact, setContact] = useState<any>(null);
   const [contactId, setContactId] = useState(params.get("contact") ?? "");
   const [h, setH] = useState({ issue_date: today(), due_date: "", currency: "", fx_rate: "", place_of_supply: "", reference: "", notes: "", terms: settings?.company.invoice_terms ?? "", warehouse_id: "", branch_id: branch, related_doc_id: "" });
+  const [rcm, setRcm] = useState(false);
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [addingContact, setAddingContact] = useState(false);
   const [contactsKey, setContactsKey] = useState(0);
@@ -147,6 +148,7 @@ export function DocumentForm() {
     const exp = CURRENCIES[doc.currency]?.exponent ?? 2;
     setContactId(doc.contact_id);
     setH({ issue_date: doc.issue_date, due_date: doc.due_date ?? "", currency: doc.currency, fx_rate: doc.currency !== base ? String(doc.fx_rate_scaled / 1e9) : "", place_of_supply: doc.place_of_supply ?? "", reference: doc.reference ?? "", notes: doc.notes ?? "", terms: doc.terms ?? "", warehouse_id: doc.warehouse_id ?? "", branch_id: doc.branch_id ?? "", related_doc_id: doc.related_doc_id ?? "" });
+    setRcm(Boolean(doc.reverse_charge));
     setLines(d.lines.map((l: any) => ({ ...blankLine(), item_id: l.item_id ?? "", description: l.description, hsn_sac: l.hsn_sac ?? "", quantity: fmtQty(l.qty_milli), unit_price: toInput(l.unit_price, doc.currency).replace(new RegExp(`\\.0{${exp}}$`), ""), discount_percent: l.discount_bp ? String(l.discount_bp / 100) : "", account_id: l.account_id ?? "", tax_code_id: l.tax_code_id ?? "", department_id: l.department_id ?? "", project_id: l.project_id ?? "", cost_centre_id: l.cost_centre_id ?? "", batch_no: l.batch_no ?? "", expiry_date: l.expiry_date ?? "" })));
   }, [existing.data, base]);
 
@@ -195,6 +197,7 @@ export function DocumentForm() {
       doc_type: docType, contact_id: contactId, issue_date: h.issue_date, due_date: h.due_date || null, currency: currency, fx_rate: currency !== base ? h.fx_rate || null : null,
       place_of_supply: h.place_of_supply || null, reference: h.reference || null, notes: h.notes || null, terms: h.terms || null,
       warehouse_id: h.warehouse_id || null, branch_id: h.branch_id || null, related_doc_id: h.related_doc_id || null,
+      ...(rcmAllowed ? { reverse_charge: rcm } : {}),
       lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null, batch_no: l.batch_no || null, expiry_date: l.expiry_date || null })),
     };
     const r = await run(async () => {
@@ -208,6 +211,7 @@ export function DocumentForm() {
     if (r) { toast("success", issue ? `${label.one} issued` : "Draft saved"); nav(`/app/${id}/${area(docType)}/${docType}/${r.id}`, { replace: true }); }
   };
   const india = settings?.tax_scheme === "in_gst";
+  const rcmAllowed = india && (docType === "bill" || docType === "debit_note") && currency === base;
   const showHsn = india;
   const money = (n: number) => toInput(n, currency);
   if (docId && existing.loading) return <Spinner />;
@@ -232,6 +236,7 @@ export function DocumentForm() {
               {Object.entries(INDIA_STATES).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}
             </Select>
           )}</Field>}
+          {rcmAllowed && <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={rcm} onChange={(e) => setRcm(e.target.checked)} /> Reverse charge (we pay the GST, not the supplier)</label>}
           {currency !== base && <Field label={`Exchange rate (${currency} → ${base})`} hint="Leave blank to use the latest saved rate.">{(fid) => <Input id={fid} inputMode="decimal" value={h.fx_rate} onChange={(e) => setH({ ...h, fx_rate: e.target.value })} />}</Field>}
           {(settings?.warehouses.length ?? 0) > 1 && ["invoice", "bill", "credit_note", "debit_note"].includes(docType) && <Field label="Warehouse">{(fid) => (
             <Select id={fid} value={h.warehouse_id} onChange={(e) => setH({ ...h, warehouse_id: e.target.value })}><option value="">Default</option>{settings!.warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select>
@@ -307,6 +312,7 @@ export function DocumentForm() {
               {preview.other_tax > 0 && <div className="flex justify-between"><dt>Tax</dt><dd className="num">{money(preview.other_tax)}</dd></div>}
               {preview.round_off !== 0 && <div className="flex justify-between"><dt>Round off</dt><dd className="num">{money(preview.round_off)}</dd></div>}
               <div className="flex justify-between border-t border-[var(--border)] pt-2 text-base font-semibold"><dt>Total ({currency})</dt><dd className="num">{money(preview.total)}</dd></div>
+              {rcmAllowed && rcm && <div className="flex justify-between text-sm"><dt>Payable to supplier (tax under reverse charge)</dt><dd className="num">{money(preview.total - preview.round_off - (preview.cgst + preview.sgst + preview.igst + preview.other_tax))}</dd></div>}
             </dl>
             <p className="mt-2 text-xs muted">Preview. The server recalculates and stores the final figures.</p>
           </div>
@@ -415,6 +421,7 @@ export function DocumentView() {
         </>} />
       <p className="mb-4 -mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs muted">
         {d.branch_name && <span>Branch: <b>{d.branch_name}</b></span>}
+        {d.reverse_charge ? <span className="text-amber-700 dark:text-amber-300">Reverse charge: the GST ({money(d.tax_total, cur)}) is payable by us; the supplier is owed {money(d.total, cur)}</span> : null}
         {d.created_by_name && <span>Created by {d.created_by_name} · {fmtDateTime(d.created_at)}</span>}
         {d.posted_by_name && <span>{d.status === "open" ? "Issued" : "Posted"} by {d.posted_by_name} · {fmtDateTime(d.posted_at)}</span>}
         {d.approval_requested_at && <span>Approval requested by {d.approval_requested_by}</span>}

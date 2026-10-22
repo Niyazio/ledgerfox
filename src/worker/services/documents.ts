@@ -15,7 +15,7 @@ import { all, batch, bumpSequence, first, nowIso, seqNumberExpr, stmt } from "..
 import { newId } from "../lib/crypto";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { audit } from "../lib/auth";
-import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, type LineInput } from "./ledger";
+import { buildJournal, buildReversal, systemAccounts, assertOpenPeriod, ensureSystemAccount, RCM_PAYABLE_SEED, type LineInput } from "./ledger";
 import { batchBalances, companyPosition, defaultWarehouse, pickBatches, planIssues, splitValue, stockMoveStmt, type BatchStock } from "./inventory";
 import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike, type TaxMode } from "@shared/tax";
 import { convertToBase, roundToWhole, RATE_SCALE_NUM, divRound } from "@shared/money";
@@ -61,6 +61,8 @@ export interface DraftInput {
   branch_id?: string | null;
   warehouse_id?: string | null;
   variant?: "proforma" | "delivery_challan" | null;
+  /** GST reverse charge on a purchase: the supplier is paid the taxable value; the buyer self-assesses the tax. */
+  reverse_charge?: boolean;
   lines: DraftLine[];
 }
 
@@ -125,9 +127,12 @@ export async function prepareDraft(c: Context<AppEnv>, input: DraftInput, existi
     mode,
   );
   const exp = currencyExponent(currency);
+  const rcm = Boolean(input.reverse_charge);
+  if (rcm && (sales || company.country !== "IN" || currency !== company.base_currency)) throw badRequest("Reverse charge applies to rupee purchase bills and debit notes of an Indian company");
   const roundOff = company.round_off_invoices && (input.doc_type === "invoice" || input.doc_type === "credit_note")
     ? roundToWhole(totals.total_before_round, exp) - totals.total_before_round : 0;
-  const total = totals.total_before_round + roundOff;
+  // Under reverse charge the supplier's bill carries no tax: we owe them the value before tax.
+  const total = totals.total_before_round + roundOff - (rcm ? totals.tax_total : 0);
   const totalBase = convertToBase(total, fx, exp, currencyExponent(company.base_currency));
   const due = input.due_date ?? (["invoice", "bill"].includes(input.doc_type) ? addDays(input.issue_date, contact.payment_terms_days) : null);
 
@@ -144,19 +149,19 @@ export async function prepareDraft(c: Context<AppEnv>, input: DraftInput, existi
     stmts.push(stmt(db,
       `UPDATE documents SET contact_id = ?, issue_date = ?, due_date = ?, currency = ?, fx_rate_scaled = ?, place_of_supply = ?, tax_mode = ?,
          reference = ?, subtotal = ?, discount_total = ?, tax_total = ?, round_off = ?, total = ?, total_base = ?, notes = ?, terms = ?,
-         related_doc_id = ?, branch_id = ?, warehouse_id = ?, updated_at = ?
+         related_doc_id = ?, branch_id = ?, warehouse_id = ?, reverse_charge = ?, updated_at = ?
        WHERE id = ? AND company_id = ? AND status = 'draft'`,
       input.contact_id, input.issue_date, due, currency, fx, pos ?? null, mode, input.reference ?? null, totals.subtotal, totals.discount_total,
       totals.tax_total, roundOff, total, totalBase, input.notes ?? null, input.terms ?? null, input.related_doc_id ?? null,
-      input.branch_id ?? null, input.warehouse_id ?? null, nowIso(), id, company.id));
+      input.branch_id ?? null, input.warehouse_id ?? null, rcm ? 1 : 0, nowIso(), id, company.id));
   } else {
     stmts.push(stmt(db,
       `INSERT INTO documents (id, company_id, doc_type, contact_id, issue_date, due_date, status, currency, fx_rate_scaled, place_of_supply, tax_mode,
-         reference, subtotal, discount_total, tax_total, round_off, total, total_base, notes, terms, related_doc_id, branch_id, warehouse_id, created_by, variant)
-       VALUES (?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         reference, subtotal, discount_total, tax_total, round_off, total, total_base, notes, terms, related_doc_id, branch_id, warehouse_id, created_by, variant, reverse_charge)
+       VALUES (?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, input.doc_type, input.contact_id, input.issue_date, due, currency, fx, pos ?? null, mode, input.reference ?? null,
       totals.subtotal, totals.discount_total, totals.tax_total, roundOff, total, totalBase, input.notes ?? null, input.terms ?? null,
-      input.related_doc_id ?? null, input.branch_id ?? null, input.warehouse_id ?? null, c.get("user").id, input.variant ?? null));
+      input.related_doc_id ?? null, input.branch_id ?? null, input.warehouse_id ?? null, c.get("user").id, input.variant ?? null, rcm ? 1 : 0));
   }
   input.lines.forEach((l, i) => {
     const t = totals.lines[i];
@@ -325,6 +330,11 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
     add(taxAcc.sgst, toBase(l.sgst), lineSide, { tax_code_id: l.tax_code_id, description: "SGST" });
     add(taxAcc.igst, toBase(l.igst), lineSide, { tax_code_id: l.tax_code_id, description: "IGST" });
     add(taxAcc.other, toBase(l.other_tax), lineSide, { tax_code_id: l.tax_code_id, description: "Tax" });
+  }
+  // Reverse charge: the GST above is our input credit; the same amount is our liability, paid in cash with the return.
+  if ((doc as { reverse_charge?: number }).reverse_charge) {
+    const rcmTax = lines.reduce((t, l) => t + toBase(l.cgst) + toBase(l.sgst) + toBase(l.igst) + toBase(l.other_tax), 0);
+    if (rcmTax) add(await ensureSystemAccount(db, company.id, "RCM_PAYABLE", RCM_PAYABLE_SEED), rcmTax, lineSide === "debit" ? "credit" : "debit", { description: "GST payable under reverse charge" });
   }
   // Round-off adjusts the receivable; posted to the Round Off account on the revenue side.
   if (doc.round_off) add(acc.ROUND_OFF, toBase(doc.round_off), lineSide, { description: "Rounding off" });

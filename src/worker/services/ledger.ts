@@ -7,7 +7,7 @@
  * account validity — so invariants hold even if application code has a bug. Callers append their own
  * statements (document status, audit log) to the same batch so everything commits or nothing does.
  */
-import { batch, bumpSequence, first, nowIso, seqNumberExpr, stmt, all } from "../lib/db";
+import { batch, bumpSequence, first, nowIso, run, seqNumberExpr, stmt, all } from "../lib/db";
 import { newId } from "../lib/crypto";
 import { conflict, unprocessable, notFound } from "../lib/errors";
 import { sum } from "@shared/money";
@@ -202,6 +202,31 @@ export async function systemAccounts(db: D1Database, companyId: string, keys: st
   }
   return map;
 }
+
+/**
+ * The account with a system key, created on first use for companies whose chart predates it. An existing account with
+ * the suggested code (or the same name) and no key is adopted rather than duplicated.
+ */
+export async function ensureSystemAccount(db: D1Database, companyId: string, key: string,
+  seed: { code: string; name: string; type: string; subtype: string; parentCode: string }): Promise<string> {
+  const hit = await first<{ id: string }>(db, `SELECT id FROM accounts WHERE company_id = ? AND system_key = ?`, companyId, key);
+  if (hit) return hit.id;
+  const adopt = await first<{ id: string }>(db, `SELECT id FROM accounts WHERE company_id = ? AND system_key IS NULL AND is_group = 0 AND (code = ? OR lower(name) = lower(?)) ORDER BY code = ? DESC LIMIT 1`,
+    companyId, seed.code, seed.name, seed.code);
+  if (adopt) { await run(db, `UPDATE accounts SET system_key = ? WHERE id = ?`, key, adopt.id); return adopt.id; }
+  const codes = new Set((await all<{ code: string }>(db, `SELECT code FROM accounts WHERE company_id = ?`, companyId)).map((r) => r.code));
+  let code = seed.code;
+  while (codes.has(code)) code = String(Number(code) + 1);
+  const parent = await first<{ id: string }>(db, `SELECT id FROM accounts WHERE company_id = ? AND code = ?`, companyId, seed.parentCode);
+  const id = newId();
+  await run(db, `INSERT INTO accounts (id, company_id, code, name, type, subtype, parent_id, is_group, system_key) VALUES (?,?,?,?,?,?,?,0,?)`,
+    id, companyId, code, seed.name, seed.type, seed.subtype, parent?.id ?? null, key);
+  return id;
+}
+
+export const TDS_RECEIVABLE_SEED = { code: "1180", name: "TDS Receivable", type: "asset", subtype: "current_asset", parentCode: "1100" };
+export const TDS_PAYABLE_SEED = { code: "2150", name: "TDS Payable", type: "liability", subtype: "current_liability", parentCode: "2100" };
+export const RCM_PAYABLE_SEED = { code: "2165", name: "GST Payable (Reverse Charge)", type: "liability", subtype: "current_liability", parentCode: "2100" };
 
 /** Ensure an account belongs to the company, is postable and active. */
 export async function assertPostable(db: D1Database, companyId: string, accountId: string, label = "Account") {

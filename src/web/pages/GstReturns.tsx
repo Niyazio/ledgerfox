@@ -85,18 +85,23 @@ export default function GstReturns() {
               ["(a) Taxable outward supplies", d3.sup_details.osup_det.txval, d3.sup_details.osup_det.iamt, d3.sup_details.osup_det.camt, d3.sup_details.osup_det.samt, 0],
               ["(b) Zero rated", 0, 0, 0, 0, 0],
               ["(c) Nil rated and exempted", d3.sup_details.osup_nil_exmp.txval, 0, 0, 0, 0],
-              ["(d) Inward supplies (reverse charge)", 0, 0, 0, 0, 0],
+              ["(d) Inward supplies (reverse charge)", d3.sup_details.isup_rev.txval, d3.sup_details.isup_rev.iamt, d3.sup_details.isup_rev.camt, d3.sup_details.isup_rev.samt, 0],
               ["(e) Non-GST outward supplies", d3.sup_details.osup_nongst.txval, 0, 0, 0, 0],
             ]} />
             <h3 className="mb-2 mt-5 text-sm font-semibold">3.2 Inter-state supplies to unregistered persons</h3>
             <Table head={["Place of supply", "Taxable Value", "Integrated Tax"]} rows={d3.inter_sup.unreg_details.map((x: any) => [state(x.pos), x.txval, x.iamt])} />
             <h3 className="mb-2 mt-5 text-sm font-semibold">4 Eligible input tax credit</h3>
-            <Table head={["Details", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess Amount"]} rows={[["(A)(5) All other ITC (bills and expenses)", d3.itc_elg.itc_net.iamt, d3.itc_elg.itc_net.camt, d3.itc_elg.itc_net.samt, 0]]} />
+            <Table head={["Details", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess Amount"]} rows={[
+              ["(A)(3) Inward supplies liable to reverse charge", d3.itc_elg.itc_avl[0].iamt, d3.itc_elg.itc_avl[0].camt, d3.itc_elg.itc_avl[0].samt, 0],
+              ["(A)(5) All other ITC (bills and expenses)", d3.itc_elg.itc_avl[1].iamt, d3.itc_elg.itc_avl[1].camt, d3.itc_elg.itc_avl[1].samt, 0],
+              ["(C) Net ITC available", d3.itc_elg.itc_net.iamt, d3.itc_elg.itc_net.camt, d3.itc_elg.itc_net.samt, 0],
+            ]} />
             <h3 className="mb-2 mt-5 text-sm font-semibold">5 Exempt, nil and non-GST inward supplies</h3>
             <Table head={["Nature", "Inter-state", "Intra-state"]} rows={[["Exempt / nil rated purchases", d3.inward_sup.isup_details[0].inter, d3.inward_sup.isup_details[0].intra]]} />
             <h3 className="mb-2 mt-5 text-sm font-semibold">Net tax (output − input), before set-off</h3>
             <Table head={["", "Integrated Tax", "Central Tax", "State/UT Tax"]} rows={[["Payable (negative = credit carried forward)", d3.net_payable_before_set_off.iamt, d3.net_payable_before_set_off.camt, d3.net_payable_before_set_off.samt]]} />
-            {d3.warnings.slice(-2).map((w: string) => <p key={w} className="mt-2 text-xs muted">{w}</p>)}
+            {(d3.reverse_charge_cash.iamt || d3.reverse_charge_cash.camt || d3.reverse_charge_cash.samt) ? <Table head={["", "Integrated Tax", "Central Tax", "State/UT Tax"]} rows={[["Reverse charge — pay in cash", d3.reverse_charge_cash.iamt, d3.reverse_charge_cash.camt, d3.reverse_charge_cash.samt]]} /> : null}
+            {d3.warnings.slice(-3).map((w: string) => <p key={w} className="mt-2 text-xs muted">{w}</p>)}
           </Card>
         </div>
       ))}

@@ -72,11 +72,13 @@ backups). Not yet production-ready** for unsupervised use or as a statutory syst
 | Price lists (wholesale/dealer/retail): % on selling price and own prices with quantity breaks; given to customers; applied on invoices/quotes and at the POS, where staff without discount rights can only use the list rate | ✅ Done | No date-limited offers or "buy X get Y free" schemes |
 | Manufacturing: bills of materials, production entries with actual consumption (wastage), components at moving-average cost, labour/overhead posted to the ledger, batch-tracked materials and products, void while the product is still in stock | ✅ Done | Single-level per entry (sub-assemblies are made as separate entries); no work-in-progress stage, job work or by-products |
 | Payroll filing files (India): EPF ECR text upload with the EPS/EPF split, NCP days and challan heads (A/c 1, 2, 10, 21, 22); ESIC monthly contribution rows; Form 24Q deductee rows per quarter for NSDL's RPU | ✅ Done | Files only: nothing is filed. No EPS exemption for members over 58 or higher-wage EPF opt-ins; 24Q challan details and the FVU step are done in NSDL's utility |
+| TDS on receipts and payments (customer deducts from us → TDS Receivable; we deduct from a supplier → TDS Payable, with section); the invoice/bill is settled by cash + TDS | ✅ Done | No automatic TDS rates/thresholds, no 26Q/27Q return files or Form 16A |
+| GST reverse charge on bills and debit notes: supplier paid the value before tax, tax booked as input credit and "GST Payable (Reverse Charge)"; GSTR-3B 3.1(d) and 4A(3) filled | ✅ Done | TCS on sale of goods not included (withdrawn from April 2025); other TCS cases not covered |
 | Subscriptions (hosted edition): Free/Starter/Business/Multi-branch plans, 14-day trial, limits and features enforced on the server, Razorpay checkout with signature verification and webhook, subscription tax invoices, vendor admin page | ✅ Built, **off by default** | Needs your Razorpay account and keys (BILLING.md); not tested with a real payment |
 
 ## Incomplete, partial or not implemented (honest list)
 
-- **GST compliance:** GSTR-1/3B, e-invoice and e-way bill files are prepared for upload but nothing is filed or generated from LedgerFox (no GSP connection); no TDS/TCS, reverse-charge postings, cess, exports table or GSTR-2B matching.
+- **GST compliance:** GSTR-1/3B, e-invoice and e-way bill files are prepared for upload but nothing is filed or generated from LedgerFox (no GSP connection); no TCS, cess, exports table or GSTR-2B matching.
 - **Optional local LLM adapter:** reserved in config (`LOCAL_LLM_URL`) but **not implemented**; no AI model is called.
 - **No email** (invitations, invoices, reminders, password resets are all copy-link/manual).
 - **No MFA**; no email verification.
