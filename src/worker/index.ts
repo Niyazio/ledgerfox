@@ -22,6 +22,7 @@ import imports from "./routes/imports";
 import recurring from "./routes/recurring";
 import priceLists from "./routes/priceLists";
 import production from "./routes/production";
+import clients from "./routes/clients";
 import pos from "./routes/pos";
 import files from "./routes/files";
 import exportdata from "./routes/exportdata";
@@ -97,6 +98,7 @@ app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
 app.route("/api/backups", backups);
 app.route("/api/billing", billing);
+app.route("/api/clients", clients);
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);

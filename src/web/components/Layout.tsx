@@ -197,6 +197,7 @@ function CompanySwitcher() {
             </button>
           ))}
           <div className="my-1 border-t border-[var(--border)]" />
+          {(me?.companies.length ?? 0) > 1 && <Link to="/app/clients" onClick={() => setOpen(false)} className="block rounded-md px-3 py-2 text-sm text-brand-700 hover:bg-[var(--surface-2)] dark:text-brand-300">All clients at a glance</Link>}
           <Link to="/app/new-company" onClick={() => setOpen(false)} className="block rounded-md px-3 py-2 text-sm text-brand-700 hover:bg-[var(--surface-2)] dark:text-brand-300">+ Add company</Link>
         </div>
       )}

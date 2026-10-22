@@ -30,6 +30,7 @@ const Expenses = lazy(() => import("./pages/Expenses"));
 const Daybook = lazy(() => import("./pages/Daybook"));
 const Labels = lazy(() => import("./pages/Labels"));
 const Production = lazy(() => import("./pages/Production"));
+const Clients = lazy(() => import("./pages/Clients"));
 const GstReturns = lazy(() => import("./pages/GstReturns"));
 const ImportPage = lazy(() => import("./pages/Import"));
 const Recurring = lazy(() => import("./pages/Recurring"));
@@ -89,6 +90,7 @@ function App() {
       <Route path="/invite" element={<AcceptInvite />} />
       <Route path="/app" element={<RequireAuth><AppHome /></RequireAuth>} />
       <Route path="/app/new-company" element={<RequireAuth><NewCompany /></RequireAuth>} />
+      <Route path="/app/clients" element={<RequireAuth><Clients /></RequireAuth>} />
       <Route path="/app/:companyId" element={<RequireAuth><CompanyLayout /></RequireAuth>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
