@@ -19,6 +19,11 @@ self.addEventListener("install", (event) => {
   })());
 });
 
+// The page's "Reload to update" button asks a waiting new version to take over now.
+self.addEventListener("message", (event) => {
+  if (event.data === "skip-waiting") self.skipWaiting();
+});
+
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     for (const name of await caches.keys()) if (name.startsWith("lf-shell-") && name !== SHELL) await caches.delete(name);
@@ -31,6 +36,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/version.json") return; // always from the network: it says whether a new version exists
   if (url.pathname.startsWith("/api/")) {
     if (url.pathname === "/api/health") return;
     event.respondWith(apiNetworkFirst(req));

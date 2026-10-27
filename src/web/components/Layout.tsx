@@ -11,6 +11,7 @@ import { Button, cx, Modal, Spinner } from "./ui";
 import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { useRecurringAutoRun } from "../pages/Recurring";
 import { setLang, useLang } from "../lib/lang";
+import { UpdateCenter } from "./Updates";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
@@ -306,6 +307,7 @@ function Shell() {
           </div>
           <div className="flex items-center gap-1">
             <OfflineStatus companyId={companyId} />
+            <UpdateCenter />
             <LangPicker />
             <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

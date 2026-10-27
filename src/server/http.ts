@@ -17,6 +17,23 @@ import { migrate } from "./migrate";
 import { ensureDefaultAdmin } from "../worker/routes/auth";
 import { CloudBackup } from "./cloud-backup";
 
+/** Update state of the desktop app, shown by the in-app Update button. */
+export interface UpdateState {
+  current: string;
+  latest: string | null;
+  status: "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
+  progress: number | null;
+  notes: string | null;
+  /** macOS: where to download the new version (the app cannot replace itself). */
+  manual_download: string | null;
+  checked_at: string | null;
+}
+export interface DesktopUpdater {
+  status: () => UpdateState;
+  check: () => Promise<UpdateState>;
+  install: () => void;
+}
+
 export interface ServerOptions {
   dataFile: string;
   webDir: string;
@@ -25,6 +42,8 @@ export interface ServerOptions {
   host: string;
   port: number;
   env?: Partial<Env>;
+  /** The desktop app's updater; absent when the server runs on its own (CLI). */
+  updater?: DesktopUpdater;
 }
 
 export interface RunningServer {
@@ -154,6 +173,18 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
         return Response.json({ error: { code: "FORBIDDEN", message: "Cloud backup is managed by the owner or an administrator on this computer" } }, { status: 403 });
       }
       return backupRoute(req, desktopBackup[1]);
+    }
+    const upd = /^\/api\/desktop\/update(?:\/(check|install))?$/.exec(url.pathname);
+    if (upd) {
+      const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { ...SECURITY_HEADERS, "Cache-Control": "no-store" } });
+      if (!opts.updater) return json({ available: false });
+      // Anyone may see the version; only the owner/administrator at this computer checks and installs.
+      if (!upd[1] && req.method === "GET") return json({ available: true, can_install: await localAdmin(req, bindings.incoming.socket.remoteAddress ?? ""), ...opts.updater.status() });
+      if (req.method !== "POST" || req.headers.get("x-requested-with") !== "ledgerfox") return json({ error: { code: "CSRF", message: "Missing request header" } }, 403);
+      if (!(await localAdmin(req, bindings.incoming.socket.remoteAddress ?? ""))) return json({ error: { code: "FORBIDDEN", message: "Updates are installed by the owner or an administrator on the computer running LedgerFox" } }, 403);
+      if (upd[1] === "check") return json({ available: true, can_install: true, ...(await opts.updater.check()) });
+      opts.updater.install();
+      return json({ ok: true });
     }
     const pair = /^\/api\/pair\/([A-Za-z0-9_-]{20,40})$/.exec(url.pathname);
     if (pair) {

@@ -11,7 +11,7 @@ import { basename, dirname, join } from "node:path";
 import QRCode from "qrcode";
 import { startServer, type RunningServer } from "../server/http";
 import { ensureCloudflared, startTunnel, type Tunnel } from "./tunnel";
-import { checkForUpdatesNow, setupAutoUpdate } from "./updates";
+import { checkForUpdatesNow, desktopUpdater, setupAutoUpdate } from "./updates";
 
 const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
@@ -55,10 +55,10 @@ async function boot(dataFile: string) {
   mkdirSync(dirname(dataFile), { recursive: true });
   const host = config.lan ? "0.0.0.0" : "127.0.0.1";
   try {
-    server = await startServer({ dataFile, webDir, migrationsDir, host, port: config.port ?? DEFAULT_PORT });
+    server = await startServer({ dataFile, webDir, migrationsDir, host, port: config.port ?? DEFAULT_PORT, updater: desktopUpdater });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EADDRINUSE") throw e;
-    server = await startServer({ dataFile, webDir, migrationsDir, host, port: 0 });
+    server = await startServer({ dataFile, webDir, migrationsDir, host, port: 0, updater: desktopUpdater });
   }
   config.dataFile = dataFile;
   saveConfig();
