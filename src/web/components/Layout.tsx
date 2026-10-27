@@ -12,6 +12,7 @@ import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { useRecurringAutoRun } from "../pages/Recurring";
 import { setLang, useLang } from "../lib/lang";
 import { UpdateCenter } from "./Updates";
+import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
@@ -268,6 +269,7 @@ function RecurringRunner() { useRecurringAutoRun(); return null; }
 function Shell() {
   const { me, logout } = useSession();
   const { settings, id: companyId } = useCompany();
+  const { pathname } = useLocation();
   const { dark, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
@@ -322,6 +324,7 @@ function Shell() {
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>
+        {settings && me?.edition !== "offline" && !/\/pos$/.test(pathname) && <Assistant />}
       </div>
     </div>
   );

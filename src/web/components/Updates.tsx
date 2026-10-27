@@ -46,7 +46,7 @@ export function UpdateCenter() {
         {info.available && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}
       </button>
       {showBar && (
-        <div role="status" className="fixed inset-x-0 bottom-4 z-40 mx-auto flex w-[min(40rem,calc(100%-2rem))] items-center gap-3 rounded-xl border border-brand-200 bg-[var(--surface)] p-3 text-sm shadow-lg dark:border-brand-800">
+        <div role="status" className="no-print fixed inset-x-0 top-16 z-40 mx-auto flex w-[min(40rem,calc(100%-2rem))] items-center gap-3 rounded-xl border border-brand-200 bg-[var(--surface)] p-3 text-sm shadow-lg dark:border-brand-800">
           <ArrowUpCircle className="h-5 w-5 shrink-0 text-brand-600" />
           <p className="flex-1">{info.edition === "cloud" ? "A new version of LedgerFox is ready." : `LedgerFox ${info.latest} is ${info.status === "ready" ? "ready to install" : "available"}.`}{" "}
             <button className="text-brand-700 underline dark:text-brand-300" onClick={() => setOpen(true)}>What's new</button></p>
