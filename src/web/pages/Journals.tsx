@@ -11,6 +11,7 @@ import { AccountSelect, DimensionSelect, CURRENCY_OPTIONS } from "../components/
 import { fmtDate, fmtDateTime, today, toInput } from "../lib/format";
 import { parseDecimal, toDecimalString } from "@shared/money";
 import { CURRENCIES } from "@shared/currencies";
+import { printPage } from "../lib/download";
 
 export function JournalList() {
   const { path, money, id, settings, can } = useCompany();
@@ -216,7 +217,7 @@ export function JournalView() {
       <PageHeader title={e.entry_number ?? "Draft journal"} subtitle={e.memo} back={{ to: `/app/${id}/journals`, label: "Journals" }}
         actions={<>
           <HistoryButton type="journal" id={e.id} />
-          <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
+          <Button variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print</Button>
           {e.status === "draft" && can("journal.create") && <LinkButton variant="secondary" to={`/app/${id}/journals/${e.id}/edit`}>Edit</LinkButton>}
           {e.status === "draft" && can("journal.post") && <Button onClick={async () => { try { await api.post(path(`/journals/${e.id}/post`)); toast("success", "Posted"); reload(); } catch (err) { toast("error", (err as Error).message); } }}>Post</Button>}
           {e.status === "draft" && can("journal.create") && <ConfirmButton label="Delete" title="Delete draft?" body="The draft will be removed. This only works for drafts." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/journals/${e.id}`)); nav(`/app/${id}/journals`); }} />}

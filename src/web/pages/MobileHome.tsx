@@ -110,20 +110,25 @@ export default function MobileHome() {
   const stopScan = () => { stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; setScanning(false); };
   const scan = async () => {
     setError(null);
+    if (!navigator.mediaDevices?.getUserMedia) return setError("The camera is not available here. Type the address shown on the computer instead.");
+    // The phone's own detector where it exists; otherwise ZXing (works on every Android version).
     const Detector = (globalThis as { BarcodeDetector?: new (o: { formats: string[] }) => { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) return setError("QR scanning is not available on this phone. Type the address shown on the computer instead.");
     try { stream.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); }
     catch { return setError("Camera permission was denied. Allow camera access for LedgerFox in Android settings, or type the address."); }
     setScanning(true);
+    const { decodeVideoFrame } = await import("../lib/scanDecode");
     requestAnimationFrame(async () => {
       if (!video.current || !stream.current) return;
       video.current.srcObject = stream.current;
       await video.current.play();
-      const det = new Detector({ formats: ["qr_code"] });
+      const det = Detector ? new Detector({ formats: ["qr_code"] }) : null;
       const tick = async () => {
         if (!stream.current || !video.current) return;
-        try { const codes = await det.detect(video.current); if (codes[0]?.rawValue) { stopScan(); void fromQr(codes[0].rawValue); return; } } catch { /* frame not ready */ }
-        requestAnimationFrame(tick);
+        try {
+          const code = det ? (await det.detect(video.current))[0]?.rawValue : await decodeVideoFrame(video.current);
+          if (code) { stopScan(); void fromQr(code); return; }
+        } catch { /* frame not ready */ }
+        setTimeout(() => requestAnimationFrame(tick), det ? 0 : 250);
       };
       void tick();
     });

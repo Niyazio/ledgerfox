@@ -6,6 +6,7 @@ import { useApi } from "../lib/hooks";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, TableWrap } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
 import { code128Svg, productQrPayload } from "@shared/barcode";
+import { printPage } from "../lib/download";
 
 interface Item { id: string; name: string; code: string | null; barcode: string | null; sku: string | null; sale_price: number; unit: string }
 
@@ -50,7 +51,7 @@ export default function Labels() {
     <>
       <div className="no-print">
         <PageHeader title="Product labels" subtitle="QR codes hold only the product code (never prices or costs). Scan them at billing, purchase or stock count."
-          actions={<Button disabled={!labels.length} onClick={() => window.print()}><Printer className="h-4 w-4" />Print {labels.length || ""} label{labels.length === 1 ? "" : "s"}</Button>} />
+          actions={<Button disabled={!labels.length} onClick={printPage}><Printer className="h-4 w-4" />Print {labels.length || ""} label{labels.length === 1 ? "" : "s"}</Button>} />
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Add products">
             {error && <Alert className="mb-3">{error}</Alert>}

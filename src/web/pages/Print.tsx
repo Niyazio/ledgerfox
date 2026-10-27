@@ -12,6 +12,7 @@ import { Alert, Spinner } from "../components/ui";
 import { INDIA_STATES } from "@shared/tax";
 import { amountInWords } from "@shared/words";
 import { currencyExponent } from "@shared/currencies";
+import { printPage } from "../lib/download";
 
 /** Paper formats. Thermal formats suit 80 mm and 58 mm receipt printers (POS, restaurant, retail counters). */
 export const FORMATS = {
@@ -413,7 +414,7 @@ function PrintInner() {
   const [showUpi, setShowUpi] = useState(settings?.company.print_qr_upi !== 0);
   const set = (f: Format) => setParams((p) => { p.set("format", f); return p; }, { replace: true });
   const shareText = useMemo(() => `${document.title}\n${location.href}`, []);
-  useEffect(() => { if (params.get("auto") === "1") setTimeout(() => window.print(), 600); }, [params]);
+  useEffect(() => { if (params.get("auto") === "1") setTimeout(printPage, 600); }, [params]);
   if (!settings) return <Spinner />;
   return (
     <div className="min-h-full bg-slate-200 pb-10 print:bg-white print:p-0 dark:bg-slate-800">
@@ -428,7 +429,7 @@ function PrintInner() {
         {kind === "document" && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showUpi} onChange={(e) => setShowUpi(e.target.checked)} />UPI payment QR</label>}
         <span className="flex-1" />
         <a className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer"><Share2 className="h-4 w-4" />WhatsApp</a>
-        <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / Save PDF</button>
+        <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={printPage}><Printer className="h-4 w-4" />Print / Save PDF</button>
       </div>
       <p className="no-print px-4 py-2 text-center text-xs muted">Preview. Choose “Save as PDF” in the print dialog for a PDF. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
       <BrandingCtx.Provider value={branding.data ?? { logo: null, payment_qr: null }}>

@@ -5,6 +5,7 @@ import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Field, Input } from "../components/ui";
 import { ProductCredit, Wordmark } from "../components/Layout";
+import { saveFile } from "../lib/download";
 
 function AuthCard({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   const { me } = useSession();
@@ -93,7 +94,7 @@ export function Register() {
         </div>
         <div className="mt-3 flex gap-2">
           <Button variant="secondary" size="sm" onClick={() => navigator.clipboard?.writeText(codes.join("\n"))}>Copy</Button>
-          <Button variant="secondary" size="sm" onClick={() => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([codes.join("\n")], { type: "text/plain" })); a.download = "ledgerfox-recovery-codes.txt"; a.click(); }}>Download</Button>
+          <Button variant="secondary" size="sm" onClick={() => void saveFile(new Blob([codes.join("\n")], { type: "text/plain" }), "ledgerfox-recovery-codes.txt")}>Download</Button>
         </div>
         <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I have stored these codes somewhere safe</label>
         <Button className="mt-4 w-full" disabled={!saved} onClick={async () => { await refresh(); nav(params.get("next") ?? "/app"); }}>Continue</Button>

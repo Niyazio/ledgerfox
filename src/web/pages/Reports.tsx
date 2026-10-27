@@ -12,6 +12,7 @@ import { DOC_LABELS, fmtDate, fyStart, qty, today, toInput } from "../lib/format
 import { api } from "../lib/api";
 import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
+import { printPage } from "../lib/download";
 
 const REPORTS = [
   { key: "cash-book", title: "Cash book / Bank book", group: "Daily tracking", desc: "Every receipt and payment through cash or bank accounts with a running balance; CSV and PDF." },
@@ -76,7 +77,7 @@ function Shell({ title, controls, onCsv, children, subtitle }: { title: string; 
       <PageHeader title={title} back={{ to: `/app/${id}/reports`, label: "Reports" }}
         actions={<>
           {onCsv && <DownloadButtons onDownload={onCsv} />}
-          <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / PDF</Button>
+          <Button variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print / PDF</Button>
         </>} />
       {controls && <div className="mb-4 flex flex-wrap items-end gap-3 no-print">{controls}</div>}
       <Card className="print-area">

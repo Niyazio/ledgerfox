@@ -3,6 +3,7 @@ import { FileJson, Truck } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { api, errorMessage } from "../lib/api";
 import { Alert, Button, Field, Input, Modal, Select, Textarea, useToast } from "./ui";
+import { saveFile } from "../lib/download";
 
 export interface GstRefs {
   irn: string | null; ack_no: string | null; ack_date: string | null; signed_qr: string | null; irn_cancelled: number;
@@ -14,9 +15,7 @@ interface Result { json: unknown; problems: string[]; places: { seller: Place; b
 const EMPTY: GstRefs = { irn: null, ack_no: null, ack_date: null, signed_qr: null, irn_cancelled: 0, ewb_no: null, ewb_date: null, ewb_valid_until: null };
 
 function download(name: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  void saveFile(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), name);
 }
 
 /** "2026-05-10 14:32:00" from the portals' "10/05/2026 02:32:00 PM" / ISO / "2026-05-10 14:32:00". */

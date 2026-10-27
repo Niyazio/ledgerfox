@@ -1,5 +1,6 @@
 import { toCsv } from "@shared/csv";
 import { buildXlsx } from "@shared/xlsx";
+import { saveFile } from "./download";
 
 export type DownloadFormat = "xlsx" | "csv";
 let pending: DownloadFormat | null = null;
@@ -8,17 +9,6 @@ let pending: DownloadFormat | null = null;
 export async function withFormat(format: DownloadFormat, fn: () => unknown) {
   pending = format;
   try { await fn(); } finally { pending = null; }
-}
-
-function save(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename.replace(/[^\w.-]+/g, "_");
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -30,9 +20,9 @@ export function downloadCsv(filename: string, header: string[], rows: unknown[][
   const base = filename.replace(/\.(csv|xlsx)$/i, "");
   if (format === "xlsx") {
     const bytes = buildXlsx(header, rows, base.slice(0, 31));
-    save(new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${base}.xlsx`);
+    void saveFile(new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${base}.xlsx`);
   } else {
-    save(new Blob(["﻿" + toCsv(header, rows)], { type: "text/csv;charset=utf-8" }), `${base}.csv`);
+    void saveFile(new Blob(["﻿" + toCsv(header, rows)], { type: "text/csv;charset=utf-8" }), `${base}.csv`);
   }
 }
 
