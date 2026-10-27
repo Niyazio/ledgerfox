@@ -1,5 +1,16 @@
 # Test report
 
+## Email, reminders and billing set-up check (branch `feature/email-billing`, 27 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck`, desktop `tsc` | ✅ 0 problems / 0 errors |
+| `npm test` (Miniflare D1) | ✅ **238 passed**, 1 skipped, 40 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **238 passed**, 1 skipped |
+| `npm audit --omit=dev --audit-level=high` | ✅ 0 vulnerabilities |
+| `test/email.test.ts` (Resend and Razorpay APIs mocked) | Confirmation link at sign-up (single use); forgot password gives the same answer for unknown addresses, link works once, old sessions signed out, 3 mails per address per hour; no reset by email when email is off; no mail to username-only staff; one receipt per payment with invoice, payment and account ids; one warning per failed auto-renew; trial/renewal/grace reminders sent once each and retried after a provider failure, none while auto-renew is on; vendor set-up check reports presence and mode but never secret values |
+| Browser check (local `wrangler dev`, Chromium) | Forgot-password-by-email page and confirmation message; "confirm your email" bar; Account ID on Plan & billing; Set-up check on `/vendor`; an expired verification link shows a clear message; no page errors. Real email delivery not tested (needs a Resend account) |
+
 ## Subscriptions, promotions and hardening (branch `feature/autopay-promos`, 27 Oct 2026)
 
 | Command | Result |

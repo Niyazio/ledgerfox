@@ -9,6 +9,7 @@ import { Wordmark } from "../components/Layout";
 import { FEATURE_LABELS, PAID_PLANS, withGst, type Interval, type Plan } from "@shared/plans";
 import { fmtDate, money as fmt } from "../lib/format";
 import { printPage } from "../lib/download";
+import { useSession } from "../lib/session";
 
 const inr = (paise: number) => fmt(paise, "INR");
 
@@ -16,8 +17,9 @@ interface BillingInfo {
   enabled: boolean; can_buy: boolean; online: boolean; gst_percent: number; plans: Plan[];
   subscription: { enforced: boolean; plan: string; paid_plan: string | null; status: string; interval: Interval | null; trial_ends_at: string | null; paid_until: string | null; days_left: number | null };
   usage: { users: number; companies: number; branches: number };
-  payments: { id: string; plan: string; billing_interval: string; total: number; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string }[];
-  autopay: { status: string; plan: string; interval: Interval; total: number } | null;
+  payments: { id: string; plan: string; billing_interval: string; total: number; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }[];
+  autopay: { id: string; status: string; plan: string; interval: Interval; total: number } | null;
+  account_id: string;
 }
 
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Last charge failed — Razorpay is retrying", halted: "Stopped after failed charges", paused: "Paused", cancelled: "Off", completed: "Finished" };
@@ -68,6 +70,7 @@ export function PlanBillingTab() {
             )}
           </div>
         )}
+        <p className="mt-2 text-xs muted">Account ID <span className="select-all font-mono">{data.account_id}</span>{data.autopay && <> · Auto-renew subscription ID <span className="select-all font-mono">{data.autopay.id}</span></>} — quote these when you contact support.</p>
         <p className="mt-3 text-sm">Using {data.usage.users} of {current.limits.users} users · {data.usage.companies} of {current.limits.companies} companies · up to {data.usage.branches} of {current.limits.branches} branches per company</p>
       </Card>
       <div className="flex items-center gap-3"><span className="text-sm font-medium">Pay</span>
@@ -93,7 +96,7 @@ export function PlanBillingTab() {
               {data.can_buy ? (
                 data.online
                   ? <Button className="mt-4 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${p.id}&interval=${interval}${auto && !autopayLive(data.autopay) ? "&mode=autopay" : ""}`)}>{same ? "Renew" : "Choose"} {p.name}</Button>
-                  : <p className="mt-4 text-xs muted">Online payment is not set up yet. Write to info@niyazio.com to pay by bank transfer.</p>
+                  : <p className="mt-4 text-xs muted">Online payment is not available right now. Write to info@niyazio.com with your account ID to pay by bank transfer.</p>
               ) : <p className="mt-4 text-xs muted">Only the owner can change the plan.</p>}
             </Card>
           );
@@ -101,10 +104,11 @@ export function PlanBillingTab() {
       </div>
       {data.payments.length > 0 && (
         <Card title="Invoices" padded={false}>
-          <TableWrap><table className="table text-sm"><thead><tr><th>Invoice</th><th>Plan</th><th>Period</th><th className="num">Amount</th><th /></tr></thead>
+          <TableWrap><table className="table text-sm"><thead><tr><th>Invoice</th><th>Plan</th><th>Period</th><th>Payment ID</th><th className="num">Amount</th><th /></tr></thead>
             <tbody>{data.payments.map((p) => (
               <tr key={p.id}><td>{p.invoice_number}</td><td>{data.plans.find((x) => x.id === p.plan)?.name} ({p.billing_interval})</td>
-                <td>{fmtDate(p.period_start.slice(0, 10))} – {fmtDate(p.period_end.slice(0, 10))}</td><td className="num">{inr(p.total)}</td>
+                <td>{fmtDate(p.period_start.slice(0, 10))} – {fmtDate(p.period_end.slice(0, 10))}</td>
+                <td className="font-mono text-xs">{p.provider_payment_id ?? (p.provider === "manual" ? "Bank transfer" : "—")}{p.provider_subscription_id && <span className="block muted">auto-renew</span>}</td><td className="num">{inr(p.total)}</td>
                 <td className="text-right"><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/billing/${orgId}/invoice/${p.id}`} target="_blank">View</Link></td></tr>
             ))}</tbody></table></TableWrap>
         </Card>
@@ -123,6 +127,23 @@ export function PlanBanner() {
   if (!show) return null;
   const text = s.status === "trial" ? `Free trial ends in ${s.days_left} day(s).` : s.status === "grace" ? `Your plan has ended — renew within ${s.days_left} day(s) to keep all features.` : `Your plan renews in ${s.days_left} day(s).`;
   return <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{text} <Link className="font-medium underline" to={`/app/${id}/settings?tab=billing`}>Plan & billing</Link></div>;
+}
+
+/** Thin banner until the signed-in person confirms their email address (hosted website with email switched on). */
+export function VerifyEmailBanner() {
+  const { me } = useSession();
+  const toast = useToast();
+  const [sent, setSent] = useState(false);
+  const u = me?.user;
+  if (!me?.email_enabled || !u || u.email_verified || !u.email_deliverable) return null;
+  return (
+    <div className="no-print border-b border-sky-200 bg-sky-50 px-4 py-1.5 text-center text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+      Please confirm your email ({u.email}) so password reset links, receipts and reminders reach you.{" "}
+      {sent ? <span>Sent — check your inbox.</span> : <button className="font-medium underline" onClick={async () => {
+        try { await api.post("/api/auth/verify-email/send"); setSent(true); } catch (e) { toast("error", errorMessage(e)); }
+      }}>Send the link again</button>}
+    </div>
+  );
 }
 
 declare global { interface Window { Razorpay?: new (opts: Record<string, unknown>) => { open: () => void; on: (e: string, cb: (r: unknown) => void) => void } } }
@@ -220,8 +241,40 @@ export function BillingInvoice() {
           : <div className="flex justify-between"><dt>{s.gstin ? "IGST" : "GST"}</dt><dd>{inr(p.gst)}</dd></div>}
         <div className="flex justify-between border-t border-slate-300 pt-1 font-semibold"><dt>Total paid</dt><dd>{inr(p.total)}</dd></div>
       </dl>
-      <p className="mt-6 text-xs text-slate-500">Paid {p.provider === "razorpay" ? "online via Razorpay" : "by bank transfer"}. This is a computer-generated invoice.</p>
+      <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs text-slate-600">
+        <dt>Account ID</dt><dd className="font-mono">{p.org_id}</dd>
+        {p.provider_payment_id && <><dt>Payment ID</dt><dd className="font-mono">{p.provider_payment_id}</dd></>}
+        {p.provider_order_id && <><dt>Order ID</dt><dd className="font-mono">{p.provider_order_id}</dd></>}
+        {p.provider_subscription_id && <><dt>Subscription ID</dt><dd className="font-mono">{p.provider_subscription_id}</dd></>}
+      </dl>
+      <p className="mt-4 text-xs text-slate-500">Paid {p.provider === "razorpay" ? (p.provider_subscription_id ? "online via Razorpay (auto-renew)" : "online via Razorpay") : "by bank transfer"}. This is a computer-generated invoice.</p>
     </div>
+  );
+}
+
+const OK = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
+  <li className="flex items-start gap-2"><span className={ok ? "text-emerald-600" : "text-red-600"}>{ok ? "✓" : "✗"}</span><span>{children}</span></li>
+);
+
+/** What the live server can see of the payment and email set-up (never secret values). */
+function SetupCheck() {
+  const { data, error, reload, loading } = useApi<any>("/api/billing/vendor/setup");
+  if (error) return <Alert className="mb-4">{error}</Alert>;
+  if (!data) return null;
+  const r = data.razorpay;
+  return (
+    <Card title="Set-up check" className="mb-4">
+      <ul className="space-y-1 text-sm">
+        <OK ok={data.billing_enabled}>Subscriptions switched on (BILLING_ENABLED)</OK>
+        <OK ok={r.key_id}>RAZORPAY_KEY_ID {r.key_id ? <>found — <strong>{r.mode === "live" ? "LIVE mode" : r.mode === "test" ? "TEST mode (no real money)" : "unknown key type"}</strong></> : "missing — the Pay buttons stay hidden until it is added as a secret of the ledgerfox Worker"}</OK>
+        <OK ok={r.key_secret}>RAZORPAY_KEY_SECRET {r.key_secret ? "found" : "missing"}</OK>
+        <OK ok={r.api === "ok"}>Razorpay accepts the keys: {{ ok: "yes", rejected: "no — the key id and secret do not match, or belong to a different mode", unreachable: "could not reach Razorpay", not_checked: "not checked (keys missing)" }[r.api as string]}</OK>
+        <OK ok={r.webhook_secret}>RAZORPAY_WEBHOOK_SECRET {r.webhook_secret ? "found" : "missing — payments made after the browser is closed, and auto-renew charges, are not recorded"}. Webhook URL: <span className="select-all font-mono text-xs">{data.webhook_url}</span></OK>
+        <OK ok={data.email.enabled}>Email {data.email.enabled ? <>on, from {data.email.from}</> : "off — add RESEND_API_KEY (secret) and EMAIL_FROM for reset links, receipts and reminders"}</OK>
+        <OK ok={Boolean(data.vendor.legal_name && data.vendor.gstin && data.vendor.address && data.vendor.state_code)}>Seller details on invoices (VENDOR_LEGAL_NAME, VENDOR_GSTIN, VENDOR_ADDRESS, VENDOR_STATE_CODE)</OK>
+      </ul>
+      <Button className="mt-3" size="sm" variant="secondary" loading={loading} onClick={reload}>Check again</Button>
+    </Card>
   );
 }
 
@@ -281,6 +334,7 @@ export function VendorAdmin() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <PageHeader title="Subscribers" subtitle={data.enabled ? "Billing is on." : "Billing is off (BILLING_ENABLED is not set) — nobody is limited yet."} />
+      <SetupCheck />
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         <Card><p className="text-xs muted">Revenue, last 30 days (before GST)</p><p className="text-xl font-semibold">{inr(data.revenue.month)}</p></Card>
         <Card><p className="text-xs muted">Revenue, all time</p><p className="text-xl font-semibold">{inr(data.revenue.total)}</p></Card>

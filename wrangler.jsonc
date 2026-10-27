@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   // Worker name must match the Worker connected in Cloudflare Workers Builds.
   "name": "ledgerfox",
-  "main": "src/worker/index.ts",
+  "main": "src/worker/entry.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./dist",
@@ -22,6 +22,8 @@
   // Requires niyazio.com to be an active zone in the same Cloudflare account.
   "routes": [{ "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
+  // Daily at 03:17 UTC (08:47 IST): trial and renewal reminder emails (only when billing and email are switched on).
+  "triggers": { "crons": ["17 3 * * *"] },
   // Keep variables added in the Cloudflare dashboard (e.g. VENDOR_ADMIN_EMAILS) when CI deploys; values below still win.
   "keep_vars": true,
   "vars": {
@@ -31,6 +33,8 @@
     "ALLOW_REGISTRATION": "true",
     "GITHUB_REPO": "Niyazio/ledgerfox",
     // Subscriptions on the hosted website (BILLING.md). Razorpay keys are Worker secrets, never in this file.
-    "BILLING_ENABLED": "true"
+    "BILLING_ENABLED": "true",
+    // Public address used in links inside emails.
+    "APP_URL": "https://ledgerfox.niyazio.com"
   }
 }

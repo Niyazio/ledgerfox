@@ -4,9 +4,10 @@ import type { AppEnv } from "../env";
 import { all, batch, first, run, stmt, nowIso } from "../lib/db";
 import { AppError, badRequest, forbidden, unauthorized } from "../lib/errors";
 import { body, reqText } from "../lib/validate";
-import { hashPassword, newId, recoveryCode, sha256Hex, temporaryPassword, verifyPassword } from "../lib/crypto";
+import { hashPassword, newId, randomToken, recoveryCode, sha256Hex, temporaryPassword, verifyPassword } from "../lib/crypto";
 import { newTotpSecret, otpauthUrl, verifyTotp } from "../lib/totp";
 import { createSession, destroySession, loadSessionUser, rateLimit, clientIp, requireAuth, requireSession, isLocalRequest } from "../lib/auth";
+import { deliverable, emailOn, sendMail, siteUrl } from "../services/email";
 
 const auth = new Hono<AppEnv>();
 
@@ -79,7 +80,8 @@ auth.post("/register", async (c) => {
     ...stmts.slice(1),
   ]);
   await createSession(c, id);
-  return c.json({ user: { id, email: input.email, username: input.username ?? null, name: input.name }, recovery_codes: codes }, 201);
+  const verification_sent = await sendVerification(c.env, c.req.url, { id, email: input.email, name: input.name });
+  return c.json({ user: { id, email: input.email, username: input.username ?? null, name: input.name }, recovery_codes: codes, verification_sent }, 201);
 });
 
 auth.post("/login", async (c) => {
@@ -144,7 +146,7 @@ auth.get("/me", async (c) => {
       ? await first<{ username: string }>(c.env.DB, `SELECT username FROM users WHERE email = ? AND must_change_password = 1`, DEFAULT_ADMIN.email)
       : null;
     const firstRun = pending ? { username: pending.username, password: firstRunPassword } : null;
-    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open", default_login: Boolean(firstRun), first_run: firstRun });
+    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open", default_login: Boolean(firstRun), first_run: firstRun, email_enabled: emailOn(c.env) });
   }
   if (user.must_change_password) {
     return c.json({ user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: true }, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition });
@@ -161,7 +163,9 @@ auth.get("/me", async (c) => {
     user.id,
   );
   return c.json({
-    user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: false, totp_enabled: Boolean(user.totp_enabled) },
+    user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: false, totp_enabled: Boolean(user.totp_enabled),
+      email_verified: Boolean((await first<{ v: string | null }>(c.env.DB, `SELECT email_verified_at AS v FROM users WHERE id = ?`, user.id))?.v), email_deliverable: deliverable(user.email) },
+    email_enabled: emailOn(c.env),
     organisations: orgs,
     companies,
     brand: c.env.BRAND_NAME ?? "LedgerFox",
@@ -268,10 +272,68 @@ auth.post("/reset", async (c) => {
   if (!r || r.used_at || r.expires_at < nowIso()) throw badRequest("This reset link is invalid or has expired");
   const h = await hashPassword(input.new_password, iterations(c.env));
   await batch(c.env.DB, [
-    stmt(c.env.DB, `UPDATE password_resets SET used_at = ? WHERE id = ?`, nowIso(), id),
+    stmt(c.env.DB, `UPDATE password_resets SET used_at = ? WHERE id = ? AND used_at IS NULL`, nowIso(), id),
     stmt(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, must_change_password = 0, updated_at = ? WHERE id = ?`, h.hash, h.salt, h.iterations, nowIso(), r.user_id),
     stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ?`, r.user_id),
   ]);
+  return c.json({ ok: true });
+});
+
+// ── Email: verification and password reset links ──
+
+const HOUR = 3_600_000;
+
+/** Mail a link that confirms the account's email address (24 hours). Returns whether it was sent. */
+async function sendVerification(env: AppEnv["Bindings"], requestUrl: string, user: { id: string; email: string; name: string }) {
+  if (!emailOn(env) || !deliverable(user.email)) return false;
+  const token = randomToken(32);
+  await run(env.DB, `INSERT INTO email_tokens (id, user_id, purpose, email, expires_at) VALUES (?, ?, 'verify', ?, ?)`, await sha256Hex(token), user.id, user.email, new Date(Date.now() + 24 * HOUR).toISOString());
+  const link = `${siteUrl(env, requestUrl)}/verify-email?token=${token}`;
+  return sendMail(env, { to: user.email, subject: "Confirm your email for LedgerFox",
+    text: `Hello ${user.name},\n\nPlease confirm that this is your email address, so we can send you password reset links, receipts and reminders:\n\n${link}\n\nThe link works for 24 hours. If you did not create a LedgerFox account, ignore this email.\n\nLedgerFox` });
+}
+
+auth.post("/verify-email/send", requireSession, async (c) => {
+  const u = c.get("user");
+  if (!emailOn(c.env)) throw new AppError(503, "EMAIL_OFF", "Email is not set up on this LedgerFox");
+  if (!deliverable(u.email)) throw badRequest("This account has no email address that can receive mail");
+  if (!(await rateLimit(c.env.DB, `verify-mail:${u.id}`, 5, 3600))) throw new AppError(429, "RATE_LIMITED", "Too many emails. Try again in an hour.");
+  if (!(await sendVerification(c.env, c.req.url, u))) throw new AppError(502, "EMAIL_FAILED", "The email could not be sent. Try again later.");
+  return c.json({ ok: true });
+});
+
+auth.post("/verify-email", async (c) => {
+  const input = await body(c, z.object({ token: z.string().min(20).max(200) }));
+  if (!(await rateLimit(c.env.DB, `verify:${clientIp(c)}`, 30, 900))) throw new AppError(429, "RATE_LIMITED", "Too many attempts. Try again later.");
+  const id = await sha256Hex(input.token);
+  const t = await first<{ user_id: string; email: string; expires_at: string; used_at: string | null }>(c.env.DB, `SELECT user_id, email, expires_at, used_at FROM email_tokens WHERE id = ? AND purpose = 'verify'`, id);
+  if (!t || t.used_at || t.expires_at < nowIso()) throw badRequest("This link is invalid or has expired. Sign in and send a new one.");
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE email_tokens SET used_at = ? WHERE id = ?`, nowIso(), id),
+    // Only the address the link was sent to is confirmed.
+    stmt(c.env.DB, `UPDATE users SET email_verified_at = ? WHERE id = ? AND email = ? AND email_verified_at IS NULL`, nowIso(), t.user_id, t.email),
+  ]);
+  return c.json({ ok: true });
+});
+
+/**
+ * Forgot password: mail a one-hour reset link. The answer is the same whether or not the address has an account, so
+ * nobody can use this page to find out who uses LedgerFox.
+ */
+auth.post("/forgot", async (c) => {
+  if (!emailOn(c.env)) throw new AppError(503, "EMAIL_OFF", "Reset by email is not available here. Use a recovery code, or ask your administrator for a reset link.");
+  const input = await body(c, z.object({ email }));
+  const ipOk = await rateLimit(c.env.DB, `forgot-ip:${clientIp(c)}`, 10, 900);
+  const mailOk = await rateLimit(c.env.DB, `forgot-mail:${input.email}`, 3, 3600);
+  if (!ipOk) throw new AppError(429, "RATE_LIMITED", "Too many attempts. Try again later.");
+  const user = mailOk ? await first<{ id: string; name: string; email: string; is_disabled: number }>(c.env.DB, `SELECT id, name, email, is_disabled FROM users WHERE email = ?`, input.email) : null;
+  if (user && !user.is_disabled && deliverable(user.email)) {
+    const token = randomToken(32);
+    await run(c.env.DB, `INSERT INTO password_resets (id, user_id, created_by, expires_at) VALUES (?,?,?,?)`, await sha256Hex(token), user.id, user.id, new Date(Date.now() + HOUR).toISOString());
+    const link = `${siteUrl(c.env, c.req.url)}/reset?token=${token}`;
+    await sendMail(c.env, { to: user.email, subject: "Reset your LedgerFox password",
+      text: `Hello ${user.name},\n\nSomeone (hopefully you) asked to reset the password of your LedgerFox account. Choose a new password here:\n\n${link}\n\nThe link works once, for one hour. If you did not ask for this, ignore this email; your password stays the same.\n\nLedgerFox` });
+  }
   return c.json({ ok: true });
 });
 

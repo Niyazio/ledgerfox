@@ -3,6 +3,7 @@ import type { AppEnv, Env } from "../env";
 import { first, run, stmt } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { newId } from "../lib/crypto";
+import { sendReceipt } from "./notices";
 import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, withGst, type Feature, type Interval, type PlanId } from "@shared/plans";
 
 /** Billing applies only to the hosted edition with BILLING_ENABLED=true; desktop and phone copies are never limited. */
@@ -143,7 +144,9 @@ export async function markPaid(env: Env, paymentRowId: string, providerPaymentId
   ]);
   const inv = await first<{ invoice_number: string }>(env.DB, `SELECT invoice_number FROM billing_payments WHERE id = ?`, p.id);
   const invoice = inv?.invoice_number ?? null;
-  return { already: !done[1].meta.changes, period_end: end.toISOString(), invoice_number: invoice };
+  const already = !done[1].meta.changes;
+  if (!already) await sendReceipt(env, p.id);
+  return { already, period_end: end.toISOString(), invoice_number: invoice };
 }
 
 // ── Auto-renewal (Razorpay Subscriptions: UPI AutoPay, cards, e-mandate) ──
