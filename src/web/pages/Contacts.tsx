@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router";
 import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
@@ -73,7 +73,10 @@ export function ContactList({ kind }: { kind: "customer" | "supplier" }) {
   const { path, money, id, can } = useCompany();
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
-  const [adding, setAdding] = useState(false);
+  // ?new=1 (the Alt+C / Alt+V shortcuts) opens the new-contact form straight away.
+  const [params, setParams] = useSearchParams();
+  const [adding, setAdding] = useState(params.get("new") === "1");
+  useEffect(() => { if (params.get("new") === "1") { setAdding(true); setParams((p) => { p.delete("new"); return p; }, { replace: true }); } }, [params, setParams]);
   const { data, loading, error, reload } = useApi<{ contacts: any[]; total: number }>(path(`/contacts?kind=${kind}&limit=50&offset=${offset}&q=${encodeURIComponent(q)}`));
   const title = kind === "customer" ? "Customers" : "Suppliers";
   const bal = kind === "customer" ? "receivable" : "payable";

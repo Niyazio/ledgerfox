@@ -166,7 +166,7 @@ export function PaymentForm() {
             </p>
           </div>
         )}
-        <Button className="mt-6" loading={busy} disabled={!contactId || !v.account_id || !amountMinor || Number.isNaN(tdsMinor) || allocated > settles} onClick={submit}>Save & post</Button>
+        <Button className="mt-6" data-shortcut="post" loading={busy} disabled={!contactId || !v.account_id || !amountMinor || Number.isNaN(tdsMinor) || allocated > settles} onClick={submit}>Save & post</Button>
       </Card>
     </>
   );

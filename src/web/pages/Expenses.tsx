@@ -79,8 +79,8 @@ function ExpenseForm({ initial, onClose }: { initial?: any; onClose: (changed: b
     <Modal open wide onClose={() => onClose(false)} title={initial ? `Expense ${initial.number ?? "(draft)"}` : "New expense"}
       footer={editable ? <>
         <Button variant="secondary" onClick={() => onClose(false)}>Cancel</Button>
-        <Button variant="secondary" loading={busy} onClick={() => save(false)}>Save draft</Button>
-        {can("expense.approve") && <Button loading={busy} onClick={() => save(true)} title="Owners and administrators may approve their own expenses">Save & post</Button>}
+        <Button variant="secondary" data-shortcut="save" loading={busy} onClick={() => save(false)}>Save draft</Button>
+        {can("expense.approve") && <Button data-shortcut="post" loading={busy} onClick={() => save(true)} title="Owners and administrators may approve their own expenses">Save & post</Button>}
       </> : <Button variant="secondary" onClick={() => onClose(false)}>Close</Button>}>
       <div className="grid gap-4 sm:grid-cols-2">
         {error && <Alert className="sm:col-span-2">{error}</Alert>}

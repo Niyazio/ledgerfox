@@ -1,5 +1,17 @@
 # Test report
 
+## Release run (v0.4.1 keyboard shortcuts, branch `feature/shortcuts`, 27 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck`, desktop `tsc` | ✅ 0 problems / 0 errors |
+| `npm test` (Miniflare D1) | ✅ **223 passed**, 1 skipped, 38 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **223 passed**, 1 skipped |
+| `npm audit --omit=dev --audit-level=high` | ✅ 0 vulnerabilities |
+| `test/scan-decode.test.ts` | label QR and Code128 decoded by the ZXing fallback |
+| `test/shortcuts.test.ts` | key names (Ctrl/Cmd, Alt, F-keys), aliases, no duplicate keys |
+| Browser check (desktop server build, Chromium) | F8/Ctrl+F8/Alt+F8/F9/F6/F5/F7/Alt+B/Alt+H open the right screens; F1 list; Ctrl+K → "gst" → Enter; Alt+C then Ctrl+S saves a customer; F8 then Ctrl+S saves a draft invoice, Ctrl+P opens print; F9 on POS left to the POS; no console errors |
+
 ## Feature-pack run (branch `feature/gst-import-share`, 21 Oct 2026)
 
 | Command | Result |

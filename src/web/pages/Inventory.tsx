@@ -210,7 +210,8 @@ export default function Inventory() {
   const items = useApi<{ items: any[] }>(path(`/items?limit=500&q=${encodeURIComponent(q)}`));
   const stock = useApi<{ stock: any[] }>(tab === "stock" ? path(`/items/stock?${branchQuery.slice(1)}`) : null);
   const moves = useApi<{ movements: any[] }>(tab === "movements" ? path("/items/movements?limit=200") : null);
-  const [edit, setEdit] = useState<any>(null);
+  const [edit, setEdit] = useState<any>(params.get("new") === "1" ? "new" : null);
+  useEffect(() => { if (params.get("new") === "1") { setEdit("new"); setParams((p) => { p.delete("new"); return p; }, { replace: true }); } }, [params, setParams]);
   const [stockOp, setStockOp] = useState<"adjust" | "transfer" | null>(null);
   const [wh, setWh] = useState({ name: "", code: "", branch_id: "" });
   const df = settings?.company.date_format;
