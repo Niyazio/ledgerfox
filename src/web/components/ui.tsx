@@ -190,7 +190,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
           <button onClick={onClose} className="rounded p-1 hover:bg-[var(--surface-2)]" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
         <div ref={body} className="overflow-y-auto p-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</div>}
+        {footer && <div data-modal-footer className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</div>}
       </div>
     </div>
   );

@@ -12,6 +12,8 @@ import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
 import { useRecurringAutoRun } from "../pages/Recurring";
 import { setLang, useLang } from "../lib/lang";
 import { UpdateCenter } from "./Updates";
+import { Shortcuts } from "./Shortcuts";
+import { HINTS } from "../lib/shortcuts";
 import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner } from "../pages/Billing";
@@ -136,6 +138,9 @@ function LangPicker() {
   );
 }
 
+/** Every sidebar screen, for the Go-to search (Alt+G / Ctrl+K). */
+const GOTO_ITEMS = NAV.flatMap((g) => g.items.map((i) => ({ to: i.to, label: i.label, group: g.label || undefined, perm: i.perm })));
+
 /** Modules the member may use; the server enforces the same permissions on every request. */
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { companyId } = useParams();
@@ -155,7 +160,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               <li key={it.to}>
                 <NavLink to={`/app/${companyId}/${it.to}`} end={it.to === "reports"} onClick={onNavigate}
                   className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to))) ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
-                  {it.icon}{t(it.label)}
+                  {it.icon}<span className="flex-1">{t(it.label)}</span>{HINTS[it.to] && <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[10px] muted lg:inline">{HINTS[it.to]}</kbd>}
                 </NavLink>
               </li>
             ))}
@@ -309,6 +314,7 @@ function Shell() {
           </div>
           <div className="flex items-center gap-1">
             <OfflineStatus companyId={companyId} />
+            <Shortcuts items={GOTO_ITEMS} />
             <UpdateCenter />
             <LangPicker />
             <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>

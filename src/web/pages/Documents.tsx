@@ -318,8 +318,8 @@ export function DocumentForm() {
           </div>
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
-          <Button variant="secondary" loading={busy} disabled={!contactId} onClick={() => save(false)}>Save draft</Button>
-          <Button loading={busy} disabled={!contactId} onClick={() => save(true)}>{["invoice", "credit_note", "bill", "debit_note"].includes(docType) ? "Save & post" : "Save & issue"}</Button>
+          <Button variant="secondary" data-shortcut="save" loading={busy} disabled={!contactId} onClick={() => save(false)}>Save draft</Button>
+          <Button data-shortcut="post" loading={busy} disabled={!contactId} onClick={() => save(true)}>{["invoice", "credit_note", "bill", "debit_note"].includes(docType) ? "Save & post" : "Save & issue"}</Button>
         </div>
       </Card>
       {addingContact && <ContactForm kind={kind} onClose={(nid) => { setAddingContact(false); if (nid) { setContactId(nid); setContactsKey((k) => k + 1); } }} />}
