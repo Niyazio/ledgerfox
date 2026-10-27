@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import QRCode from "qrcode";
+import { bilingual, type Lang } from "@shared/i18n";
 import { ArrowLeft, Printer, Share2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -94,7 +95,7 @@ function CompanyBlock({ thermal, center }: { thermal?: boolean; center?: boolean
 }
 
 // ── Invoice, bill, quotation, notes ─────────────────────────────────────────────────────────────────────────────
-function DocumentPrint({ id, format, showQr }: { id: string; format: Format; showQr: boolean }) {
+function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Format; showQr: boolean; showUpi: boolean }) {
   const { path, money, settings } = useCompany();
   const { data, error } = useApi<any>(path(`/documents/${id}`));
   const d = data?.document;
@@ -104,31 +105,35 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   const lines: any[] = data?.lines ?? [];
   const sales = d ? SALES_DOCS.includes(d.doc_type) : true;
   const outstanding = d ? d.total - d.amount_settled : 0;
-  const summary = d ? `${co.legal_name || co.name}${co.tax_id ? ` (${co.tax_id})` : ""}\n${DOC_LABELS[d.doc_type]?.one} ${d.number ?? "DRAFT"} dated ${d.issue_date}\nTotal ${money(d.total, cur)}` : "";
+  const summary = d ? `${co.legal_name || co.name}${co.tax_id ? ` (${co.tax_id})` : ""}\n${DOC_LABELS[d.variant ?? d.doc_type]?.one} ${d.number ?? "DRAFT"} dated ${d.issue_date}\nTotal ${money(d.total, cur)}` : "";
   const verify = useQr(useVerifyLink("document", id, showQr && Boolean(d && d.status !== "draft"), summary));
   const upiText = d && sales && d.doc_type === "invoice" && co.upi_id && cur === "INR" && outstanding > 0
     ? `upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.legal_name || co.name)}&am=${(outstanding / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Invoice ${d.number ?? ""}`)}`
     : null;
-  const generatedUpi = useQr(showQr ? upiText : null);
+  const generatedUpi = useQr(showUpi ? upiText : null);
   const { payment_qr } = useContext(BrandingCtx);
   // The business's own QR image (fixed, no amount) takes precedence; otherwise a UPI QR with the balance due.
-  const upi = showQr && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
+  const upi = showUpi && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
   const payLabel = payment_qr && upi === payment_qr ? `Scan to pay${co.upi_id ? ` · ${co.upi_id}` : ""}` : null;
+  // GST e-invoice: the IRP's signed QR must be printed on the invoice (not for cancelled IRNs).
+  const gst = data?.gst_refs as { irn: string | null; ack_no: string | null; ack_date: string | null; signed_qr: string | null; irn_cancelled: number; ewb_no: string | null; ewb_date: string | null } | null | undefined;
+  const irnQr = useQr(gst?.irn && !gst.irn_cancelled ? gst.signed_qr : null, 300);
   if (error) return <Alert>{error}</Alert>;
   if (!d) return <Spinner />;
   const df = co.date_format;
   const taxes = { cgst: sum(lines, "cgst"), sgst: sum(lines, "sgst"), igst: sum(lines, "igst"), other: sum(lines, "other_tax") };
-  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply") : DOC_LABELS[d.doc_type].one;
+  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply") : DOC_LABELS[d.variant ?? d.doc_type].one;
   const words = amountInWords(d.total, cur, currencyExponent(cur));
   const thermal = format.startsWith("thermal");
   const watermark = d.status === "draft" ? "DRAFT" : d.status === "void" ? "VOID" : null;
+  const L = (en: string) => bilingual(en, co.print_language as Lang | undefined);
 
   if (thermal) {
     return (
       <Sheet format={format}>
         <CompanyBlock thermal center />
         <Rule />
-        <p className="text-center font-bold uppercase">{title}</p>
+        <p className="text-center font-bold uppercase">{L(title)}</p>
         <p className="flex justify-between"><span>No: {d.number ?? "DRAFT"}</span><span>{fmtDate(d.issue_date, df)}</span></p>
         <p>{sales ? "To" : "From"}: {d.contact_name}</p>
         {d.contact_tax_id && <p>GSTIN: {d.contact_tax_id}</p>}
@@ -136,21 +141,24 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         {lines.map((l) => (
           <div key={l.id} className="mb-1">
             <p className="font-semibold">{l.description}</p>
+            {l.batch_no && <p>Batch {l.batch_no}{l.expiry_date ? ` Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</p>}
             <p className="flex justify-between"><span>{fmtQty(l.qty_milli)} × {money(l.unit_price, cur)}</span><span>{money(l.line_total, cur)}</span></p>
           </div>
         ))}
         <Rule />
-        <Row k="Taxable" v={money(d.subtotal - d.discount_total, cur)} />
+        <Row k={L("Taxable")} v={money(d.subtotal - d.discount_total, cur)} />
         {taxes.cgst > 0 && <Row k="CGST" v={money(taxes.cgst, cur)} />}
         {taxes.sgst > 0 && <Row k="SGST" v={money(taxes.sgst, cur)} />}
         {taxes.igst > 0 && <Row k="IGST" v={money(taxes.igst, cur)} />}
         {taxes.other > 0 && <Row k="Tax" v={money(taxes.other, cur)} />}
-        {d.round_off !== 0 && <Row k="Round off" v={money(d.round_off, cur)} />}
-        <p className="mt-1 flex justify-between border-y border-dashed border-slate-500 py-1 text-[13px] font-bold"><span>TOTAL</span><span>{money(d.total, cur)}</span></p>
+        {d.round_off !== 0 && <Row k={L("Round off")} v={money(d.round_off, cur)} />}
+        <p className="mt-1 flex justify-between border-y border-dashed border-slate-500 py-1 text-[13px] font-bold"><span>{L("Total").toUpperCase()}</span><span>{money(d.total, cur)}</span></p>
         <p className="mt-1 text-[10px]">{words}</p>
-        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? "Scan to pay (UPI)"} size={110} /><Qr src={verify} label="Scan to verify" size={90} /></div>
+        {gst?.irn && !gst.irn_cancelled && <div className="mt-2 text-center text-[9px]"><p className="break-all">IRN {gst.irn}</p>{gst.ack_no && <p>Ack {gst.ack_no} · {gst.ack_date}</p>}{irnQr && <img src={irnQr} alt="e-invoice QR" className="mx-auto mt-1 h-32 w-32" />}</div>}
+        {gst?.ewb_no && <p className="mt-1 text-center text-[10px]">E-way bill {gst.ewb_no}</p>}
+        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? L("Scan to pay (UPI)")} size={110} /><Qr src={verify} label={L("Scan to verify")} size={90} /></div>
         {watermark && <p className="mt-2 text-center font-bold">*** {watermark} ***</p>}
-        <p className="mt-2 text-center">Thank you! Visit again.</p>
+        <p className="mt-2 text-center">{L("Thank you! Visit again.")}</p>
       </Sheet>
     );
   }
@@ -163,40 +171,50 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         {classic ? (
           <header className="border-2 border-slate-800 p-3 text-center">
             <CompanyBlock center />
-            <p className="mt-2 border-t border-slate-800 pt-1 text-base font-bold uppercase tracking-widest">{title}</p>
+            <p className="mt-2 border-t border-slate-800 pt-1 text-base font-bold uppercase tracking-widest">{L(title)}</p>
           </header>
         ) : (
           <header className="flex items-start justify-between gap-6 border-b-4 border-brand-700 pb-5">
             <CompanyBlock />
             <div className="text-right">
-              <p className="inline-block rounded-md bg-brand-700 px-3 py-1 text-sm font-semibold uppercase tracking-wider text-white">{title}</p>
+              <p className="inline-block rounded-md bg-brand-700 px-3 py-1 text-sm font-semibold uppercase tracking-wider text-white">{L(title)}</p>
               <dl className="mt-3 space-y-0.5">
-                <Meta k="Number" v={<b>{d.number ?? "DRAFT"}</b>} />
-                <Meta k="Date" v={fmtDate(d.issue_date, df)} />
-                {d.due_date && <Meta k="Due date" v={fmtDate(d.due_date, df)} />}
-                {d.reference && <Meta k="Reference" v={d.reference} />}
+                <Meta k={L("Number")} v={<b>{d.number ?? "DRAFT"}</b>} />
+                <Meta k={L("Date")} v={fmtDate(d.issue_date, df)} />
+                {d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}
+                {d.reference && <Meta k={L("Reference")} v={d.reference} />}
               </dl>
             </div>
           </header>
         )}
+        {(gst?.irn || gst?.ewb_no) && (
+          <section className={`flex items-start justify-between gap-4 text-[11px] ${classic ? "border-x-2 border-b-2 border-slate-800 p-3" : "border-b border-slate-200 py-3"}`}>
+            <dl className="space-y-0.5">
+              {gst.irn && <div><dt className="inline text-slate-500">IRN: </dt><dd className="inline break-all font-mono">{gst.irn}{gst.irn_cancelled ? " (cancelled)" : ""}</dd></div>}
+              {gst.ack_no && <div><dt className="inline text-slate-500">Ack No: </dt><dd className="inline font-mono">{gst.ack_no}</dd><dt className="ml-3 inline text-slate-500">Ack Date: </dt><dd className="inline">{gst.ack_date}</dd></div>}
+              {gst.ewb_no && <div><dt className="inline text-slate-500">E-way bill: </dt><dd className="inline font-mono">{gst.ewb_no}</dd>{gst.ewb_date && <><dt className="ml-3 inline text-slate-500">Date: </dt><dd className="inline">{gst.ewb_date}</dd></>}</div>}
+            </dl>
+            {irnQr && <figure className="shrink-0 text-center"><img src={irnQr} alt="e-invoice QR" className="h-28 w-28" /><figcaption className="text-[9px] text-slate-500">e-Invoice QR</figcaption></figure>}
+          </section>
+        )}
         <section className={`grid grid-cols-2 gap-6 ${classic ? "border-x-2 border-b-2 border-slate-800 p-3" : "py-5"}`}>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{sales ? "Bill to" : "Supplier"}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{sales ? L("Bill to") : L("Supplier")}</p>
             <p className="mt-1 text-base font-semibold">{d.contact_name}</p>
             <p className="whitespace-pre-line text-slate-600">{d.contact_address}</p>
             {d.contact_tax_id && <p>{india ? "GSTIN" : "Tax ID"}: <span className="font-mono">{d.contact_tax_id}</span></p>}
             {d.contact_phone && <p className="text-slate-600">{d.contact_phone}</p>}
           </div>
           <div className="text-right">
-            {classic && <dl className="space-y-0.5"><Meta k="Number" v={<b>{d.number ?? "DRAFT"}</b>} /><Meta k="Date" v={fmtDate(d.issue_date, df)} />{d.due_date && <Meta k="Due" v={fmtDate(d.due_date, df)} />}</dl>}
-            {india && sales && d.place_of_supply && <p className="mt-1"><span className="text-slate-500">Place of supply: </span>{INDIA_STATES[d.place_of_supply] ?? ""} ({d.place_of_supply})</p>}
-            {d.contact_shipping_address && <><p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ship to</p><p className="whitespace-pre-line text-slate-600">{d.contact_shipping_address}</p></>}
+            {classic && <dl className="space-y-0.5"><Meta k={L("Number")} v={<b>{d.number ?? "DRAFT"}</b>} /><Meta k={L("Date")} v={fmtDate(d.issue_date, df)} />{d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}</dl>}
+            {india && sales && d.place_of_supply && <p className="mt-1"><span className="text-slate-500">{L("Place of supply")}: </span>{INDIA_STATES[d.place_of_supply] ?? ""} ({d.place_of_supply})</p>}
+            {d.contact_shipping_address && <><p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{L("Ship to")}</p><p className="whitespace-pre-line text-slate-600">{d.contact_shipping_address}</p></>}
           </div>
         </section>
         <table className={`w-full border-collapse ${classic ? "border-2 border-slate-800" : ""}`}>
           <thead>
             <tr className={classic ? "border-b-2 border-slate-800" : "bg-brand-700 text-white"}>
-              {["#", "Description", ...(india ? ["HSN/SAC"] : []), "Qty", "Rate", ...(lines.some((l) => l.discount_bp) ? ["Disc."] : []), "Taxable", "Tax", "Amount"].map((h, i) => (
+              {["#", L("Description"), ...(india ? ["HSN/SAC"] : []), L("Qty"), L("Rate"), ...(lines.some((l) => l.discount_bp) ? [L("Disc.")] : []), L("Taxable"), L("Tax"), L("Amount")].map((h, i) => (
                 <th key={h} className={`px-2 py-2 text-[11px] font-semibold uppercase ${i > (india ? 2 : 1) ? "text-right" : "text-left"} ${classic ? "border border-slate-800" : ""}`}>{h}</th>
               ))}
             </tr>
@@ -205,7 +223,7 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
             {lines.map((l, i) => (
               <tr key={l.id} className={classic ? "" : i % 2 ? "bg-slate-50" : ""}>
                 <Td c={classic}>{l.line_no}</Td>
-                <Td c={classic}><span className="font-medium">{l.description}</span></Td>
+                <Td c={classic}><span className="font-medium">{l.description}</span>{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
                 {india && <Td c={classic}><span className="font-mono text-[11px]">{l.hsn_sac}</span></Td>}
                 <Td c={classic} r>{fmtQty(l.qty_milli)} {l.unit ?? ""}</Td>
                 <Td c={classic} r>{money(l.unit_price, cur)}</Td>
@@ -219,23 +237,23 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
         </table>
         <section className="mt-5 flex justify-between gap-6">
           <div className="max-w-sm space-y-3">
-            <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Amount in words</p><p className="font-medium">{words}</p></div>
+            <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{L("Amount in words")}</p><p className="font-medium">{words}</p></div>
             {d.notes && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes</p><p className="whitespace-pre-line">{d.notes}</p></div>}
             {d.terms && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Terms &amp; conditions</p><p className="whitespace-pre-line text-slate-600">{d.terms}</p></div>}
             <div className="flex gap-4 pt-1"><Qr src={upi} label={payLabel ? `${payLabel} · ${money(outstanding, cur)} due` : `Scan to pay ${money(outstanding, cur)} by UPI`} size={104} /><Qr src={verify} label="Scan to verify this document" size={92} /></div>
           </div>
           <div className="w-72">
             <dl className={`space-y-1 ${classic ? "border-2 border-slate-800 p-3" : "rounded-lg bg-slate-50 p-4"}`}>
-              <Row k="Taxable value" v={money(d.subtotal - d.discount_total, cur)} />
+              <Row k={L("Taxable value")} v={money(d.subtotal - d.discount_total, cur)} />
               {taxes.cgst > 0 && <Row k="CGST" v={money(taxes.cgst, cur)} />}
               {taxes.sgst > 0 && <Row k="SGST" v={money(taxes.sgst, cur)} />}
               {taxes.igst > 0 && <Row k="IGST" v={money(taxes.igst, cur)} />}
               {taxes.other > 0 && <Row k="Tax" v={money(taxes.other, cur)} />}
-              {d.round_off !== 0 && <Row k="Round off" v={money(d.round_off, cur)} />}
-              <p className={`flex justify-between border-t pt-2 text-base font-bold ${classic ? "border-slate-800" : "border-brand-700 text-brand-800"}`}><span>Total</span><span>{money(d.total, cur)}</span></p>
-              {d.status === "posted" && d.amount_settled > 0 && <><Row k="Paid" v={money(d.amount_settled, cur)} /><Row k="Balance due" v={<b>{money(outstanding, cur)}</b>} /></>}
+              {d.round_off !== 0 && <Row k={L("Round off")} v={money(d.round_off, cur)} />}
+              <p className={`flex justify-between border-t pt-2 text-base font-bold ${classic ? "border-slate-800" : "border-brand-700 text-brand-800"}`}><span>{L("Total")}</span><span>{money(d.total, cur)}</span></p>
+              {d.status === "posted" && d.amount_settled > 0 && <><Row k={L("Paid")} v={money(d.amount_settled, cur)} /><Row k={L("Balance due")} v={<b>{money(outstanding, cur)}</b>} /></>}
             </dl>
-            <div className="mt-12 text-center"><div className="mx-auto w-48 border-t border-slate-400" /><p className="mt-1 text-[11px] text-slate-500">Authorised signatory for {co.legal_name || co.name}</p></div>
+            <div className="mt-12 text-center"><div className="mx-auto w-48 border-t border-slate-400" /><p className="mt-1 text-[11px] text-slate-500">{L("Authorised signatory for")} {co.legal_name || co.name}</p></div>
           </div>
         </section>
         <p className="mt-8 text-center text-[10px] text-slate-400">This is a computer-generated document. {cur !== co.base_currency ? `1 ${cur} = ${d.fx_rate_scaled / 1e9} ${co.base_currency}.` : ""}</p>
@@ -388,8 +406,11 @@ function PrintInner() {
   const { settings, path } = useCompany();
   const branding = useApi<{ logo: string | null; payment_qr: string | null }>(path("/settings/branding"));
   const def = (settings?.company.print_template as Format | undefined) ?? "modern";
-  const format = (params.get("format") as Format | null) ?? (kind === "payment" ? "a5" : def in FORMATS ? def : "modern");
-  const [showQr, setShowQr] = useState(true);
+  const asked = params.get("format");
+  const format: Format = asked && asked in FORMATS ? (asked as Format) : kind === "payment" ? "a5" : def in FORMATS ? def : "modern";
+  // Company defaults (Settings → Company → printing); either can be switched for this print.
+  const [showQr, setShowQr] = useState(settings?.company.print_qr_verify !== 0);
+  const [showUpi, setShowUpi] = useState(settings?.company.print_qr_upi !== 0);
   const set = (f: Format) => setParams((p) => { p.set("format", f); return p; }, { replace: true });
   const shareText = useMemo(() => `${document.title}\n${location.href}`, []);
   useEffect(() => { if (params.get("auto") === "1") setTimeout(() => window.print(), 600); }, [params]);
@@ -403,7 +424,8 @@ function PrintInner() {
         <select id="fmt" className="input max-w-[12rem] py-1" value={format} onChange={(e) => set(e.target.value as Format)}>
           {Object.entries(FORMATS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
         </select>
-        <label className="ml-2 flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} />QR codes</label>
+        <label className="ml-2 flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} />Verification QR</label>
+        {kind === "document" && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showUpi} onChange={(e) => setShowUpi(e.target.checked)} />UPI payment QR</label>}
         <span className="flex-1" />
         <a className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer"><Share2 className="h-4 w-4" />WhatsApp</a>
         <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / Save PDF</button>
@@ -411,7 +433,7 @@ function PrintInner() {
       <p className="no-print px-4 py-2 text-center text-xs muted">Preview. Choose “Save as PDF” in the print dialog for a PDF. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
       <BrandingCtx.Provider value={branding.data ?? { logo: null, payment_qr: null }}>
       <div className="px-2 print:px-0">
-        {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} />}
+        {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} showUpi={showUpi} />}
         {kind === "payment" && <PaymentPrint id={id} format={format} showQr={showQr} />}
         {kind === "payslip" && <PayslipPrint id={id} format={format} showQr={showQr} />}
       </div>

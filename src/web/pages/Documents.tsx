@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { Plus, Trash2, Printer, Download } from "lucide-react";
+import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
-import { api, errorMessage } from "../lib/api";
+import { api, ApiError, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
-import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { DOC_LABELS, SALES_DOCS, fmtDate, fmtDateTime, qty as fmtQty, today, toInput, pct } from "../lib/format";
 import { computeDocument, resolveTaxMode, INDIA_STATES, type TaxMode } from "@shared/tax";
@@ -14,6 +14,10 @@ import { CURRENCIES } from "@shared/currencies";
 import { downloadCsv } from "../lib/csv";
 import { docFamily } from "@shared/permissions";
 import { HistoryButton } from "../components/History";
+import { ShareButton } from "../components/Share";
+import { GstEDocButtons } from "../components/GstEDocs";
+import { listPrice, type PriceBreak, type PriceList } from "@shared/pricing";
+import { RepeatButton } from "./Recurring";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { ScanInput } from "../components/Scanner";
 import { ContactForm } from "./Contacts";
@@ -47,7 +51,7 @@ export function DocumentList() {
   return (
     <>
       <PageHeader title={label.many} actions={<>
-        {data && <Button variant="secondary" loading={exporting} onClick={exportCsv} title="Download every row matching the filters (opens in Excel)"><Download className="h-4 w-4" />Download CSV</Button>}
+        {data && <DownloadButtons disabled={exporting} onDownload={exportCsv} />}
         {can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}><Plus className="h-4 w-4" />New {label.one.toLowerCase()}</LinkButton>}
       </>} />
       <Card padded={false}>
@@ -94,9 +98,9 @@ export function DocumentList() {
   );
 }
 
-interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string }
+interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string; batch_no: string; expiry_date: string; auto_price?: boolean }
 let lk = 0;
-const blankLine = (): Line => ({ key: ++lk, item_id: "", description: "", hsn_sac: "", quantity: "1", unit_price: "", discount_percent: "", account_id: "", tax_code_id: "", department_id: "", project_id: "", cost_centre_id: "" });
+const blankLine = (): Line => ({ key: ++lk, item_id: "", description: "", hsn_sac: "", quantity: "1", unit_price: "", discount_percent: "", account_id: "", tax_code_id: "", department_id: "", project_id: "", cost_centre_id: "", batch_no: "", expiry_date: "" });
 
 function tryParse<T>(fn: () => T, fallback: T) { try { return fn(); } catch { return fallback; } }
 
@@ -113,6 +117,7 @@ export function DocumentForm() {
   const [contact, setContact] = useState<any>(null);
   const [contactId, setContactId] = useState(params.get("contact") ?? "");
   const [h, setH] = useState({ issue_date: today(), due_date: "", currency: "", fx_rate: "", place_of_supply: "", reference: "", notes: "", terms: settings?.company.invoice_terms ?? "", warehouse_id: "", branch_id: branch, related_doc_id: "" });
+  const [rcm, setRcm] = useState(false);
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [addingContact, setAddingContact] = useState(false);
   const [contactsKey, setContactsKey] = useState(0);
@@ -120,6 +125,21 @@ export function DocumentForm() {
   const items = useApi<{ items: any[] }>(path("/items?active=1&limit=500"));
   const existing = useApi<any>(docId ? path(`/documents/${docId}`) : null);
   const contactRes = useApi<any>(contactId ? path(`/contacts/${contactId}`) : null);
+  // Customers on a price list get its rates (quantity breaks follow the quantity until the rate is typed by hand).
+  const pricing = useApi<{ list: PriceList | null; breaks: PriceBreak[] }>(sales && contactId ? path(`/price-lists/for-contact/${contactId}`) : null);
+  const rateFor = (it: any, qtyText: string) => {
+    const base = (sales ? it.sale_price : it.purchase_price) ?? 0;
+    if (!sales) return base;
+    return listPrice(base, pricing.data?.list ?? null, pricing.data?.breaks ?? [], it.id, tryParse(() => parseQty(qtyText || "1"), 1000));
+  };
+  useEffect(() => {
+    if (!pricing.data) return;
+    setLines((ls) => ls.map((l) => {
+      const it = l.auto_price && l.item_id ? items.data?.items.find((x) => x.id === l.item_id) : null;
+      return it ? { ...l, unit_price: toInput(rateFor(it, l.quantity), base) } : l;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricing.data]);
   useEffect(() => { if (contactRes.data) setContact(contactRes.data.contact); }, [contactRes.data]);
   useEffect(() => {
     const d = existing.data;
@@ -128,7 +148,8 @@ export function DocumentForm() {
     const exp = CURRENCIES[doc.currency]?.exponent ?? 2;
     setContactId(doc.contact_id);
     setH({ issue_date: doc.issue_date, due_date: doc.due_date ?? "", currency: doc.currency, fx_rate: doc.currency !== base ? String(doc.fx_rate_scaled / 1e9) : "", place_of_supply: doc.place_of_supply ?? "", reference: doc.reference ?? "", notes: doc.notes ?? "", terms: doc.terms ?? "", warehouse_id: doc.warehouse_id ?? "", branch_id: doc.branch_id ?? "", related_doc_id: doc.related_doc_id ?? "" });
-    setLines(d.lines.map((l: any) => ({ ...blankLine(), item_id: l.item_id ?? "", description: l.description, hsn_sac: l.hsn_sac ?? "", quantity: fmtQty(l.qty_milli), unit_price: toInput(l.unit_price, doc.currency).replace(new RegExp(`\\.0{${exp}}$`), ""), discount_percent: l.discount_bp ? String(l.discount_bp / 100) : "", account_id: l.account_id ?? "", tax_code_id: l.tax_code_id ?? "", department_id: l.department_id ?? "", project_id: l.project_id ?? "", cost_centre_id: l.cost_centre_id ?? "" })));
+    setRcm(Boolean(doc.reverse_charge));
+    setLines(d.lines.map((l: any) => ({ ...blankLine(), item_id: l.item_id ?? "", description: l.description, hsn_sac: l.hsn_sac ?? "", quantity: fmtQty(l.qty_milli), unit_price: toInput(l.unit_price, doc.currency).replace(new RegExp(`\\.0{${exp}}$`), ""), discount_percent: l.discount_bp ? String(l.discount_bp / 100) : "", account_id: l.account_id ?? "", tax_code_id: l.tax_code_id ?? "", department_id: l.department_id ?? "", project_id: l.project_id ?? "", cost_centre_id: l.cost_centre_id ?? "", batch_no: l.batch_no ?? "", expiry_date: l.expiry_date ?? "" })));
   }, [existing.data, base]);
 
   const currency = h.currency || contact?.currency || base;
@@ -149,17 +170,25 @@ export function DocumentForm() {
     return { ...t, round_off: roundOff, total: t.total_before_round + roundOff };
   }, [lines, settings, mode, exp, docType]);
 
+  // Batch-tracked items: purchases and sales returns bring stock in, so they need a batch and expiry; sales may name one.
+  const batchItems = useMemo(() => new Set((items.data?.items ?? []).filter((i) => i.track_batches).map((i) => i.id as string)), [items.data]);
+  const inbound = docType === "bill" || docType === "credit_note";
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const pickItem = (key: number, itemId: string) => {
     const it = items.data?.items.find((x) => x.id === itemId);
     if (!it) return setLine(key, { item_id: "" });
-    setLine(key, { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput((sales ? it.sale_price : it.purchase_price) ?? 0, base), tax_code_id: it.tax_code_id ?? "" });
+    const qtyText = lines.find((l) => l.key === key)?.quantity ?? "1";
+    setLine(key, { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput(rateFor(it, qtyText), base), tax_code_id: it.tax_code_id ?? "", auto_price: true });
   };
   // A scanned product adds a line, or one more of it if it is already on the document.
   const addScanned = (it: any) => setLines((ls) => {
     const same = ls.find((l) => l.item_id === it.id);
-    if (same) return ls.map((l) => (l.key === same.key ? { ...l, quantity: String((parseFloat(l.quantity) || 0) + 1) } : l));
-    const filled = { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput((sales ? it.sale_price : it.purchase_price) ?? 0, base), tax_code_id: it.tax_code_id ?? "" };
+    if (same) return ls.map((l) => {
+      if (l.key !== same.key) return l;
+      const quantity = String((parseFloat(l.quantity) || 0) + 1);
+      return { ...l, quantity, ...(l.auto_price ? { unit_price: toInput(rateFor(it, quantity), base) } : {}) };
+    });
+    const filled = { item_id: it.id, description: it.name, hsn_sac: it.hsn_sac ?? "", unit_price: toInput(rateFor(it, "1"), base), tax_code_id: it.tax_code_id ?? "", auto_price: true };
     const empty = ls.find((l) => !l.description.trim() && !l.item_id);
     return empty ? ls.map((l) => (l.key === empty.key ? { ...l, ...filled } : l)) : [...ls, { ...blankLine(), ...filled }];
   });
@@ -168,7 +197,8 @@ export function DocumentForm() {
       doc_type: docType, contact_id: contactId, issue_date: h.issue_date, due_date: h.due_date || null, currency: currency, fx_rate: currency !== base ? h.fx_rate || null : null,
       place_of_supply: h.place_of_supply || null, reference: h.reference || null, notes: h.notes || null, terms: h.terms || null,
       warehouse_id: h.warehouse_id || null, branch_id: h.branch_id || null, related_doc_id: h.related_doc_id || null,
-      lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null })),
+      ...(rcmAllowed ? { reverse_charge: rcm } : {}),
+      lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null, batch_no: l.batch_no || null, expiry_date: l.expiry_date || null })),
     };
     const r = await run(async () => {
       const saved = docId ? await api.put(path(`/documents/${docId}`), body) : await postOrQueue(path("/documents"), body, { label: `${label.one}${h.reference ? ` ${h.reference}` : ""} (${h.issue_date})`, then: issue ? "/issue" : undefined });
@@ -181,6 +211,7 @@ export function DocumentForm() {
     if (r) { toast("success", issue ? `${label.one} issued` : "Draft saved"); nav(`/app/${id}/${area(docType)}/${docType}/${r.id}`, { replace: true }); }
   };
   const india = settings?.tax_scheme === "in_gst";
+  const rcmAllowed = india && (docType === "bill" || docType === "debit_note") && currency === base;
   const showHsn = india;
   const money = (n: number) => toInput(n, currency);
   if (docId && existing.loading) return <Spinner />;
@@ -205,6 +236,7 @@ export function DocumentForm() {
               {Object.entries(INDIA_STATES).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}
             </Select>
           )}</Field>}
+          {rcmAllowed && <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={rcm} onChange={(e) => setRcm(e.target.checked)} /> Reverse charge (we pay the GST, not the supplier)</label>}
           {currency !== base && <Field label={`Exchange rate (${currency} → ${base})`} hint="Leave blank to use the latest saved rate.">{(fid) => <Input id={fid} inputMode="decimal" value={h.fx_rate} onChange={(e) => setH({ ...h, fx_rate: e.target.value })} />}</Field>}
           {(settings?.warehouses.length ?? 0) > 1 && ["invoice", "bill", "credit_note", "debit_note"].includes(docType) && <Field label="Warehouse">{(fid) => (
             <Select id={fid} value={h.warehouse_id} onChange={(e) => setH({ ...h, warehouse_id: e.target.value })}><option value="">Default</option>{settings!.warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select>
@@ -231,6 +263,12 @@ export function DocumentForm() {
                       {items.data?.items.map((it) => <option key={it.id} value={it.id}>{it.name}{it.sku ? ` (${it.sku})` : ""}</option>)}
                     </Select>
                     <Input value={l.description} placeholder="Description" onChange={(e) => setLine(l.key, { description: e.target.value })} aria-label="Description" />
+                    {batchItems.has(l.item_id) && (inbound
+                      ? <div className="grid grid-cols-[minmax(0,1fr)_10rem] gap-2">
+                          <Input value={l.batch_no} placeholder="Batch no. (required)" className="uppercase" onChange={(e) => setLine(l.key, { batch_no: e.target.value })} aria-label="Batch number" />
+                          <Input type="date" value={l.expiry_date} onChange={(e) => setLine(l.key, { expiry_date: e.target.value })} aria-label="Expiry date" title="Expiry date" />
+                        </div>
+                      : <Input value={l.batch_no} placeholder="Batch (blank = earliest expiry first)" className="uppercase" onChange={(e) => setLine(l.key, { batch_no: e.target.value })} aria-label="Batch number" />)}
                     {!l.item_id && <AccountSelect value={l.account_id} onChange={(v) => setLine(l.key, { account_id: v })} placeholder={sales ? "Income account (default: Sales)" : "Expense account (default: Purchases)"} filter={(a) => (sales ? a.type === "income" : ["expense", "asset"].includes(a.type))} />}
                     <div className="grid grid-cols-3 gap-2">
                       <DimensionSelect kind="departments" value={l.department_id} onChange={(v) => setLine(l.key, { department_id: v })} />
@@ -239,8 +277,11 @@ export function DocumentForm() {
                     </div>
                   </td>
                   {showHsn && <td><Input value={l.hsn_sac} maxLength={8} onChange={(e) => setLine(l.key, { hsn_sac: e.target.value })} aria-label="HSN/SAC" /></td>}
-                  <td><Input inputMode="decimal" className="num" value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} aria-label="Quantity" /></td>
-                  <td><MoneyInput value={l.unit_price} onChange={(e) => setLine(l.key, { unit_price: e.target.value })} aria-label="Rate" /></td>
+                  <td><Input inputMode="decimal" className="num" value={l.quantity} onChange={(e) => {
+                    const it = l.auto_price ? items.data?.items.find((x) => x.id === l.item_id) : null;
+                    setLine(l.key, { quantity: e.target.value, ...(it ? { unit_price: toInput(rateFor(it, e.target.value), base) } : {}) });
+                  }} aria-label="Quantity" /></td>
+                  <td><MoneyInput value={l.unit_price} onChange={(e) => setLine(l.key, { unit_price: e.target.value, auto_price: false })} aria-label="Rate" /></td>
                   <td><Input inputMode="decimal" className="num" value={l.discount_percent} onChange={(e) => setLine(l.key, { discount_percent: e.target.value })} aria-label="Discount percent" /></td>
                   <td><TaxSelect value={l.tax_code_id} onChange={(v) => setLine(l.key, { tax_code_id: v })} /></td>
                   <td className="num pt-4">{money(preview.lines[i]?.line_total ?? 0)}</td>
@@ -271,6 +312,7 @@ export function DocumentForm() {
               {preview.other_tax > 0 && <div className="flex justify-between"><dt>Tax</dt><dd className="num">{money(preview.other_tax)}</dd></div>}
               {preview.round_off !== 0 && <div className="flex justify-between"><dt>Round off</dt><dd className="num">{money(preview.round_off)}</dd></div>}
               <div className="flex justify-between border-t border-[var(--border)] pt-2 text-base font-semibold"><dt>Total ({currency})</dt><dd className="num">{money(preview.total)}</dd></div>
+              {rcmAllowed && rcm && <div className="flex justify-between text-sm"><dt>Payable to supplier (tax under reverse charge)</dt><dd className="num">{money(preview.total - preview.round_off - (preview.cgst + preview.sgst + preview.igst + preview.other_tax))}</dd></div>}
             </dl>
             <p className="mt-2 text-xs muted">Preview. The server recalculates and stores the final figures.</p>
           </div>
@@ -321,7 +363,7 @@ export function DocumentView() {
   const d = data.document;
   const lines = data.lines as any[];
   const co = settings!.company;
-  const label = DOC_LABELS[d.doc_type];
+  const label = DOC_LABELS[d.variant ?? d.doc_type];
   const df = co.date_format;
   const cur = d.currency;
   const outstanding = d.total - d.amount_settled;
@@ -338,12 +380,29 @@ export function DocumentView() {
       <PageHeader title={`${label.one} ${d.number ?? "(draft)"}`} subtitle={d.contact_name} back={{ to: `/app/${id}/${area(docType)}/${docType}`, label: label.many }}
         actions={<>
           <HistoryButton type="document" id={d.id} />
+          {d.doc_type === "invoice" && d.status === "posted" && can("sales.create") && <RepeatButton invoiceId={d.id} number={d.number} issueDate={d.issue_date} />}
+          {sales && d.status !== "draft" && d.status !== "void" && (
+            <ShareButton entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
+              doc={{ kind: d.variant === "proforma" ? "quote" : d.doc_type, number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: d.due_date ? fmtDate(d.due_date, df) : null, total: money(d.total, cur), balance: d.doc_type === "invoice" && outstanding > 0 ? money(outstanding, cur) : null }} />
+          )}
+          {d.doc_type === "invoice" && d.status === "posted" && outstanding > 0 && d.due_date && d.due_date < today() && (
+            <ShareButton reminder entity={{ type: "document", id: d.id }} phone={d.contact_phone} email={d.contact_email}
+              doc={{ kind: "invoice", number: d.number, party: d.contact_name, date: fmtDate(d.issue_date, df), dueDate: fmtDate(d.due_date, df), total: money(d.total, cur), balance: money(outstanding, cur), overdueDays: Math.floor((Date.parse(today()) - Date.parse(d.due_date)) / 86400000) }} />
+          )}
           {d.status === "draft" && fam === "purchase" && needsApproval && !d.approval_requested_at && can("purchase.create") && <Button variant="secondary" onClick={() => act(() => api.post(path(`/documents/${d.id}/request-approval`), {}), "Approval requested")}>Request approval</Button>}
           {d.status === "draft" && fam === "purchase" && d.approval_requested_at && !d.approved_at && can("purchase.approve") && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/approve`), {}), "Approved")}>Approve</Button>}
+          {india && sales && <GstEDocButtons doc={d} refs={data.gst_refs} onChanged={reload} />}
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}`}><Printer className="h-4 w-4" />Print preview</LinkButton>
           <LinkButton variant="secondary" to={`/print/${id}/document/${d.id}?format=thermal80`}><Printer className="h-4 w-4" />Thermal bill</LinkButton>
           {d.status === "draft" && can(`${fam}.create`) && <LinkButton variant="secondary" to={`/app/${id}/${area(docType)}/${docType}/${d.id}/edit`}>Edit</LinkButton>}
-          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? `${fam}.post` : `${fam}.create`) && <Button onClick={() => act(() => api.post(path(`/documents/${d.id}/issue`)), "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
+          {d.status === "draft" && can(["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? `${fam}.post` : `${fam}.create`) && <Button onClick={() => act(async () => {
+            try { await api.post(path(`/documents/${d.id}/issue`)); }
+            catch (e) {
+              // Over the customer's credit limit: managers may confirm and issue anyway (recorded in the history).
+              if (e instanceof ApiError && e.code === "CREDIT_LIMIT" && can("sales.credit_override") && confirm(`${e.message}`)) await api.post(path(`/documents/${d.id}/issue`), { override_credit_limit: true });
+              else throw e;
+            }
+          }, "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
           {d.status === "draft" && can(`${fam}.create`) && <ConfirmButton label="Delete" title="Delete draft?" body="Drafts can be deleted; issued documents must be voided." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/documents/${d.id}`)); nav(`/app/${id}/${area(docType)}/${docType}`); }} />}
           {d.status === "posted" && settles && outstanding > 0 && can(`${fam}.post`) && <LinkButton to={`/app/${id}/payments/${sales ? "in" : "out"}/new?contact=${d.contact_id}&doc=${d.id}`}>Record {sales ? "receipt" : "payment"}</LinkButton>}
           {d.status === "posted" && isNote && outstanding > 0 && can(`${fam}.post`) && <Button variant="secondary" onClick={() => setApplying(true)}>Apply to {sales ? "invoice" : "bill"}</Button>}
@@ -362,6 +421,7 @@ export function DocumentView() {
         </>} />
       <p className="mb-4 -mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs muted">
         {d.branch_name && <span>Branch: <b>{d.branch_name}</b></span>}
+        {d.reverse_charge ? <span className="text-amber-700 dark:text-amber-300">Reverse charge: the GST ({money(d.tax_total, cur)}) is payable by us; the supplier is owed {money(d.total, cur)}</span> : null}
         {d.created_by_name && <span>Created by {d.created_by_name} · {fmtDateTime(d.created_at)}</span>}
         {d.posted_by_name && <span>{d.status === "open" ? "Issued" : "Posted"} by {d.posted_by_name} · {fmtDateTime(d.posted_at)}</span>}
         {d.approval_requested_at && <span>Approval requested by {d.approval_requested_by}</span>}
@@ -390,6 +450,8 @@ export function DocumentView() {
             {d.due_date && <p className="text-sm"><span className="muted">Due</span> {fmtDate(d.due_date, df)}</p>}
             {d.reference && <p className="text-sm"><span className="muted">Ref</span> {d.reference}</p>}
             {d.related_number && <p className="text-sm"><span className="muted">Against</span> {d.related_number}</p>}
+            {data.gst_refs?.irn && <p className="text-xs"><span className="muted">IRN</span> <span className="font-mono">{data.gst_refs.irn.slice(0, 12)}…</span> {data.gst_refs.irn_cancelled ? <Badge color="red">cancelled</Badge> : <span className="muted">Ack {data.gst_refs.ack_no}</span>}</p>}
+            {data.gst_refs?.ewb_no && <p className="text-xs"><span className="muted">E-way bill</span> <span className="font-mono">{data.gst_refs.ewb_no}</span>{data.gst_refs.ewb_valid_until ? <span className="muted"> · valid until {data.gst_refs.ewb_valid_until.slice(0, 10)}</span> : null}</p>}
           </div>
         </header>
         <section className="grid gap-6 py-6 sm:grid-cols-2">
@@ -408,7 +470,7 @@ export function DocumentView() {
               {lines.map((l) => (
                 <tr key={l.id}>
                   <td className="muted">{l.line_no}</td>
-                  <td>{l.description}</td>
+                  <td>{l.description}{l.batch_no && <span className="block text-xs muted">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date}` : ""}</span>}</td>
                   {india && <td className="font-mono text-xs">{l.hsn_sac}</td>}
                   <td className="num">{fmtQty(l.qty_milli)} {l.unit ?? ""}</td>
                   <td className="num">{money(l.unit_price, cur)}</td>

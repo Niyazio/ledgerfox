@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
+import { TwoFactorCard } from "../components/TwoFactor";
+
+const TWO_FACTOR = "__two_factor_required__";
 import type { Permission } from "@shared/permissions";
 
 export interface CompanySettings {
@@ -8,7 +11,7 @@ export interface CompanySettings {
     fiscal_year_start_month: number; tax_id: string | null; state_code: string | null; address: string | null; city: string | null;
     postal_code: string | null; phone: string | null; email: string | null; date_format: string; number_locale: string;
     round_off_invoices: number; invoice_terms: string | null;
-    business_type?: string; is_demo?: number; upi_id?: string | null; print_template?: string;
+    business_type?: string; is_demo?: number; upi_id?: string | null; print_template?: string; print_language?: "en" | "hi" | "ta"; print_qr_verify?: number; print_qr_upi?: number;
     purchase_approval_limit?: number | null; billing_discount_limit_bp?: number | null;
   };
   role: string;
@@ -56,7 +59,7 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
       setSettings(await api.get(`/api/c/${id}/settings`));
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e instanceof ApiError && e.code === "TWO_FACTOR_REQUIRED" ? TWO_FACTOR : (e as Error).message);
     }
   }, [id]);
   const reloadAccounts = useCallback(async () => {
@@ -64,6 +67,7 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
     setAccounts(r.accounts);
   }, [id]);
   useEffect(() => { setSettings(null); reload(); reloadAccounts(); }, [reload, reloadAccounts]);
+  if (error === TWO_FACTOR) return <div className="mx-auto max-w-lg p-6"><p className="mb-3 text-lg font-semibold">Set up two-factor sign-in to continue</p><p className="mb-4 text-sm muted">Your organisation's owner requires it for everyone.</p><TwoFactorCard onDone={() => void reload()} /></div>;
   if (error) return <div className="p-8 text-center"><p className="text-lg font-semibold">Company unavailable</p><p className="muted mt-2">{error}</p></div>;
   const scope = settings?.branch_scope ?? { all: true, ids: [] };
   const branches = (settings?.branches ?? []).filter((b) => scope.all || scope.ids.includes(b.id));

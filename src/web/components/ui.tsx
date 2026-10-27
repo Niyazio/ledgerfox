@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
-import { AlertCircle, CheckCircle2, Info, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileSpreadsheet, Info, Loader2, X } from "lucide-react";
 import { Link } from "react-router";
+import { withFormat } from "../lib/csv";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 export { cx };
@@ -278,5 +279,17 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
       <p className={cx("mt-1 text-xl font-semibold num !text-left", tone === "bad" && "text-red-600", tone === "good" && "text-emerald-600 dark:text-emerald-400")}>{value}</p>
       {sub && <p className="mt-1 text-xs muted">{sub}</p>}
     </div>
+  );
+}
+
+/** "Excel" and "CSV" buttons for one table download; `onDownload` calls downloadCsv, which follows the button pressed. */
+export function DownloadButtons({ onDownload, disabled, size = "md", className }: { onDownload: () => unknown; disabled?: boolean; size?: "sm" | "md"; className?: string }) {
+  const [busy, setBusy] = useState<"xlsx" | "csv" | null>(null);
+  const go = async (f: "xlsx" | "csv") => { setBusy(f); try { await withFormat(f, onDownload); } finally { setBusy(null); } };
+  return (
+    <span className={cx("inline-flex gap-1", className)}>
+      <Button variant="secondary" size={size} disabled={disabled || busy !== null} loading={busy === "xlsx"} onClick={() => void go("xlsx")} title="Download as an Excel workbook (.xlsx)"><FileSpreadsheet className="h-4 w-4" />Excel</Button>
+      <Button variant="secondary" size={size} disabled={disabled || busy !== null} loading={busy === "csv"} onClick={() => void go("csv")} title="Download as CSV (for Tally and other tools)">CSV</Button>
+    </span>
   );
 }

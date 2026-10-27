@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { Download, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
+import { ShareButton } from "../components/Share";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { downloadCsv } from "../lib/csv";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
 import { isQueued, postOrQueue, randomKey } from "../lib/offline";
-import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
+import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast, DownloadButtons } from "../components/ui";
 import { AccountSelect, ContactSelect, isCashOrBank } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
 import { parseDecimal } from "@shared/money";
@@ -28,14 +29,14 @@ export function PaymentList() {
     try {
       const rows = await fetchAllRows<any>(path(filters), "payments");
       downloadCsv(`${title.toLowerCase()}${dates.from ? `-${dates.from}` : ""}${dates.to ? `-to-${dates.to}` : ""}.csv`, ["Date", "Number", direction === "in" ? "Customer" : "Supplier", "Account", "Method", "Reference", "Status", "Currency", "Amount", "Unapplied"],
-        rows.map((p) => [p.payment_date, p.number, p.contact_name, p.account_name, p.method ?? "", p.reference ?? "", p.status, p.currency, toInput(p.amount, p.currency), p.status === "posted" ? toInput(p.amount - p.allocated, p.currency) : ""]));
+        rows.map((p) => [p.payment_date, p.number, p.contact_name, p.account_name, p.method ?? "", p.reference ?? "", p.status, p.currency, toInput(p.amount, p.currency), p.status === "posted" ? toInput(p.amount + (p.tds_amount ?? 0) - p.allocated, p.currency) : ""]));
     } finally { setExporting(false); }
   };
   return (
     <>
       <PageHeader title={title} subtitle={direction === "in" ? "Money received from customers" : "Money paid to suppliers"}
         actions={<>
-          {data && <Button variant="secondary" loading={exporting} onClick={exportCsv}><Download className="h-4 w-4" />Download CSV</Button>}
+          {data && <DownloadButtons disabled={exporting} onDownload={exportCsv} />}
           {can(direction === "in" ? "sales.post" : "purchase.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>}
         </>} />
       <Card padded={false}>
@@ -52,7 +53,7 @@ export function PaymentList() {
                 <td>{p.contact_name}</td><td className="text-sm muted">{p.account_name}</td>
                 <td><StatusBadge status={p.status} /></td>
                 <td className="num">{money(p.amount, p.currency)}</td>
-                <td className="num">{p.status === "posted" && p.amount - p.allocated > 0 ? money(p.amount - p.allocated, p.currency) : ""}</td>
+                <td className="num">{p.status === "posted" && p.amount + (p.tds_amount ?? 0) - p.allocated > 0 ? money(p.amount + (p.tds_amount ?? 0) - p.allocated, p.currency) : ""}</td>
               </tr>
             ))}</tbody>
           </table></TableWrap>
@@ -72,7 +73,7 @@ export function PaymentForm() {
   const base = settings?.company.base_currency ?? "INR";
   const [contactId, setContactId] = useState(params.get("contact") ?? "");
   const [contact, setContact] = useState<any>(null);
-  const [v, setV] = useState({ payment_date: today(), account_id: accounts.find((a) => a.system_key === "BANK")?.id ?? "", amount: "", method: "bank_transfer", reference: "", notes: "", fx_rate: "" });
+  const [v, setV] = useState({ payment_date: today(), account_id: accounts.find((a) => a.system_key === "BANK")?.id ?? "", amount: "", method: "bank_transfer", reference: "", notes: "", fx_rate: "", tds_amount: "", tds_section: "" });
   const [alloc, setAlloc] = useState<Record<string, string>>({});
   const [idem] = useState(() => `ui-${randomKey()}`);
   const { busy, error, run } = useAction();
@@ -90,8 +91,12 @@ export function PaymentForm() {
   useEffect(() => { if (!v.account_id) { const b = accounts.find((a) => a.system_key === "BANK"); if (b) setV((p) => ({ ...p, account_id: b.id })); } }, [accounts, v.account_id]);
   const allocated = useMemo(() => Object.values(alloc).reduce((t, x) => { try { return t + (x ? parseDecimal(x, exp) : 0); } catch { return NaN; } }, 0), [alloc, exp]);
   const amountMinor = (() => { try { return v.amount ? parseDecimal(v.amount, exp) : 0; } catch { return NaN; } })();
+  // TDS (India, rupee payments): deducted on top of the cash, it settles the invoice/bill too.
+  const tdsAllowed = settings?.company.country === "IN" && currency === base;
+  const tdsMinor = (() => { try { return tdsAllowed && v.tds_amount ? parseDecimal(v.tds_amount, exp) : 0; } catch { return NaN; } })();
+  const settles = amountMinor + tdsMinor;
   const autoAllocate = () => {
-    let left = amountMinor;
+    let left = settles;
     const next: Record<string, string> = {};
     for (const d of [...(openDocs.data?.documents ?? [])].sort((a, b) => (a.due_date ?? a.issue_date).localeCompare(b.due_date ?? b.issue_date))) {
       if (left <= 0 || d.currency !== currency) break;
@@ -106,6 +111,7 @@ export function PaymentForm() {
       direction, contact_id: contactId, payment_date: v.payment_date, account_id: v.account_id, currency, fx_rate: currency !== base ? v.fx_rate || null : null,
       amount: v.amount, method: v.method, reference: v.reference || null, notes: v.notes || null, idempotency_key: idem, branch_id: branch || null,
       allocations: Object.entries(alloc).filter(([, a]) => a && a !== "0").map(([document_id, amount]) => ({ document_id, amount })),
+      ...(tdsMinor > 0 ? { tds_amount: v.tds_amount, tds_section: v.tds_section || null } : {}),
     }, { label: `${direction === "in" ? "Receipt" : "Payment"} ${v.amount} ${currency} (${v.payment_date})` }));
     if (r && isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); nav(`/app/${id}/payments/${direction}`); return; }
     if (r) { toast("success", "Recorded"); nav(`/app/${id}/payments/view/${r.id}`); }
@@ -126,6 +132,13 @@ export function PaymentForm() {
             </Select>
           )}</Field>
           <Field label="Reference (UTR / cheque no.)">{(fid) => <Input id={fid} value={v.reference} onChange={(e) => setV({ ...v, reference: e.target.value })} />}</Field>
+          {tdsAllowed && <Field label={direction === "in" ? "TDS deducted by the customer" : "TDS deducted (we pay it to the government)"} hint="Leave blank if none">{(fid) => <MoneyInput id={fid} value={v.tds_amount} onChange={(e) => setV({ ...v, tds_amount: e.target.value })} />}</Field>}
+          {tdsAllowed && tdsMinor > 0 && <Field label="TDS section">{(fid) => (
+            <Select id={fid} value={v.tds_section} onChange={(e) => setV({ ...v, tds_section: e.target.value })}>
+              <option value="">—</option><option value="194C">194C Contractors</option><option value="194J">194J Professional / technical</option><option value="194I">194I Rent</option>
+              <option value="194H">194H Commission</option><option value="194Q">194Q Purchase of goods</option><option value="194A">194A Interest</option><option value="194O">194O E-commerce</option>
+            </Select>
+          )}</Field>}
           {currency !== base && <Field label={`Rate on payment date (${currency} → ${base})`} hint="Differences from invoice rates post to Exchange Gain / Loss.">{(fid) => <Input id={fid} inputMode="decimal" value={v.fx_rate} onChange={(e) => setV({ ...v, fx_rate: e.target.value })} />}</Field>}
         </div>
         {contactId && (
@@ -147,13 +160,13 @@ export function PaymentForm() {
               </table></TableWrap>
             ) : <p className="text-sm muted">No open {docType}s. The full amount will be recorded as an advance and can be applied later.</p>}
             <p className="mt-2 text-sm">
-              Applied {Number.isNaN(allocated) ? "—" : toInput(allocated, currency)} of {Number.isNaN(amountMinor) ? "—" : toInput(amountMinor, currency)}
-              {amountMinor - allocated > 0 && <span className="muted"> · {toInput(amountMinor - allocated, currency)} will remain as an advance</span>}
-              {allocated > amountMinor && <span className="text-red-600"> · applied amount exceeds the payment</span>}
+              Applied {Number.isNaN(allocated) ? "—" : toInput(allocated, currency)} of {Number.isNaN(settles) ? "—" : toInput(settles, currency)}{tdsMinor > 0 && <span className="muted"> (cash {toInput(amountMinor, currency)} + TDS {toInput(tdsMinor, currency)})</span>}
+              {settles - allocated > 0 && <span className="muted"> · {toInput(settles - allocated, currency)} will remain as an advance</span>}
+              {allocated > settles && <span className="text-red-600"> · applied amount exceeds the payment</span>}
             </p>
           </div>
         )}
-        <Button className="mt-6" loading={busy} disabled={!contactId || !v.account_id || !amountMinor || allocated > amountMinor} onClick={submit}>Save & post</Button>
+        <Button className="mt-6" loading={busy} disabled={!contactId || !v.account_id || !amountMinor || Number.isNaN(tdsMinor) || allocated > settles} onClick={submit}>Save & post</Button>
       </Card>
     </>
   );
@@ -192,8 +205,10 @@ export function PaymentView() {
       <PageHeader title={`${p.direction === "in" ? "Receipt" : "Payment"} ${p.number}`} subtitle={p.contact_name} back={{ to: `/app/${id}/payments/${p.direction}`, label: p.direction === "in" ? "Receipts" : "Payments" }}
         actions={<>
           <HistoryButton type="payment" id={p.id} />
+          {p.direction === "in" && p.status === "posted" && <ShareButton entity={{ type: "payment", id: p.id }} phone={p.contact_phone} email={p.contact_email}
+            doc={{ kind: "receipt", number: p.number, party: p.contact_name, date: fmtDate(p.payment_date, settings?.company.date_format), total: money(p.amount, p.currency) }} />}
           <LinkButton variant="secondary" to={`/print/${id}/payment/${p.id}`}>Print receipt</LinkButton>
-          {p.status === "posted" && p.amount - allocated > 0 && can(p.direction === "in" ? "sales.post" : "purchase.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
+          {p.status === "posted" && p.amount + (p.tds_amount ?? 0) - allocated > 0 && can(p.direction === "in" ? "sales.post" : "purchase.post") && <Button onClick={() => setApplying(true)}>Apply advance</Button>}
           {p.status === "posted" && can(p.direction === "in" ? "sales.void" : "purchase.void") && <ConfirmButton label="Void" title="Void payment?" withReason confirmLabel="Void" body="A reversing journal is posted and the amounts applied to invoices/bills are released." onConfirm={async (reason) => { try { await api.post(path(`/payments/${p.id}/void`), { reason: reason ?? null }); toast("success", "Payment voided"); reload(); } catch (e) { toast("error", (e as Error).message); } }} />}
         </>} />
       <Card className="print-area">
@@ -204,7 +219,8 @@ export function PaymentView() {
           <div><p className="muted">Status</p><StatusBadge status={p.status} /></div>
           <div><p className="muted">Method / reference</p><p>{[p.method?.replace("_", " "), p.reference].filter(Boolean).join(" · ") || "—"}</p></div>
           <div><p className="muted">Journal</p><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${p.journal_entry_id}`}>{p.journal_number}</Link></div>
-          <div><p className="muted">Unapplied</p><p>{money(p.amount - allocated, p.currency)}</p></div>
+          {p.tds_amount > 0 && <div><p className="muted">TDS{p.tds_section ? ` (${p.tds_section})` : ""}</p><p>{money(p.tds_amount, p.currency)}</p></div>}
+          <div><p className="muted">Unapplied</p><p>{money(p.amount + (p.tds_amount ?? 0) - allocated, p.currency)}</p></div>
         </div>
         <h3 className="mt-6 text-sm font-semibold">Applied to</h3>
         {data.allocations.length ? (

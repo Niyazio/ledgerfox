@@ -29,6 +29,15 @@ const PaymentView = lazy(() => named(import("./pages/Payments"), "PaymentView"))
 const Expenses = lazy(() => import("./pages/Expenses"));
 const Daybook = lazy(() => import("./pages/Daybook"));
 const Labels = lazy(() => import("./pages/Labels"));
+const Production = lazy(() => import("./pages/Production"));
+const Clients = lazy(() => import("./pages/Clients"));
+const GstReturns = lazy(() => import("./pages/GstReturns"));
+const ImportPage = lazy(() => import("./pages/Import"));
+const Recurring = lazy(() => import("./pages/Recurring"));
+const Pos = lazy(() => import("./pages/Pos"));
+const CheckoutPage = lazy(() => named(import("./pages/Billing"), "CheckoutPage"));
+const BillingInvoice = lazy(() => named(import("./pages/Billing"), "BillingInvoice"));
+const VendorAdmin = lazy(() => named(import("./pages/Billing"), "VendorAdmin"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Assets = lazy(() => import("./pages/Assets"));
@@ -70,6 +79,9 @@ function App() {
       <Route path="/download" element={<Download />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/verify/:token" element={<Verify />} />
+      <Route path="/billing/:orgId/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
+      <Route path="/billing/:orgId/invoice/:paymentId" element={<RequireAuth><BillingInvoice /></RequireAuth>} />
+      <Route path="/vendor" element={<RequireAuth><VendorAdmin /></RequireAuth>} />
       <Route path="/print/:companyId/:kind/:id" element={<RequireAuth><PrintPage /></RequireAuth>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -78,11 +90,16 @@ function App() {
       <Route path="/invite" element={<AcceptInvite />} />
       <Route path="/app" element={<RequireAuth><AppHome /></RequireAuth>} />
       <Route path="/app/new-company" element={<RequireAuth><NewCompany /></RequireAuth>} />
+      <Route path="/app/clients" element={<RequireAuth><Clients /></RequireAuth>} />
       <Route path="/app/:companyId" element={<RequireAuth><CompanyLayout /></RequireAuth>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="daybook" element={<Daybook />} />
         <Route path="labels" element={<Labels />} />
+        <Route path="production" element={<Production />} />
+        <Route path="import" element={<ImportPage />} />
+        <Route path="recurring" element={<Recurring />} />
+        <Route path="pos" element={<Pos />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<JournalList />} />
         <Route path="journals/new" element={<JournalForm />} />
@@ -107,6 +124,7 @@ function App() {
         <Route path="assets" element={<Assets />} />
         <Route path="reports" element={<ReportIndex />} />
         <Route path="reports/statement/:contactId" element={<Statement />} />
+        <Route path="reports/gst-returns" element={<GstReturns />} />
         <Route path="reports/:reportKey" element={<ReportRouter />} />
         <Route path="insights" element={<Insights />} />
         <Route path="settings" element={<Settings />} />

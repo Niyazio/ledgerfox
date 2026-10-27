@@ -1,10 +1,11 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { Download, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Printer, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { DateRangeFilter } from "../components/DateRange";
+import { ShareButton } from "../components/Share";
 import { useApi } from "../lib/hooks";
-import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap , Stat } from "../components/ui";
+import { Alert, Button, Card, DownloadButtons, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap , Stat } from "../components/ui";
 import { AccountSelect, DimensionSelect } from "../components/pickers";
 import { downloadCsv } from "../lib/csv";
 import { DOC_LABELS, fmtDate, fyStart, qty, today, toInput } from "../lib/format";
@@ -13,6 +14,7 @@ import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
 
 const REPORTS = [
+  { key: "cash-book", title: "Cash book / Bank book", group: "Daily tracking", desc: "Every receipt and payment through cash or bank accounts with a running balance; CSV and PDF." },
   { key: "daily", title: "Daily report", group: "Daily tracking", desc: "Day by day: opening balance, income, expenses, money received and paid, closing balance. Any date range; download CSV or PDF." },
   { key: "profit-loss", title: "Profit & loss", group: "Financial statements", desc: "Income, cost of sales, expenses and net profit with comparison to the previous period." },
   { key: "balance-sheet", title: "Balance sheet", group: "Financial statements", desc: "Assets, liabilities and equity at a date, with computed retained earnings." },
@@ -25,6 +27,7 @@ const REPORTS = [
   { key: "purchases-by-supplier", title: "Purchases by supplier", group: "Customers & suppliers", desc: "Billed amounts less debit notes, in base currency." },
   { key: "expenses", title: "Expense report", group: "Operations", desc: "Expenses by category from the ledger, plus claim status." },
   { key: "inventory-valuation", title: "Inventory valuation", group: "Operations", desc: "Stock quantity and value per item, reconciled to the ledger." },
+  { key: "gst-returns", title: "GSTR-1 / GSTR-3B", group: "Tax", desc: "Monthly returns prepared from your books: B2B, B2C, credit notes, HSN summary, documents issued, ITC. JSON for the GST offline tool and CSV sheets." },
   { key: "gst-summary", title: "Tax / GST summary", group: "Tax", desc: "Output and input tax by rate, and net payable from the ledger." },
   { key: "budgets", title: "Budget vs actual", group: "Planning", desc: "Compare budgets with posted results." },
 ];
@@ -72,7 +75,7 @@ function Shell({ title, controls, onCsv, children, subtitle }: { title: string; 
     <>
       <PageHeader title={title} back={{ to: `/app/${id}/reports`, label: "Reports" }}
         actions={<>
-          {onCsv && <Button variant="secondary" onClick={onCsv}><Download className="h-4 w-4" />CSV</Button>}
+          {onCsv && <DownloadButtons onDownload={onCsv} />}
           <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / PDF</Button>
         </>} />
       {controls && <div className="mb-4 flex flex-wrap items-end gap-3 no-print">{controls}</div>}
@@ -99,6 +102,47 @@ function Loading({ r }: { r: { loading: boolean; error: string | null; data: unk
   if (r.error) return <Alert>{r.error}</Alert>;
   if (r.loading && !r.data) return <Spinner />;
   return null;
+}
+
+/** Cash book / bank book: receipts and payments through cash or bank with a running balance. */
+export function CashBook() {
+  const { path, money, settings, branchQuery, accounts } = useCompany();
+  const [params, setParams] = useSearchParams();
+  const t = today();
+  const from = params.get("from") ?? `${t.slice(0, 7)}-01`;
+  const to = params.get("to") ?? t;
+  const kind = params.get("kind") ?? "cash";
+  const account = params.get("account_id") ?? "";
+  const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
+  const r = useApi<any>(path(`/reports/cash-book?kind=${kind}&from=${from}&to=${to}${account ? `&account_id=${account}` : ""}${branchQuery}`));
+  const d = r.data;
+  const df = settings?.company.date_format;
+  const cur = settings?.company.base_currency ?? "INR";
+  const title = kind === "bank" ? "Bank book" : kind === "all" ? "Cash & bank book" : "Cash book";
+  const choices = accounts.filter((a) => !a.is_group && (kind === "all" ? ["cash", "bank"].includes(a.subtype) : a.subtype === kind));
+  return (
+    <Shell title={title} subtitle={`${fmtDate(from, df)} to ${fmtDate(to, df)}`}
+      onCsv={d ? () => downloadCsv(`${title.toLowerCase().replace(/ /g, "-")}-${from}-${to}.csv`, ["Date", "Voucher", "Account", "Particulars", "Receipt", "Payment", "Balance"],
+        [["", "", "", "Opening balance", "", "", toInput(d.opening, cur)], ...d.entries.map((e: any) => [e.date, e.voucher, e.account, e.particulars, e.receipt ? toInput(e.receipt, cur) : "", e.payment ? toInput(e.payment, cur) : "", toInput(e.balance, cur)]), ["", "", "", "Closing balance", toInput(d.receipts, cur), toInput(d.payments, cur), toInput(d.closing, cur)]]) : undefined}
+      controls={<>
+        <Field label="Book">{(fid) => <Select id={fid} value={kind} onChange={(e) => { const n = new URLSearchParams(params); n.set("kind", e.target.value); n.delete("account_id"); setParams(n, { replace: true }); }}><option value="cash">Cash book</option><option value="bank">Bank book</option><option value="all">Cash & bank</option></Select>}</Field>
+        {choices.length > 1 && <Field label="Account">{(fid) => <Select id={fid} value={account} onChange={(e) => set("account_id", e.target.value)}><option value="">All</option>{choices.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>}
+        <DateRangeFilter from={from} to={to} allowAll={false} onChange={(f, tt) => { const n = new URLSearchParams(params); n.set("from", f || t); n.set("to", tt || f || t); setParams(n, { replace: true }); }} />
+      </>}>
+      <Loading r={r} />
+      {d && <TableWrap><table className="table text-sm">
+        <thead><tr><th>Date</th><th>Voucher</th>{kind === "all" || choices.length > 1 ? <th>Account</th> : null}<th>Particulars</th><th className="num">Receipt</th><th className="num">Payment</th><th className="num">Balance</th></tr></thead>
+        <tbody>
+          <tr className="font-medium"><td colSpan={kind === "all" || choices.length > 1 ? 6 : 5}>Opening balance</td><td className="num">{money(d.opening)}</td></tr>
+          {d.entries.map((e: any, i: number) => (
+            <tr key={i}><td className="whitespace-nowrap">{fmtDate(e.date, df)}</td><td>{e.voucher}</td>{kind === "all" || choices.length > 1 ? <td>{e.account}</td> : null}<td>{e.particulars}</td>
+              <td className="num">{e.receipt ? money(e.receipt) : ""}</td><td className="num">{e.payment ? money(e.payment) : ""}</td><td className="num">{money(e.balance)}</td></tr>
+          ))}
+        </tbody>
+        <tfoot><tr className="font-semibold"><td colSpan={kind === "all" || choices.length > 1 ? 4 : 3}>Closing balance</td><td className="num">{money(d.receipts)}</td><td className="num">{money(d.payments)}</td><td className="num">{money(d.closing)}</td></tr></tfoot>
+      </table></TableWrap>}
+    </Shell>
+  );
 }
 
 export function DailyReport() {
@@ -353,7 +397,8 @@ export function Statement() {
   const cur = settings?.company.base_currency ?? "INR";
   const co = settings?.company;
   return (
-    <Shell title={d ? `Statement — ${d.contact.name}` : "Statement"} controls={controls} subtitle={`${fmtDate(from)} to ${fmtDate(to)} · ${cur}`}
+    <Shell title={d ? `Statement — ${d.contact.name}` : "Statement"} controls={<>{controls}{d && <div className="pb-0.5"><ShareButton phone={d.contact.phone} email={d.contact.email}
+        doc={{ kind: "statement", number: "", party: d.contact.name, date: `${fmtDate(from, co?.date_format)} to ${fmtDate(to, co?.date_format)}`, total: money(Math.abs(d.closing)), balance: d.closing > 0 ? "payable to us" : d.closing < 0 ? "in your favour" : null }} /></div>}</>} subtitle={`${fmtDate(from)} to ${fmtDate(to)} · ${cur}`}
       onCsv={d ? () => downloadCsv(`statement-${d.contact.name}-${from}-${to}.csv`, ["Date", "Reference", "Description", "Debit", "Credit", "Balance"], [["", "", "Opening balance", "", "", toInput(d.opening, cur)], ...d.lines.map((l: any) => [l.entry_date, l.reference, l.memo, toInput(l.debit, cur), toInput(l.credit, cur), toInput(l.balance, cur)])]) : undefined}>
       <Loading r={r} />
       {d && <>
@@ -540,6 +585,7 @@ export function ReportRouter() {
   const { reportKey } = useParams();
   switch (reportKey) {
     case "daily": return <DailyReport />;
+    case "cash-book": return <CashBook />;
     case "trial-balance": return <TrialBalance />;
     case "profit-loss": return <ProfitLoss />;
     case "balance-sheet": return <BalanceSheet />;

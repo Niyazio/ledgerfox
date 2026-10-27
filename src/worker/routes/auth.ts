@@ -5,6 +5,7 @@ import { all, batch, first, run, stmt, nowIso } from "../lib/db";
 import { AppError, badRequest, forbidden, unauthorized } from "../lib/errors";
 import { body, reqText } from "../lib/validate";
 import { hashPassword, newId, recoveryCode, sha256Hex, temporaryPassword, verifyPassword } from "../lib/crypto";
+import { newTotpSecret, otpauthUrl, verifyTotp } from "../lib/totp";
 import { createSession, destroySession, loadSessionUser, rateLimit, clientIp, requireAuth, requireSession, isLocalRequest } from "../lib/auth";
 
 const auth = new Hono<AppEnv>();
@@ -83,13 +84,17 @@ auth.post("/register", async (c) => {
 
 auth.post("/login", async (c) => {
   // `login` is a username or an email address (`email` is accepted for older clients).
-  const input = await body(c, z.object({ login: z.string().trim().toLowerCase().min(1).max(254).optional(), email: z.string().trim().toLowerCase().max(254).optional(), password: z.string().min(1).max(200) }));
+  const input = await body(c, z.object({
+    login: z.string().trim().toLowerCase().min(1).max(254).optional(), email: z.string().trim().toLowerCase().max(254).optional(), password: z.string().min(1).max(200),
+    // Second step for accounts with two-factor sign-in: a 6-digit app code, or one of the recovery codes.
+    totp: z.string().trim().max(10).optional(), recovery_code: z.string().trim().max(40).optional(),
+  }));
   const login = input.login ?? input.email;
   if (!login) throw badRequest("Enter your username or email");
   const ipOk = await rateLimit(c.env.DB, `login-ip:${clientIp(c)}`, 30, 900);
   const userOk = await rateLimit(c.env.DB, `login-email:${login}`, 10, 900);
   if (!ipOk || !userOk) throw new AppError(429, "RATE_LIMITED", "Too many login attempts. Wait 15 minutes and try again.");
-  const user = await first<{ id: string; email: string; username: string | null; name: string; password_hash: string; password_salt: string; password_iters: number; is_disabled: number; must_change_password: number }>(
+  const user = await first<{ id: string; email: string; username: string | null; name: string; password_hash: string; password_salt: string; password_iters: number; is_disabled: number; must_change_password: number; totp_enabled: number; totp_secret: string | null; totp_last_step: number | null }>(
     c.env.DB, `SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1`, login, login,
   );
   if (!user) {
@@ -101,6 +106,20 @@ auth.post("/login", async (c) => {
   // A default or temporary password may only be used on the computer running LedgerFox, never over the network.
   if (user.must_change_password && c.env.APP_ENV === "desktop" && !isLocalRequest(c)) {
     throw forbidden("This account still has its one-time password. Sign in on the main computer first and change it.");
+  }
+  if (user.totp_enabled && user.totp_secret) {
+    if (!input.totp && !input.recovery_code) throw new AppError(401, "TOTP_REQUIRED", "Enter the 6-digit code from your authenticator app");
+    if (input.totp) {
+      const step = await verifyTotp(user.totp_secret, input.totp.replace(/\s/g, ""), user.totp_last_step);
+      if (step === null) throw new AppError(401, "TOTP_INVALID", "That code is not right or has expired. Check the time on your phone and try the next code.");
+      // Record the step so the same code cannot be replayed (guarded against a parallel sign-in with the same code).
+      const ok = await run(c.env.DB, `UPDATE users SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)`, step, user.id, step);
+      if (!ok.meta.changes) throw new AppError(401, "TOTP_INVALID", "That code was already used. Wait for the next one.");
+    } else {
+      const hash = await sha256Hex(input.recovery_code!.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/(.{4})(?=.)/g, "$1-"));
+      const used = await run(c.env.DB, `UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL`, nowIso(), user.id, hash);
+      if (!used.meta.changes) throw new AppError(401, "TOTP_INVALID", "That recovery code is not valid or was already used");
+    }
   }
   // Transparently upgrade hashes when the configured work factor increases.
   if (user.password_iters < iterations(c.env)) {
@@ -142,7 +161,7 @@ auth.get("/me", async (c) => {
     user.id,
   );
   return c.json({
-    user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: false },
+    user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: false, totp_enabled: Boolean(user.totp_enabled) },
     organisations: orgs,
     companies,
     brand: c.env.BRAND_NAME ?? "LedgerFox",
@@ -166,6 +185,47 @@ auth.post("/change-password", requireSession, async (c) => {
     stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ? AND id <> ?`, u.id, u.session_id),
   ]);
   if (u.email === DEFAULT_ADMIN.email) firstRunPassword = null;
+  return c.json({ ok: true });
+});
+
+// ── Two-factor sign-in (authenticator app) ──
+auth.post("/2fa/setup", requireAuth, async (c) => {
+  const input = await body(c, z.object({ current_password: z.string().min(1) }));
+  const u = c.get("user");
+  const row = await first<{ password_hash: string; password_salt: string; password_iters: number; totp_enabled: number }>(c.env.DB, `SELECT * FROM users WHERE id = ?`, u.id);
+  if (!row || !(await verifyPassword(input.current_password, row))) throw badRequest("Current password is incorrect");
+  if (row.totp_enabled) throw badRequest("Two-factor sign-in is already on. Turn it off first to move it to a new phone.");
+  const secret = newTotpSecret();
+  await run(c.env.DB, `UPDATE users SET totp_secret = ?, totp_last_step = NULL WHERE id = ?`, secret, u.id);
+  return c.json({ secret, otpauth_url: otpauthUrl(secret, u.username ?? u.email, c.env.BRAND_NAME ?? "LedgerFox") });
+});
+
+auth.post("/2fa/enable", requireAuth, async (c) => {
+  const input = await body(c, z.object({ code: z.string().trim().max(10) }));
+  const u = c.get("user");
+  const row = await first<{ totp_secret: string | null; totp_enabled: number }>(c.env.DB, `SELECT totp_secret, totp_enabled FROM users WHERE id = ?`, u.id);
+  if (!row?.totp_secret) throw badRequest("Start the set-up again");
+  const step = await verifyTotp(row.totp_secret, input.code.replace(/\s/g, ""), null);
+  if (step === null) throw badRequest("That code is not right. Check that the time on your phone is set automatically.");
+  const { codes, stmts } = await makeRecoveryCodes(c.env.DB, u.id);
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE users SET totp_enabled = 1, totp_last_step = ? WHERE id = ?`, step, u.id),
+    ...stmts,
+    stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ? AND id <> ?`, u.id, u.session_id),
+  ]);
+  return c.json({ ok: true, recovery_codes: codes });
+});
+
+auth.post("/2fa/disable", requireAuth, async (c) => {
+  const input = await body(c, z.object({ current_password: z.string().min(1), code: z.string().trim().max(10) }));
+  const u = c.get("user");
+  const row = await first<{ password_hash: string; password_salt: string; password_iters: number; totp_secret: string | null; totp_enabled: number; totp_last_step: number | null }>(c.env.DB, `SELECT * FROM users WHERE id = ?`, u.id);
+  if (!row || !(await verifyPassword(input.current_password, row))) throw badRequest("Current password is incorrect");
+  if (!row.totp_enabled || !row.totp_secret) return c.json({ ok: true });
+  if ((await verifyTotp(row.totp_secret, input.code, row.totp_last_step)) === null) throw badRequest("That code is not right");
+  const required = await first(c.env.DB, `SELECT 1 FROM memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = ? AND o.require_2fa = 1 LIMIT 1`, u.id);
+  if (required) throw forbidden("Your organisation requires two-factor sign-in");
+  await run(c.env.DB, `UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL WHERE id = ?`, u.id);
   return c.json({ ok: true });
 });
 

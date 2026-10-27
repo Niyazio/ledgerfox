@@ -14,6 +14,19 @@ export interface Env {
   /** Optional OpenAI-compatible endpoint for a self-hosted open-source model (e.g. Ollama). Disabled when unset. */
   LOCAL_LLM_URL?: string;
   LOCAL_LLM_MODEL?: string;
+  /** Subscriptions (hosted edition only). Off unless "true". Keys come from the owner's Razorpay account (secrets). */
+  BILLING_ENABLED?: string;
+  BILLING_GST_PERCENT?: string;
+  RAZORPAY_KEY_ID?: string;
+  RAZORPAY_KEY_SECRET?: string;
+  RAZORPAY_WEBHOOK_SECRET?: string;
+  /** Comma-separated emails of the vendor's own staff who may open the subscriber admin page. */
+  VENDOR_ADMIN_EMAILS?: string;
+  /** Seller details printed on subscription tax invoices. */
+  VENDOR_LEGAL_NAME?: string;
+  VENDOR_GSTIN?: string;
+  VENDOR_ADDRESS?: string;
+  VENDOR_STATE_CODE?: string;
 }
 
 export interface SessionUser {
@@ -22,6 +35,7 @@ export interface SessionUser {
   name: string;
   username: string | null;
   must_change_password: boolean;
+  totp_enabled?: boolean;
   session_id: string;
 }
 
@@ -48,6 +62,7 @@ export interface CompanyRow {
   is_demo: number;
   upi_id: string | null;
   print_template: string;
+  print_language?: "en" | "hi" | "ta";
   purchase_approval_limit: number | null;
   billing_discount_limit_bp: number | null;
   created_at: string;

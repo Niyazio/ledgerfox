@@ -179,7 +179,8 @@ describe("QR verification", () => {
     const r = await anon.get(`/api/verify/${draftTok}`);
     expect(r.status).toBe(200);
     expect(r.json).toMatchObject({ valid: true, kind: "Invoice", amount: 100_000, currency: "INR" });
-    expect(JSON.stringify(r.json)).not.toMatch(/company_id|contact_id|email/);
+    // No internal IDs and nothing about the customer beyond what the printed invoice shows (name, address, GSTIN).
+    expect(JSON.stringify(r.json)).not.toMatch(/company_id|contact_id|"id"|party_email|party_phone|created_by/);
     expect((await anon.get("/api/verify/abcdefghijklmnopqrstuv")).status).toBe(404);
     expect((await anon.get("/api/verify/x")).status).toBe(404);
     // Another company's member cannot mint tokens for this invoice.

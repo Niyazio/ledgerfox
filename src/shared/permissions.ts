@@ -47,6 +47,7 @@ export const PERMISSION_GROUPS = {
     "sales.post": "Issue invoices and record receipts",
     "sales.void": "Cancel or reverse sales documents and receipts",
     "sales.discount_any": "Give discounts above the billing discount limit",
+    "sales.credit_override": "Issue invoices above a customer's credit limit",
     "customers.write": "Add and edit customers",
   },
   "Purchases": {
@@ -102,7 +103,7 @@ const DEFAULTS: Record<Role, Permission[]> = {
   accountant: [
     ...VIEW, "reports.export", "audit.read", "accounts.write", "journal.create", "journal.post", "journal.reverse", "bank.reconcile",
     "expense.create", "expense.approve", "assets.manage", "sales.create", "sales.post", "sales.void", "purchase.create", "purchase.post", "purchase.void",
-    "customers.write", "suppliers.write", "payroll.read", "payroll.manage",
+    "customers.write", "suppliers.write", "payroll.read", "payroll.manage", "sales.credit_override",
   ],
   inventory: ["inventory.view", "inventory.adjust", "inventory.transfer", "labels.print", "items.write"],
   auditor: [...VIEW, "audit.read", "reports.export", "payroll.read"],
@@ -143,6 +144,11 @@ export function canAssignRole(actor: Role, target: Role): boolean {
   return false;
 }
 
-export const SALES_DOC_TYPES = ["quote", "sales_order", "invoice", "credit_note"];
+export const SALES_DOC_TYPES = ["quote", "sales_order", "invoice", "credit_note", "proforma", "delivery_challan"];
+/** Proforma invoices and delivery challans are stored as variants of quotations and sales orders. */
+export const DOC_VARIANTS: Record<string, { doc_type: "quote" | "sales_order"; variant: "proforma" | "delivery_challan" }> = {
+  proforma: { doc_type: "quote", variant: "proforma" },
+  delivery_challan: { doc_type: "sales_order", variant: "delivery_challan" },
+};
 /** Which permission family governs a document type. */
 export const docFamily = (docType: string): "sales" | "purchase" => (SALES_DOC_TYPES.includes(docType) ? "sales" : "purchase");

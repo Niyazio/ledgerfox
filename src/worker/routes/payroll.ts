@@ -9,6 +9,7 @@ import { audit, requirePerm } from "../lib/auth";
 import { currencyExponent } from "@shared/currencies";
 import { DEFAULT_ACCOUNTS } from "@shared/coa";
 import { computePayslip, daysInPeriod, type PayEmployee } from "@shared/payroll";
+import { ecrFile, esiRows, tds24qRows, type StatSlip } from "@shared/statutory";
 import { buildJournal, assertOpenPeriod, assertPostable, type LineInput } from "../services/ledger";
 
 const payroll = new Hono<AppEnv>();
@@ -335,6 +336,32 @@ payroll.post("/runs/:id/pay", async (c) => {
     audit(c, "payroll.pay", "payroll_run", runId, { net: run.net }),
   ]);
   return c.json({ ok: true, journal_entry_id: built.id });
+});
+
+// ── Statutory files (India): EPF ECR, ESIC monthly contribution, Form 24Q deductee rows ──
+const STAT_COLS = `e.code, e.name, e.uan, e.esi_number, e.pan, e.date_of_leaving, p.working_days, p.paid_days_milli, p.basic, p.gross, p.pf_employee, p.pf_employer, p.esi_employee, p.esi_employer, p.tds`;
+
+payroll.get("/runs/:id/statutory", async (c) => {
+  requirePerm(c, "payroll.read");
+  const company = c.get("company");
+  const run = await first<{ period: string; status: string }>(c.env.DB, `SELECT period, status FROM payroll_runs WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
+  if (!run) throw notFound("Payroll");
+  if (run.status === "draft") throw conflict("NOT_POSTED", "Post the payroll first; files are made from final payslips");
+  const slips = await all<StatSlip>(c.env.DB, `SELECT ${STAT_COLS} FROM payslips p JOIN employees e ON e.id = p.employee_id WHERE p.run_id = ? ORDER BY e.code`, c.req.param("id"));
+  return c.json({ period: run.period, ecr: ecrFile(slips), esi: esiRows(slips, run.period) });
+});
+
+/** Form 24Q quarter: Q1 = Apr–Jun of the financial year starting in `fy`. */
+payroll.get("/tds-24q", async (c) => {
+  requirePerm(c, "payroll.read");
+  const fy = Number(c.req.query("fy")), q = Number(c.req.query("quarter"));
+  if (!Number.isInteger(fy) || fy < 2000 || fy > 2100 || ![1, 2, 3, 4].includes(q)) throw badRequest("Give fy (e.g. 2026 for 2026-27) and quarter 1–4");
+  const startMonth = 4 + (q - 1) * 3;
+  const months = [0, 1, 2].map((i) => { const m = startMonth + i; const y = m > 12 ? fy + 1 : fy; return `${y}-${String(((m - 1) % 12) + 1).padStart(2, "0")}`; });
+  const slips = await all<StatSlip & { pay_date: string }>(c.env.DB,
+    `SELECT ${STAT_COLS}, r.pay_date FROM payslips p JOIN payroll_runs r ON r.id = p.run_id JOIN employees e ON e.id = p.employee_id
+     WHERE r.company_id = ? AND r.status <> 'draft' AND r.period IN (?,?,?) ORDER BY r.period, e.code`, c.get("company").id, ...months);
+  return c.json({ fy, quarter: q, months, ...tds24qRows(slips) });
 });
 
 payroll.get("/payslips/:id", async (c) => {

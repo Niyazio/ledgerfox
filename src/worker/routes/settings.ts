@@ -6,6 +6,7 @@ import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, reqText, shortText, isoDate, rate, percentBp, minor } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, requirePerm } from "../lib/auth";
+import { requireCapacity } from "../services/billing";
 import { companySchema, validateCompanyInput } from "./orgs";
 import { fiscalYearStatements, monthlyPeriods } from "../services/setup";
 import { currencyExponent, isCurrency } from "@shared/currencies";
@@ -42,6 +43,9 @@ settings.patch("/", async (c) => {
   const company = c.get("company");
   const input = await body(c, companySchema.omit({ country: true, base_currency: true, fiscal_year_start_month: true, is_demo: true, business_type: true }).extend({
     print_template: z.enum(["modern", "classic", "compact"]).optional(),
+    print_language: z.enum(["en", "hi", "ta"]).optional(),
+    print_qr_verify: z.boolean().optional(),
+    print_qr_upi: z.boolean().optional(),
     round_off_invoices: z.boolean().optional(),
     invoice_terms: shortText(2000).nullish(),
     date_format: z.enum(["DD-MM-YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "DD/MM/YYYY"]).optional(),
@@ -61,7 +65,8 @@ settings.patch("/", async (c) => {
       c.env.DB,
       `UPDATE companies SET name = ?, legal_name = ?, tax_id = ?, state_code = ?, address = ?, city = ?, postal_code = ?, phone = ?, email = ?,
          round_off_invoices = COALESCE(?, round_off_invoices), invoice_terms = ?, date_format = COALESCE(?, date_format), number_locale = COALESCE(?, number_locale),
-         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template),
+         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template), print_language = COALESCE(?, print_language),
+         print_qr_verify = COALESCE(?, print_qr_verify), print_qr_upi = COALESCE(?, print_qr_upi),
          purchase_approval_limit = CASE WHEN ? THEN ? ELSE purchase_approval_limit END,
          billing_discount_limit_bp = CASE WHEN ? THEN ? ELSE billing_discount_limit_bp END
        WHERE id = ?`,
@@ -69,7 +74,8 @@ settings.patch("/", async (c) => {
       input.postal_code ?? null, input.phone ?? null, input.email || null,
       input.round_off_invoices === undefined ? null : input.round_off_invoices ? 1 : 0, input.invoice_terms ?? null,
       input.date_format ?? null, input.number_locale ?? null,
-      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null,
+      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null, input.print_language ?? null,
+      input.print_qr_verify === undefined ? null : input.print_qr_verify ? 1 : 0, input.print_qr_upi === undefined ? null : input.print_qr_upi ? 1 : 0,
       limits.purchase === undefined ? 0 : 1, limits.purchase ?? null, limits.discount === undefined ? 0 : 1, limits.discount ?? null, company.id,
     ),
     audit(c, "company.update", "company", company.id, input),
@@ -89,6 +95,7 @@ for (const [path, table] of Object.entries(DIMENSIONS)) {
   settings.post(`/${path}`, async (c) => {
     requirePerm(c, table === "branches" ? "branches.manage" : "company.manage");
     const input = await body(c, dimSchema);
+    if (table === "branches") await requireCapacity(c, c.get("company").org_id, "branches", c.get("company").id);
     const id = newId();
     const company = c.get("company");
     const s = table === "branches"

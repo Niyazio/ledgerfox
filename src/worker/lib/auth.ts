@@ -58,13 +58,13 @@ export async function loadSessionUser(c: Context<AppEnv>): Promise<SessionUser |
   const token = sessionToken(c);
   if (!token || token.length > 200) return null;
   const sid = await sha256Hex(token);
-  const row = await first<{ id: string; email: string; name: string; username: string | null; must_change_password: number; expires_at: string; is_disabled: number }>(
+  const row = await first<{ id: string; email: string; name: string; username: string | null; must_change_password: number; expires_at: string; is_disabled: number; totp_enabled: number }>(
     c.env.DB,
-    `SELECT u.id, u.email, u.name, u.username, u.must_change_password, s.expires_at, u.is_disabled FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    `SELECT u.id, u.email, u.name, u.username, u.must_change_password, s.expires_at, u.is_disabled, u.totp_enabled FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     sid,
   );
   if (!row || row.is_disabled || row.expires_at < new Date().toISOString()) return null;
-  return { id: row.id, email: row.email, name: row.name, username: row.username, must_change_password: Boolean(row.must_change_password), session_id: sid };
+  return { id: row.id, email: row.email, name: row.name, username: row.username, must_change_password: Boolean(row.must_change_password), totp_enabled: Boolean(row.totp_enabled), session_id: sid };
 }
 
 /** Signed-in user required; accounts still on a temporary/default password may only change it. */
@@ -97,13 +97,15 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   const companyId = c.req.param("companyId");
   const user = c.get("user");
   if (!companyId) throw notFound("Company");
-  const row = await first<CompanyRow & { role: Role; all_branches: number }>(
+  const row = await first<CompanyRow & { role: Role; all_branches: number; require_2fa: number }>(
     c.env.DB,
-    `SELECT co.*, m.role, m.all_branches FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? WHERE co.id = ?`,
+    `SELECT co.*, m.role, m.all_branches, o.require_2fa FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? JOIN organisations o ON o.id = co.org_id WHERE co.id = ?`,
     user.id, companyId,
   );
   if (!row) throw notFound("Company");
-  const { role, all_branches, ...company } = row;
+  const { role, all_branches, require_2fa, ...company } = row;
+  // The owner can require two-factor sign-in for everyone; members without it are sent to set it up.
+  if (require_2fa && !user.totp_enabled) throw new AppError(403, "TWO_FACTOR_REQUIRED", "Your organisation requires two-factor sign-in. Set it up under Settings → My account.");
   c.set("company", company as CompanyRow);
   c.set("role", role);
   c.set("perms", await orgPermissions(c.env.DB, company.org_id, role));

@@ -10,6 +10,7 @@ import { audit, requirePerm, resolveBranch } from "../lib/auth";
 import { formatMoney, currencyExponent } from "@shared/currencies";
 import { fiscalYearFor } from "../services/setup";
 import * as R from "../services/reports";
+import { companyGstins, gstr1, gstr1Sheets, gstr3b } from "../services/gstr";
 import { cashForecast, explainProfitAndLoss, unusualTransactions } from "../services/insights";
 
 const reports = new Hono<AppEnv>();
@@ -65,6 +66,44 @@ reports.get("/profit-loss", async (c) => {
     { income: prev.total_income, expense: prev.total_expense, lines: flat(prev) }, fmt,
   );
   return c.json({ ...cur, previous: { from: prevFrom, to: prevTo, net_profit: prev.net_profit, total_income: prev.total_income, total_expense: prev.total_expense }, explanation });
+});
+
+function gstOptions(c: Context<AppEnv>) {
+  consolidatedOnly(c);
+  const company = c.get("company");
+  if (company.country !== "IN") throw badRequest("GST returns apply to Indian companies only");
+  const period = c.req.query("period") ?? todayIso().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw badRequest("period must be YYYY-MM");
+  return { period, gstin: c.req.query("gstin") || null };
+}
+
+async function checkedGstin(c: Context<AppEnv>, opts: { period: string; gstin: string | null }) {
+  const company = c.get("company");
+  const list = await companyGstins(c.env.DB, company);
+  if (!list.length) throw badRequest("Add your GSTIN in Settings → Company (or on a branch) first");
+  if (opts.gstin && !list.includes(opts.gstin)) throw badRequest("That GSTIN is not one of this company's");
+  return { ...opts, gstin: opts.gstin ?? list[0] };
+}
+
+reports.get("/gstr1", async (c) => {
+  const opts = await checkedGstin(c, gstOptions(c));
+  const g = await gstr1(c.env.DB, c.get("company"), opts);
+  return c.json(c.req.query("format") === "sheets" ? { period: g.period, gstin: g.gstin, sheets: gstr1Sheets(g), warnings: g.warnings } : g);
+});
+
+reports.get("/gstr3b", async (c) => {
+  const opts = await checkedGstin(c, gstOptions(c));
+  return c.json(await gstr3b(c.env.DB, c.get("company"), opts));
+});
+
+reports.get("/cash-book", async (c) => {
+  const company = c.get("company");
+  const today = todayIso();
+  const from = dateParam(c, "from", `${today.slice(0, 7)}-01`);
+  const to = dateParam(c, "to", today);
+  if (from > to) throw badRequest("The from date is after the to date");
+  const kind = (["cash", "bank", "all"] as const).find((k) => k === c.req.query("kind")) ?? "cash";
+  return c.json(await R.cashBook(c.env.DB, company, { from, to, kind, accountId: c.req.query("account_id") || null, branchId: reportBranch(c) }));
 });
 
 reports.get("/daily", async (c) => {
@@ -207,13 +246,19 @@ reports.get("/dashboard", async (c) => {
     `SELECT i.id, i.name, i.unit, i.reorder_level_milli, COALESCE((SELECT SUM(qty_milli) FROM stock_moves s WHERE s.item_id = i.id),0) AS qty_milli
      FROM items i WHERE i.company_id = ? AND i.track_inventory = 1 AND i.is_active = 1 AND i.reorder_level_milli > 0
        AND COALESCE((SELECT SUM(qty_milli) FROM stock_moves s WHERE s.item_id = i.id),0) <= i.reorder_level_milli LIMIT 20`, company.id);
+  // Batches with stock that are expired or expire within 30 days (only companies that track batches have any).
+  const soon = new Date(Date.parse(today) + 30 * 86_400_000).toISOString().slice(0, 10);
+  const expiry = await first<{ expired: number; expiring: number }>(c.env.DB,
+    `SELECT COALESCE(SUM(exp < ?),0) AS expired, COALESCE(SUM(exp >= ? AND exp <= ?),0) AS expiring
+     FROM (SELECT MAX(expiry_date) AS exp FROM stock_moves WHERE company_id = ? AND batch_no IS NOT NULL GROUP BY item_id, warehouse_id, batch_no HAVING SUM(qty_milli) > 0)`,
+    today, today, soon, company.id);
   const pending = await first<{ drafts: number; expenses: number; unmatched: number }>(c.env.DB,
     `SELECT (SELECT COUNT(*) FROM journal_entries WHERE company_id = ? AND status = 'draft'${db_}) AS drafts,
             (SELECT COUNT(*) FROM expenses WHERE company_id = ? AND status = 'submitted'${db_}) AS expenses,
             (SELECT COUNT(*) FROM bank_statement_lines WHERE company_id = ? AND status = 'unmatched') AS unmatched`, company.id, ...bp, company.id, ...bp, company.id);
   const recent = await all(c.env.DB,
     `SELECT id, entry_number, entry_date, memo, total, kind FROM journal_entries WHERE company_id = ? AND status = 'posted'${db_} ORDER BY posted_at DESC LIMIT 8`, company.id, ...bp);
-  return c.json({ cash, receivables: arap, months, reorder: branch ? [] : reorder, pending, recent, branch_id: branch });
+  return c.json({ cash, receivables: arap, months, reorder: branch ? [] : reorder, expiry: branch ? null : expiry, pending, recent, branch_id: branch });
 });
 
 reports.get("/insights", async (c) => {

@@ -1,5 +1,34 @@
 # Test report
 
+## Feature-pack run (branch `feature/gst-import-share`, 21 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck` | ✅ 0 problems / 0 errors |
+| `npm test` (Miniflare D1) | ✅ **217 passed**, 1 skipped (opt-in performance benchmark), 36 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **217 passed**, 1 skipped |
+| `test/gstr.test.ts` | GSTR-1 sections (B2B, B2CL over ₹1 lakh inter-state, B2CS, CDNR/CDNUR, nil/exempt, HSN, documents issued) and GSTR-3B figures checked against hand calculations, per GSTIN |
+| `test/import.test.ts`, `test/sheet.test.ts` | customer/product import with loose headers, dry run, skipped duplicates, opening stock journal; a real `.xlsx` fixture read by the built-in reader |
+| `test/share.test.ts` | WhatsApp/email/UPI links and messages |
+| `test/sales-extras.test.ts` | proforma/challan series, credit-limit warning and block with audited override, recurring invoices (catch-up, claim-once), POS sale with change, discount and price locks |
+| `test/billing.test.ts` | plans, trial, limits (402), features, checkout/webhook signatures, paid-twice idempotency, invoice numbering, vendor admin hidden from others |
+| `test/totp.test.ts`, `test/twofactor.test.ts` | RFC 6238 test vectors; enable/disable, code and recovery-code sign-in, replay refused, owner-required 2FA, reset clears it |
+| `test/batches.test.ts` | batch required on bills; FEFO skips expired stock; choosing an expired batch refused; "short by X; Y more is expired"; invoice line records the batches sold; void restores the same batches; write-off of an expired batch; transfers keep batch and expiry; valuation still reconciles; switching tracking with stock refused; import with batch/expiry and spreadsheet dates |
+| `test/einvoice.test.ts` | address splitting; IRP JSON per line: UnitPrice × Qty = TotAmt, TotAmt − Discount = AssAmt, AssAmt + taxes = TotItemVal; totals + round-off = invoice total; IGST between states; credit note refers to its invoice; problems listed (B2C, missing address/PIN/HSN, draft); corrections apply to the file only; e-way bill outward and sales-return inward, vehicle-number check; IRN/QR/e-way bill number saved, validated, and refused for a viewer |
+| `test/pricelists.test.ts` | quantity-break and percentage rules; duplicate rows refused; customer linking kept when a form omits it; POS for billing staff at the list rate (₹1,110 for 12 + 2), own rate refused, walk-in pays the selling price; switched-off list stops applying; list in use cannot be deleted; staff cannot edit lists |
+| `test/production.test.ts` | recipe checks (no self-consumption, stock items only); plan for 20 loaves; production at ₹500 materials + ₹150 labour = ₹32.50 each, stock and inventory valuation reconcile; actual consumption differing from the recipe; shortage refused; labour without an account refused; void returns components and reverses the journal; no void once the product is sold; billing staff refused; batch required for the product, components taken first-expiry-first-out |
+| `test/statutory.test.ts` | ECR line for basic ≥ ₹15,000 (1,800 / 1,250 / 550); a full month with loss of pay (NCP 2 days, prorated wages) and a lower-wage member (EPS 833, difference 367); bad UAN reported; challan heads with the ₹500 admin minimum; ESIC row; Form 24Q rows and quarter months; draft payroll refused |
+| `test/tds-rcm.test.ts` | receipt ₹9,800 + ₹200 TDS and payment ₹49,000 + ₹1,000 TDS settle ₹10,000 / ₹50,000 in full; TDS Receivable/Payable balances; over-allocation counts TDS; an advance with TDS applied in full; voiding reopens the bill; reverse-charge bill: supplier owed ₹10,000, input CGST/SGST ₹900 each, RCM liability ₹1,800, GSTR-3B 3.1(d) and 4A(3); refused on sales documents |
+| `test/clients.test.ts` | an accountant invited to two organisations sees both companies with sales, receivables and drafts; a user with no memberships sees none; a branch-limited accountant sees the name without figures |
+| `test/i18n.test.ts` | every word has Hindi (Devanagari) and Tamil script; every sidebar label is translated; bilingual labels and English fallback; company bill language saved, kept when omitted, invalid value refused |
+| `test/assistant.test.ts` | periods (today, yesterday, weeks, last N days, months, financial years, date ranges); 21 kinds of question; answers checked against known figures (sales ₹2,000 from 2 invoices, ₹3,000 owed, overdue ₹1,000, customer details); billing staff refused profit, cash and purchases |
+| `test/xlsx.test.ts` | workbook read back cell for cell (special characters, line breaks, Tamil/Hindi); amounts as numbers, phone numbers/codes/dates as text. Also opened with openpyxl (no warnings) and LibreOffice |
+| `test/demo-isolation.test.ts` | real company's trial balance, customers, products and invoices identical after a demo company is loaded, used and deleted (including work done in the real company meanwhile) |
+| `test/print-options.test.ts`, `test/desktop-update.test.ts` | QR choices saved and kept; desktop update status readable by anyone, check/install only by the owner at that computer with the request header; version comparison |
+| Browser checks (Chromium, desktop server) | assistant: six questions answered with the right figures and links, hidden on POS; updates: desktop "ready" notice → What's new → Restart to update calls the installer; website notice appears only after a new build and reloads; bill language set to Tamil → A4 and thermal bills show English + Tamil labels; app language Hindi → sidebar and POS in Hindi; Clients page lists two companies with figures and opens one; payment form with TDS (cash ₹49,000 + TDS ₹1,000 settles ₹50,000); reverse-charge bill (supplier owed ₹10,000, GST ₹1,800 ours); posted payroll → ECR downloaded (line checked) and challan total; Form 24Q Q2 rows downloaded; bill of materials and production entry with edited consumption: estimate ₹4,080 = posted ₹3,580 + ₹500 labour (₹204 each); price list made in the new tab → invoice line re-priced when the customer is chosen (₹40 → ₹36) and at the 12+ break (₹34); POS shows the list rate; e-invoice dialog flags the missing PIN → fixed → JSON downloaded → a portal-style response pasted fills IRN/Ack/QR → saved → A4 print shows IRN, Ack, e-way bill no. and the QR; POS sale ₹300 with ₹200 change and print; share links on phone and desktop; 2FA end to end; batch item form → bill with batch/expiry → "Batches & expiry" tab → dashboard alert → invoice view and A4/thermal print show the batch. Found and fixed: an unknown `?format=` on the print page showed a blank page |
+
+Not covered: a real Razorpay payment; uploading the GSTR, e-invoice or e-way bill JSON to the government portals (the IRN in the browser check was a made-up sample); camera scanning on a phone.
+
 ## Phase 2 run (branch `feature/multi-branch`, 21 Oct 2026)
 
 | Command | Result |

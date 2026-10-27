@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { Download, Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
+import { Plus, Paperclip, Sparkles, Repeat } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
 import { DateRangeFilter, SummaryBar, fetchAllRows, useDateParams } from "../components/DateRange";
 import { useApi, useAction, useDebounced } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Tabs, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Tabs, useToast, DownloadButtons } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
@@ -156,7 +156,7 @@ export default function Expenses() {
     <>
       <PageHeader title="Expenses" subtitle="Record spending, attach receipts and route claims for approval before they post."
         actions={<>
-          {tab === "list" && data && <Button variant="secondary" loading={exporting} onClick={exportCsv}><Download className="h-4 w-4" />Download CSV</Button>}
+          {tab === "list" && data && <DownloadButtons disabled={exporting} onDownload={exportCsv} />}
           {can("expense.create") && <Button onClick={() => setEditing("new")}><Plus className="h-4 w-4" />New expense</Button>}
         </>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "list", label: "Expenses" }, { value: "templates", label: "Recurring templates" }]} />

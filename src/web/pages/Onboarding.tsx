@@ -132,7 +132,10 @@ export function AppHome() {
             </Link>
           ))}
         </div>
-        <Link to="/app/new-company" className="mt-4 inline-block text-sm text-brand-700 hover:underline dark:text-brand-300">+ Add another company</Link>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm">
+          <Link to="/app/clients" className="text-brand-700 hover:underline dark:text-brand-300">All clients at a glance →</Link>
+          <Link to="/app/new-company" className="text-brand-700 hover:underline dark:text-brand-300">+ Add another company</Link>
+        </div>
         <div className="mt-6"><DemoLoader orgId={me.organisations[0]?.org_id ?? null} /></div>
       </div>
     );

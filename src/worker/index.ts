@@ -18,12 +18,21 @@ import banking from "./routes/banking";
 import assets from "./routes/assets";
 import reports from "./routes/reports";
 import daybook from "./routes/daybook";
+import imports from "./routes/imports";
+import recurring from "./routes/recurring";
+import priceLists from "./routes/priceLists";
+import production from "./routes/production";
+import clients from "./routes/clients";
+import assistant from "./routes/assistant";
+import pos from "./routes/pos";
 import files from "./routes/files";
 import exportdata from "./routes/exportdata";
 import payroll from "./routes/payroll";
 import { verifyPublic, verifyToken } from "./routes/verify";
 import backups from "./routes/backups";
 import { VERSION } from "./version";
+import billing from "./routes/billing";
+import { requireFeature } from "./services/billing";
 
 
 const app = new Hono<AppEnv>();
@@ -45,6 +54,8 @@ app.use("*", async (c, next) => {
  */
 app.use("/api/*", async (c, next) => {
   const m = c.req.method;
+  // Razorpay's webhook carries no cookies and is authenticated by its HMAC signature instead.
+  if (c.req.path === "/api/billing/webhook") return next();
   if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") {
     if (c.req.header("x-requested-with") !== "ledgerfox") throw new AppError(403, "CSRF", "Missing request header");
     const origin = c.req.header("origin");
@@ -87,9 +98,17 @@ app.route("/api/orgs", orgRoutes);
 app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
 app.route("/api/backups", backups);
+app.route("/api/billing", billing);
+app.route("/api/clients", clients);
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
+// Plan features (hosted edition with billing on); registered before the routes so they run first.
+company.use("/pos/*", async (c, next) => { await requireFeature(c, c.get("company").org_id, "pos"); await next(); });
+company.use("/recurring/*", async (c, next) => { await requireFeature(c, c.get("company").org_id, "recurring"); await next(); });
+company.use("/payroll/*", async (c, next) => { if (c.req.method !== "GET") await requireFeature(c, c.get("company").org_id, "payroll"); await next(); });
+company.use("/reports/:gst{gstr1|gstr3b}", async (c, next) => { await requireFeature(c, c.get("company").org_id, "gst_returns"); await next(); });
+
 company.route("/settings", settings);
 company.route("/accounts", accounts);
 company.route("/journals", journals);
@@ -102,6 +121,12 @@ company.route("/banking", banking);
 company.route("/assets", assets);
 company.route("/reports", reports);
 company.route("/daybook", daybook);
+company.route("/import", imports);
+company.route("/recurring", recurring);
+company.route("/pos", pos);
+company.route("/price-lists", priceLists);
+company.route("/production", production);
+company.route("/assistant", assistant);
 company.route("/attachments", files);
 company.route("/export", exportdata);
 company.route("/payroll", payroll);

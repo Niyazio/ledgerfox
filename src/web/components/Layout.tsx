@@ -3,12 +3,18 @@ import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "reac
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
-  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale,
+  CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory,
 } from "lucide-react";
 import { useSession } from "../lib/session";
 import { CompanyProvider, useCompany } from "../lib/company";
 import { Button, cx, Modal, Spinner } from "./ui";
 import { ROLE_LABELS, type Permission, type Role } from "@shared/permissions";
+import { useRecurringAutoRun } from "../pages/Recurring";
+import { setLang, useLang } from "../lib/lang";
+import { UpdateCenter } from "./Updates";
+import { Assistant } from "./Assistant";
+import { LANGS, type Lang } from "@shared/i18n";
+import { PlanBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -68,10 +74,14 @@ const NAV: NavGroup[] = [
     { to: "daybook", label: "Daybook", icon: <CalendarDays className="h-4 w-4" />, perm: "daybook.read" },
   ] },
   { label: "Sales & billing", items: [
+    { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/delivery_challan", label: "Delivery challans", icon: <Truck className="h-4 w-4" />, perm: "sales.view" },
     { to: "sales/invoice", label: "Invoices / bills", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
+    { to: "recurring", label: "Recurring invoices", icon: <Repeat className="h-4 w-4" />, perm: "sales.create" },
     { to: "sales/credit_note", label: "Sales returns", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" />, perm: "sales.view" },
   ] },
@@ -86,6 +96,7 @@ const NAV: NavGroup[] = [
     { to: "inventory", label: "Products & stock", icon: <Package className="h-4 w-4" />, perm: "inventory.view" },
     { to: "inventory?tab=transfers", label: "Stock transfers", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "inventory.transfer" },
     { to: "labels", label: "Product labels / QR", icon: <QrCode className="h-4 w-4" />, perm: "labels.print" },
+    { to: "production", label: "Manufacturing", icon: <Factory className="h-4 w-4" />, perm: "inventory.view" },
   ] },
   { label: "Accounting", items: [
     { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
@@ -98,9 +109,11 @@ const NAV: NavGroup[] = [
     { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
   ] },
   { label: "Reports & control", items: [
+    { to: "reports/cash-book", label: "Cash / bank book", icon: <BookOpen className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/daily", label: "Daily report", icon: <CalendarRange className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/profit-loss", label: "Profit & loss", icon: <TrendingUp className="h-4 w-4" />, perm: "reports.read" },
     { to: "reports/balance-sheet", label: "Balance sheet", icon: <Scale className="h-4 w-4" />, perm: "reports.read" },
+    { to: "reports/gst-returns", label: "GST returns", icon: <Landmark className="h-4 w-4" />, perm: "reports.export" },
     { to: "reports", label: "All reports", icon: <BarChart3 className="h-4 w-4" />, perm: "reports.read" },
     { to: "insights", label: "Insights", icon: <Lightbulb className="h-4 w-4" />, perm: "reports.read" },
     { to: "settings?tab=audit", label: "Audit log", icon: <ShieldCheck className="h-4 w-4" />, perm: "audit.read" },
@@ -108,14 +121,26 @@ const NAV: NavGroup[] = [
   { label: "Administration", items: [
     { to: "settings?tab=members", label: "Users & permissions", icon: <UserCog className="h-4 w-4" />, perm: "org.manage" },
     { to: "settings?tab=dimensions", label: "Branches", icon: <GitBranch className="h-4 w-4" />, perm: "branches.manage" },
+    { to: "import", label: "Import from Excel", icon: <FileUp className="h-4 w-4" />, perm: ["items.write", "customers.write", "suppliers.write"] },
     { to: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
   ] },
 ];
+
+function LangPicker() {
+  const { lang, t } = useLang();
+  return (
+    <select aria-label={t("Language")} title={t("Language")} value={lang} onChange={(e) => setLang(e.target.value as Lang)}
+      className="rounded-lg border-0 bg-transparent py-1 pl-1 pr-6 text-sm hover:bg-[var(--surface-2)]">
+      {LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "EN" : l.value === "hi" ? "हि" : "த"}</option>)}
+    </select>
+  );
+}
 
 /** Modules the member may use; the server enforces the same permissions on every request. */
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { companyId } = useParams();
   const { can, settings } = useCompany();
+  const { t } = useLang();
   const location = useLocation();
   const allowed = (it: NavItem) => !it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm));
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
@@ -124,13 +149,13 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <nav aria-label="Main" className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
       {groups.map((g, i) => (
         <div key={i}>
-          {g.label && <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider muted">{g.label}</p>}
+          {g.label && <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider muted">{t(g.label)}</p>}
           <ul className="space-y-0.5">
             {g.items.map((it) => (
               <li key={it.to}>
                 <NavLink to={`/app/${companyId}/${it.to}`} end={it.to === "reports"} onClick={onNavigate}
                   className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to))) ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
-                  {it.icon}{it.label}
+                  {it.icon}{t(it.label)}
                 </NavLink>
               </li>
             ))}
@@ -187,6 +212,7 @@ function CompanySwitcher() {
             </button>
           ))}
           <div className="my-1 border-t border-[var(--border)]" />
+          {(me?.companies.length ?? 0) > 1 && <Link to="/app/clients" onClick={() => setOpen(false)} className="block rounded-md px-3 py-2 text-sm text-brand-700 hover:bg-[var(--surface-2)] dark:text-brand-300">All clients at a glance</Link>}
           <Link to="/app/new-company" onClick={() => setOpen(false)} className="block rounded-md px-3 py-2 text-sm text-brand-700 hover:bg-[var(--surface-2)] dark:text-brand-300">+ Add company</Link>
         </div>
       )}
@@ -238,9 +264,12 @@ function OfflineStatus({ companyId }: { companyId: string }) {
   );
 }
 
+function RecurringRunner() { useRecurringAutoRun(); return null; }
+
 function Shell() {
   const { me, logout } = useSession();
   const { settings, id: companyId } = useCompany();
+  const { pathname } = useLocation();
   const { dark, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
@@ -280,6 +309,8 @@ function Shell() {
           </div>
           <div className="flex items-center gap-1">
             <OfflineStatus companyId={companyId} />
+            <UpdateCenter />
+            <LangPicker />
             <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -288,9 +319,12 @@ function Shell() {
           </div>
         </header>
         {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
+        {settings && me?.edition !== "offline" && <RecurringRunner />}
+        {settings && me?.edition === "cloud" && <PlanBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>
+        {settings && me?.edition !== "offline" && !/\/pos$/.test(pathname) && <Assistant />}
       </div>
     </div>
   );
