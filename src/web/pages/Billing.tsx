@@ -17,7 +17,17 @@ interface BillingInfo {
   subscription: { enforced: boolean; plan: string; paid_plan: string | null; status: string; interval: Interval | null; trial_ends_at: string | null; paid_until: string | null; days_left: number | null };
   usage: { users: number; companies: number; branches: number };
   payments: { id: string; plan: string; billing_interval: string; total: number; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string }[];
+  autopay: { status: string; plan: string; interval: Interval; total: number } | null;
 }
+
+const AUTOPAY: Record<string, string> = { active: "On", pending: "Last charge failed — Razorpay is retrying", halted: "Stopped after failed charges", paused: "Paused", cancelled: "Off", completed: "Finished" };
+const autopayLive = (a: BillingInfo["autopay"]) => !!a && ["active", "pending", "halted", "paused"].includes(a.status);
+
+/**
+ * Checkout opens with a full page load: only /billing/* pages are allowed (by the Content-Security-Policy header) to
+ * load Razorpay's script, and the policy belongs to the page that was loaded, not to the in-app route.
+ */
+const goCheckout = (url: string) => { window.location.assign(url); };
 
 const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", grace: "Payment due", free: "Free plan", unlimited: "Unlimited" };
 
@@ -25,9 +35,11 @@ const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", 
 export function PlanBillingTab() {
   const { settings } = useCompany();
   const orgId = settings!.company.org_id;
-  const nav = useNavigate();
-  const { data, error } = useApi<BillingInfo>(`/api/billing/org/${orgId}`);
+  const { data, error, reload } = useApi<BillingInfo>(`/api/billing/org/${orgId}`);
   const [interval, setInterval] = useState<Interval>("yearly");
+  const [auto, setAuto] = useState(true);
+  const [stopping, setStopping] = useState(false);
+  const toast = useToast();
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
   if (!data.enabled) return <Card><p className="text-sm">All features are available. Subscriptions are not switched on for this LedgerFox.</p></Card>;
@@ -43,11 +55,28 @@ export function PlanBillingTab() {
           {s.status === "grace" && <span className="text-sm text-amber-700 dark:text-amber-300">Your plan ended on {fmtDate(s.paid_until!.slice(0, 10))}. Renew within {s.days_left} days to keep its features.</span>}
           {s.status === "free" && <span className="text-sm muted">Billing, accounts and reports keep working. Choose a plan for more users, branches, POS, payroll and GST returns.</span>}
         </div>
+        {data.autopay && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span>Auto-renew: <strong>{AUTOPAY[data.autopay.status] ?? data.autopay.status}</strong>{autopayLive(data.autopay) && <> · {data.plans.find((p) => p.id === data.autopay!.plan)?.name}, {inr(data.autopay.total)} every {data.autopay.interval === "monthly" ? "month" : "year"}</>}</span>
+            {autopayLive(data.autopay) && data.can_buy && (
+              <Button size="sm" variant="secondary" loading={stopping} onClick={async () => {
+                if (!confirm("Turn off auto-renew? No more charges will be taken. The days already paid for are kept.")) return;
+                setStopping(true);
+                try { await api.post(`/api/billing/org/${orgId}/autopay/cancel`); toast("success", "Auto-renew is off"); reload(); }
+                catch (e) { toast("error", errorMessage(e)); } finally { setStopping(false); }
+              }}>Turn off auto-renew</Button>
+            )}
+          </div>
+        )}
         <p className="mt-3 text-sm">Using {data.usage.users} of {current.limits.users} users · {data.usage.companies} of {current.limits.companies} companies · up to {data.usage.branches} of {current.limits.branches} branches per company</p>
       </Card>
       <div className="flex items-center gap-3"><span className="text-sm font-medium">Pay</span>
         <div className="flex gap-1">{(["monthly", "yearly"] as const).map((i) => <Button key={i} size="sm" variant={interval === i ? "primary" : "secondary"} onClick={() => setInterval(i)}>{i === "monthly" ? "Monthly" : "Yearly (2 months free)"}</Button>)}</div>
-        <span className="text-xs muted">Prices plus {data.gst_percent}% GST</span></div>
+        <span className="text-xs muted">Prices plus {data.gst_percent}% GST</span>
+        {data.can_buy && data.online && !autopayLive(data.autopay) && (
+          <label className="ml-auto flex items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+            Renew automatically <span className="text-xs muted">(UPI AutoPay, card or bank mandate — cancel any time)</span></label>
+        )}</div>
       <div className="grid gap-4 md:grid-cols-3">
         {data.plans.filter((p) => PAID_PLANS.includes(p.id)).map((p) => {
           const price = p.price[interval];
@@ -63,7 +92,7 @@ export function PlanBillingTab() {
               </ul>
               {data.can_buy ? (
                 data.online
-                  ? <Button className="mt-4 w-full" onClick={() => nav(`/billing/${orgId}/checkout?plan=${p.id}&interval=${interval}`)}>{same ? "Renew" : "Choose"} {p.name}</Button>
+                  ? <Button className="mt-4 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${p.id}&interval=${interval}${auto && !autopayLive(data.autopay) ? "&mode=autopay" : ""}`)}>{same ? "Renew" : "Choose"} {p.name}</Button>
                   : <p className="mt-4 text-xs muted">Online payment is not set up yet. Write to info@niyazio.com to pay by bank transfer.</p>
               ) : <p className="mt-4 text-xs muted">Only the owner can change the plan.</p>}
             </Card>
@@ -105,7 +134,8 @@ export function CheckoutPage() {
   const nav = useNavigate();
   const [state, setState] = useState<"loading" | "ready" | "paying" | "done" | "error">("loading");
   const [message, setMessage] = useState("");
-  const plan = params.get("plan"), interval = params.get("interval");
+  const plan = params.get("plan"), interval = params.get("interval"), autopay = params.get("mode") === "autopay";
+  const [startsAt, setStartsAt] = useState<string | null>(null);
   useEffect(() => {
     if (window.Razorpay) { setState("ready"); return; }
     const s = document.createElement("script");
@@ -114,9 +144,25 @@ export function CheckoutPage() {
     s.onerror = () => { setState("error"); setMessage("Could not load the payment window. Check your internet connection."); };
     document.body.appendChild(s);
   }, []);
+  const failed = () => { setState("error"); setMessage("The payment did not go through. No money was taken, or it will be refunded automatically."); };
   const pay = async () => {
     setState("paying");
     try {
+      if (autopay) {
+        const o = await api.post<{ subscription_id: string; key_id: string; amount: number; name: string; starts_at: string | null; prefill: Record<string, string> }>(`/api/billing/org/${orgId}/autopay`, { plan, interval });
+        setStartsAt(o.starts_at);
+        const rz = new window.Razorpay!({
+          key: o.key_id, subscription_id: o.subscription_id, name: "LedgerFox", description: `${o.name} plan, renews every ${interval === "monthly" ? "month" : "year"}`, prefill: o.prefill, theme: { color: "#1d4ed8" },
+          handler: async (r: { razorpay_subscription_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+            try { await api.post(`/api/billing/org/${orgId}/autopay/verify`, r); setState("done"); }
+            catch (e) { setState("error"); setMessage(errorMessage(e)); }
+          },
+          modal: { ondismiss: () => setState("ready") },
+        });
+        rz.on("payment.failed", failed);
+        rz.open();
+        return;
+      }
       const o = await api.post<{ order_id: string; key_id: string; amount: number; currency: string; name: string; prefill: Record<string, string> }>(`/api/billing/org/${orgId}/checkout`, { plan, interval });
       const rz = new window.Razorpay!({
         key: o.key_id, order_id: o.order_id, amount: o.amount, currency: o.currency, name: "LedgerFox", description: `${o.name} plan (${interval})`, prefill: o.prefill, theme: { color: "#1d4ed8" },
@@ -126,7 +172,7 @@ export function CheckoutPage() {
         },
         modal: { ondismiss: () => setState("ready") },
       });
-      rz.on("payment.failed", () => { setState("error"); setMessage("The payment did not go through. No money was taken, or it will be refunded automatically."); });
+      rz.on("payment.failed", failed);
       rz.open();
     } catch (e) { setState("error"); setMessage(errorMessage(e)); }
   };
@@ -137,11 +183,12 @@ export function CheckoutPage() {
         <Card>
           {state === "done" ? <>
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
-            <p className="mt-3 text-lg font-semibold">Payment received — your plan is active</p>
+            <p className="mt-3 text-lg font-semibold">{autopay ? (startsAt ? "Auto-renew is set up" : "Payment received — auto-renew is on") : "Payment received — your plan is active"}</p>
+            {autopay && <p className="mt-1 text-sm muted">{startsAt ? `The first charge will be taken on ${fmtDate(startsAt.slice(0, 10))}, when your current period ends.` : "Your plan is active. It will renew by itself; you can turn this off in Plan & billing."} It can take a minute to show in LedgerFox.</p>}
             <Button className="mt-4" onClick={() => nav(-1)}>Back to LedgerFox</Button>
           </> : <>
-            <p className="text-lg font-semibold">Pay for your LedgerFox plan</p>
-            <p className="mt-1 text-sm muted">Secure payment by Razorpay (UPI, cards, net banking). LedgerFox never sees your card or UPI PIN.</p>
+            <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your LedgerFox plan" : "Pay for your LedgerFox plan"}</p>
+            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay. You are charged each period until you turn it off in Plan & billing; if your trial or paid period is still running, the first charge waits until it ends." : "Secure payment by Razorpay (UPI, cards, net banking)."} LedgerFox never sees your card details or UPI PIN.</p>
             {message && <Alert className="mt-4 text-left">{message}</Alert>}
             <Button className="mt-4 w-full" loading={state === "loading" || state === "paying"} onClick={() => void pay()}>Continue to payment</Button>
             <button className="mt-3 text-sm muted hover:underline" onClick={() => nav(-1)}>Cancel</button>
@@ -175,6 +222,52 @@ export function BillingInvoice() {
       </dl>
       <p className="mt-6 text-xs text-slate-500">Paid {p.provider === "razorpay" ? "online via Razorpay" : "by bank transfer"}. This is a computer-generated invoice.</p>
     </div>
+  );
+}
+
+const EMPTY_PROMO = { title: "", body: "", cta: "Learn more", link_url: "https://", sponsor: "", starts_on: "", ends_on: "", weight: 1, is_active: true };
+
+/** Promotions shown to Free-plan organisations: text and an https link only. */
+function PromotionsAdmin() {
+  const toast = useToast();
+  const { data, reload } = useApi<{ promotions: any[] }>("/api/billing/vendor/promotions");
+  const [edit, setEdit] = useState<(typeof EMPTY_PROMO & { id?: string }) | null>(null);
+  const save = async () => {
+    if (!edit) return;
+    const { id, ...rest } = edit;
+    const payload = { ...rest, sponsor: rest.sponsor || null, starts_on: rest.starts_on || null, ends_on: rest.ends_on || null, weight: Number(rest.weight) || 1 };
+    try {
+      if (id) await api.put(`/api/billing/vendor/promotions/${id}`, payload); else await api.post("/api/billing/vendor/promotions", payload);
+      setEdit(null); reload(); toast("success", "Saved");
+    } catch (e) { toast("error", errorMessage(e)); }
+  };
+  return (
+    <Card title="Promotions on the Free plan" className="mt-6">
+      <p className="mb-3 text-sm muted">One small card on the dashboard of organisations on the Free plan (never trial, paid or desktop users). Text and a link only — no ad scripts run inside the app. Your own messages about paid plans and the desktop app are shown too.</p>
+      {data && data.promotions.length > 0 && (
+        <TableWrap><table className="table text-sm"><thead><tr><th>Message</th><th>Sponsor</th><th>Dates</th><th className="num">Views</th><th className="num">Clicks</th><th>Status</th><th /></tr></thead>
+          <tbody>{data.promotions.map((p) => (
+            <tr key={p.id}><td><span className="font-medium">{p.title}</span><span className="block text-xs muted">{p.link_url}</span></td><td>{p.sponsor ?? "—"}</td>
+              <td>{p.starts_on ?? "…"} – {p.ends_on ?? "…"}</td><td className="num">{p.views}</td><td className="num">{p.clicks}</td><td>{p.is_active ? "On" : "Off"}</td>
+              <td className="whitespace-nowrap text-right"><Button size="sm" variant="ghost" onClick={() => setEdit({ ...EMPTY_PROMO, ...p, sponsor: p.sponsor ?? "", starts_on: p.starts_on ?? "", ends_on: p.ends_on ?? "", is_active: !!p.is_active })}>Edit</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { if (confirm(`Delete "${p.title}"?`)) { await api.del(`/api/billing/vendor/promotions/${p.id}`); reload(); } }}>Delete</Button></td></tr>
+          ))}</tbody></table></TableWrap>
+      )}
+      {edit ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Title (60)">{(fid) => <Input id={fid} maxLength={60} value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />}</Field>
+          <Field label="Sponsor (blank for your own message)">{(fid) => <Input id={fid} maxLength={60} value={edit.sponsor} onChange={(e) => setEdit({ ...edit, sponsor: e.target.value })} />}</Field>
+          <Field label="Text (160)" className="sm:col-span-2">{(fid) => <Input id={fid} maxLength={160} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />}</Field>
+          <Field label="Link (https://)">{(fid) => <Input id={fid} value={edit.link_url} onChange={(e) => setEdit({ ...edit, link_url: e.target.value })} />}</Field>
+          <Field label="Button text">{(fid) => <Input id={fid} maxLength={20} value={edit.cta} onChange={(e) => setEdit({ ...edit, cta: e.target.value })} />}</Field>
+          <Field label="From">{(fid) => <Input id={fid} type="date" value={edit.starts_on} onChange={(e) => setEdit({ ...edit, starts_on: e.target.value })} />}</Field>
+          <Field label="Until">{(fid) => <Input id={fid} type="date" value={edit.ends_on} onChange={(e) => setEdit({ ...edit, ends_on: e.target.value })} />}</Field>
+          <Field label="Share (1–10)">{(fid) => <Input id={fid} type="number" min={1} max={10} value={edit.weight} onChange={(e) => setEdit({ ...edit, weight: Number(e.target.value) })} />}</Field>
+          <label className="flex items-center gap-2 self-end text-sm"><input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />Show it</label>
+          <div className="flex gap-2 sm:col-span-2"><Button onClick={() => void save()}>Save</Button><Button variant="secondary" onClick={() => setEdit(null)}>Cancel</Button></div>
+        </div>
+      ) : <Button className="mt-3" size="sm" onClick={() => setEdit({ ...EMPTY_PROMO })}>Add a promotion</Button>}
+    </Card>
   );
 }
 
@@ -213,6 +306,7 @@ export function VendorAdmin() {
           </div>
         </Card>
       )}
+      <PromotionsAdmin />
     </div>
   );
 }

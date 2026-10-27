@@ -1,5 +1,16 @@
 # Test report
 
+## Subscriptions, promotions and hardening (branch `feature/autopay-promos`, 27 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck`, desktop `tsc` | ✅ 0 problems / 0 errors |
+| `npm test` (Miniflare D1) | ✅ **232 passed**, 1 skipped, 39 files |
+| `npm run test:desktop` (Node SQLite) | ✅ **232 passed**, 1 skipped |
+| `npm audit --omit=dev --audit-level=high` | ✅ 0 vulnerabilities |
+| `test/autopay-promos.test.ts` | Auto-renew against a mocked Razorpay API with real HMAC signatures: plan created once, first charge after the trial, mandate check not counted as a charge, duplicate and wrong-amount webhooks ignored, renewals extend the period, halted/cancelled status, owner-only, outsiders refused, 20 checkouts per hour limit; promotions only on the Free plan, unsafe links (`javascript:`, `http:`, credentials, `data:`) refused, vendor-only management, views and clicks; HSTS on https |
+| Browser check (local `wrangler dev`, billing on, Chromium) | Plan page shows "Renew automatically"; choosing a plan does a full page load to the checkout page in auto-renew mode; no promotion during the trial; a `javascript:` link is refused on `/vendor`; after the trial the dashboard shows house and sponsored cards, "Hide for today" works; the background recurring run no longer fails on the Free plan. Razorpay's window itself could not be opened (no internet in the test machine) |
+
 ## Release run (v0.4.1 keyboard shortcuts, branch `feature/shortcuts`, 27 Oct 2026)
 
 | Command | Result |

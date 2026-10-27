@@ -2,7 +2,8 @@ import type { Context } from "hono";
 import type { AppEnv, Env } from "../env";
 import { first, run, stmt } from "../lib/db";
 import { AppError } from "../lib/errors";
-import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, type Feature, type Interval, type PlanId } from "@shared/plans";
+import { newId } from "../lib/crypto";
+import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, withGst, type Feature, type Interval, type PlanId } from "@shared/plans";
 
 /** Billing applies only to the hosted edition with BILLING_ENABLED=true; desktop and phone copies are never limited. */
 export const billingOn = (env: Env) => env.BILLING_ENABLED === "true" && env.APP_ENV !== "desktop" && env.APP_ENV !== "offline";
@@ -40,6 +41,11 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
 }
 
 const upgradeHint = (s: Subscription) => (s.status === "free" && s.paid_plan === null ? "Choose a plan in Settings → Plan & billing." : "Upgrade in Settings → Plan & billing.");
+
+export async function hasFeature(c: Context<AppEnv>, orgId: string, feature: Feature) {
+  const s = await subscription(c.env, orgId);
+  return !s.enforced || PLANS[s.plan].features.includes(feature);
+}
 
 /** Throws 402 when the organisation's plan does not include the feature. */
 export async function requireFeature(c: Context<AppEnv>, orgId: string, feature: Feature) {
@@ -139,3 +145,75 @@ export async function markPaid(env: Env, paymentRowId: string, providerPaymentId
   const invoice = inv?.invoice_number ?? null;
   return { already: !done[1].meta.changes, period_end: end.toISOString(), invoice_number: invoice };
 }
+
+// ── Auto-renewal (Razorpay Subscriptions: UPI AutoPay, cards, e-mandate) ──
+
+async function razorpay<T>(env: Env, method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) throw new AppError(503, "BILLING_NOT_CONFIGURED", "Online payment is not set up yet. Contact support to pay by bank transfer.");
+  const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method,
+    headers: { "content-type": "application/json", authorization: `Basic ${btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`)}` },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  if (!res.ok) throw new AppError(502, "PAYMENT_PROVIDER", `Razorpay refused the request (${res.status})`);
+  return (await res.json()) as T;
+}
+
+/** The Razorpay plan for this plan, interval and price; created the first time it is needed and remembered. */
+export async function razorpayPlanId(env: Env, plan: PlanId, interval: Interval, total: number) {
+  const key = `${plan}:${interval}:${total}`;
+  const known = await first<{ razorpay_plan_id: string }>(env.DB, `SELECT razorpay_plan_id FROM billing_rzp_plans WHERE plan_key = ?`, key);
+  if (known) return known.razorpay_plan_id;
+  const created = await razorpay<{ id: string }>(env, "POST", "/plans", {
+    period: interval, interval: 1,
+    item: { name: `LedgerFox ${PLANS[plan].name} (${interval})`, amount: total, currency: "INR", description: "Including GST" },
+    notes: { plan, interval },
+  });
+  await run(env.DB, `INSERT INTO billing_rzp_plans (plan_key, razorpay_plan_id) VALUES (?, ?) ON CONFLICT (plan_key) DO NOTHING`, key, created.id);
+  return (await first<{ razorpay_plan_id: string }>(env.DB, `SELECT razorpay_plan_id FROM billing_rzp_plans WHERE plan_key = ?`, key))!.razorpay_plan_id;
+}
+
+/** Ten years of renewals at most; the customer can cancel any time. */
+const RENEWALS: Record<Interval, number> = { monthly: 120, yearly: 10 };
+
+export async function createRazorpaySubscription(env: Env, planId: string, interval: Interval, startAt: number | null, notes: Record<string, string>) {
+  return razorpay<{ id: string; status: string }>(env, "POST", "/subscriptions", {
+    plan_id: planId, total_count: RENEWALS[interval], customer_notify: 1, notes, ...(startAt ? { start_at: startAt } : {}),
+  });
+}
+
+export async function cancelRazorpaySubscription(env: Env, subscriptionId: string) {
+  return razorpay<{ id: string; status: string }>(env, "POST", `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { cancel_at_cycle_end: 0 });
+}
+
+export async function fetchRazorpayPayment(env: Env, paymentId: string) {
+  return razorpay<{ id: string; amount: number; status: string; order_id?: string | null; invoice_id?: string | null }>(env, "GET", `/payments/${encodeURIComponent(paymentId)}`);
+}
+
+/** Checkout success for a subscription: signature = HMAC-SHA256(payment_id|subscription_id, key secret). */
+export async function verifySubscriptionSignature(secret: string, paymentId: string, subscriptionId: string, signature: string) {
+  return safeEqual(await hmacHex(secret, `${paymentId}|${subscriptionId}`), signature);
+}
+
+/**
+ * Record one auto-renewal charge (from the webhook or the checkout page) and extend the paid period. Idempotent: the
+ * Razorpay payment id is unique, so a repeated event finds the same row and markPaid does nothing the second time.
+ */
+export async function recordAutopayCharge(env: Env, subscriptionId: string, paymentId: string, amount: number) {
+  const s = await first<{ org_id: string; autopay_plan: PlanId; autopay_interval: Interval; autopay_total: number }>(env.DB,
+    `SELECT org_id, autopay_plan, autopay_interval, autopay_total FROM org_subscriptions WHERE autopay_id = ?`, subscriptionId);
+  if (!s || amount !== s.autopay_total) return { recorded: false };
+  // Split the charged total into price and GST; a later price change does not affect subscriptions already running.
+  const now = withGstFor(env, s.autopay_plan, s.autopay_interval);
+  const base = now.total === amount ? now.amount : Math.round(amount / (1 + gstPercentOf(env) / 100));
+  const price = { amount: base, gst: amount - base, total: amount };
+  await run(env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, provider_payment_id, provider_subscription_id)
+     VALUES (?,?,?,?,?,?,?,'razorpay',?,?) ON CONFLICT (provider_payment_id) DO NOTHING`,
+    newId(), s.org_id, s.autopay_plan, s.autopay_interval, price.amount, price.gst, price.total, paymentId, subscriptionId);
+  const row = await first<{ id: string }>(env.DB, `SELECT id FROM billing_payments WHERE provider_payment_id = ? AND org_id = ?`, paymentId, s.org_id);
+  if (!row) return { recorded: false };
+  return { recorded: true, ...(await markPaid(env, row.id, paymentId)) };
+}
+
+export const gstPercentOf = (env: Env) => Number(env.BILLING_GST_PERCENT ?? "18") || 0;
+export const withGstFor = (env: Env, plan: PlanId, interval: Interval) => withGst(PLANS[plan].price[interval], gstPercentOf(env));

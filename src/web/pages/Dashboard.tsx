@@ -4,6 +4,7 @@ import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { Alert, Card, EmptyState, LinkButton, PageHeader, Spinner, Stat } from "../components/ui";
 import { fmtDate, qty } from "../lib/format";
+import { PromoCard } from "../components/Promo";
 
 function IncomeExpenseChart({ months, fmt }: { months: { month: string; income: number; expense: number }[]; fmt: (n: number) => string }) {
   const max = Math.max(1, ...months.flatMap((m) => [m.income, m.expense]));
@@ -151,6 +152,7 @@ function FinancialDashboard() {
           ) : <EmptyState icon={<BookOpen className="h-5 w-5" />} title="No posted entries yet" />}
         </Card>
       </div>
+      <PromoCard />
     </>
   );
 }
