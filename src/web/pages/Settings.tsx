@@ -22,7 +22,7 @@ function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const c = settings!.company;
-  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern", print_language: (c.print_language ?? "en") as string,
+  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern", print_language: (c.print_language ?? "en") as string, print_qr_verify: c.print_qr_verify !== 0, print_qr_upi: c.print_qr_upi !== 0,
     purchase_approval_limit: c.purchase_approval_limit != null ? toInput(c.purchase_approval_limit, c.base_currency) : "", billing_discount_limit: c.billing_discount_limit_bp != null ? String(c.billing_discount_limit_bp / 100) : "" });
   const { busy, error, run } = useAction();
   const disabled = !can("company.manage");
@@ -44,6 +44,12 @@ function CompanyTab() {
         <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" disabled={disabled} checked={v.round_off_invoices} onChange={(e) => setV({ ...v, round_off_invoices: e.target.checked })} /> Round invoice totals to the nearest whole currency unit (difference posts to Rounding Off)</label>
         <Field label="UPI ID for payment QR" hint="Printed invoices show a 'Scan to pay' UPI QR for the balance due.">{(id) => <Input id={id} disabled={disabled} placeholder="business@okbank" value={v.upi_id} onChange={(e) => setV({ ...v, upi_id: e.target.value })} />}</Field>
         <Field label="Default print layout">{(id) => <Select id={id} disabled={disabled} value={v.print_template} onChange={(e) => setV({ ...v, print_template: e.target.value })}><option value="modern">A4 — modern</option><option value="classic">A4 — classic</option><option value="compact">Compact</option></Select>}</Field>
+        <div className="space-y-1 text-sm sm:col-span-2">
+          <p className="font-medium">QR codes on printed bills</p>
+          <label className="flex items-center gap-2"><input type="checkbox" disabled={disabled} checked={v.print_qr_verify} onChange={(e) => setV({ ...v, print_qr_verify: e.target.checked })} /> Verification QR (customer scans to check the bill is genuine)</label>
+          <label className="flex items-center gap-2"><input type="checkbox" disabled={disabled} checked={v.print_qr_upi} onChange={(e) => setV({ ...v, print_qr_upi: e.target.checked })} /> UPI payment QR on unpaid invoices</label>
+          <p className="text-xs muted">The GST e-invoice QR always prints when an IRN is recorded (it is required).</p>
+        </div>
         <Field label="Bill language" hint="Labels print in English plus the chosen language (e.g. “Qty / मात्रा”)">{(id) => <Select id={id} disabled={disabled} value={v.print_language} onChange={(e) => setV({ ...v, print_language: e.target.value })}>{LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "English only" : `English + ${l.label}`}</option>)}</Select>}</Field>
         <Field label="Purchase approval limit" hint="Bills above this amount need approval by someone with “Approve purchases”. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.purchase_approval_limit} onChange={(e) => setV({ ...v, purchase_approval_limit: e.target.value })} />}</Field>
         <Field label="Billing discount limit (%)" hint="Billing staff cannot give a line discount above this. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.billing_discount_limit} onChange={(e) => setV({ ...v, billing_discount_limit: e.target.value })} />}</Field>

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Download, FileUp, CheckCircle2 } from "lucide-react";
+import { FileUp, CheckCircle2 } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { api, errorMessage } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
 import { readSheet, type SheetRow } from "../lib/sheet";
-import { Alert, Button, Card, Field, Input, PageHeader, Select, TableWrap } from "../components/ui";
+import { Alert, Button, Card, Field, Input, PageHeader, Select, TableWrap, DownloadButtons } from "../components/ui";
 import { today } from "../lib/format";
 
 type Kind = "contacts" | "items";
@@ -83,7 +83,7 @@ export default function Import() {
               {can("items.write") && <option value="items">Products, services & opening stock</option>}
             </Select>)}</Field>
           <p className="mt-3 text-xs muted">{t.help}</p>
-          <Button variant="secondary" className="mt-3" onClick={() => downloadCsv(`ledgerfox-${kind}-template.csv`, t.head, t.sample)}><Download className="h-4 w-4" />Download template</Button>
+          <DownloadButtons onDownload={() => downloadCsv(`ledgerfox-${kind}-template.csv`, t.head, t.sample)} />
         </Card>
         <Card title="2. Choose your file">
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-[var(--border)] p-6 text-center text-sm hover:border-brand-500">

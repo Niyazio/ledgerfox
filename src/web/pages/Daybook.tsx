@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Download } from "lucide-react";
+
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
-import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, StatusBadge, TableWrap } from "../components/ui";
+import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, StatusBadge, TableWrap, DownloadButtons } from "../components/ui";
 import { HistoryButton } from "../components/History";
 import { DOC_LABELS, fmtDate, fmtDateTime, today, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
@@ -43,7 +43,7 @@ export default function Daybook() {
   return (
     <>
       <PageHeader title="Daybook" subtitle="Every transaction of the day with who created, modified, approved, posted and cancelled it."
-        actions={data && <Button variant="secondary" onClick={csv}><Download className="h-4 w-4" />CSV</Button>} />
+        actions={data && <DownloadButtons onDownload={csv} />} />
       <Card className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="From">{(fid) => <Input id={fid} type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} />}</Field>

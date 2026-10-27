@@ -1,11 +1,11 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { Download, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Printer, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { DateRangeFilter } from "../components/DateRange";
 import { ShareButton } from "../components/Share";
 import { useApi } from "../lib/hooks";
-import { Alert, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap , Stat } from "../components/ui";
+import { Alert, Button, Card, DownloadButtons, EmptyState, Field, Input, PageHeader, Select, Spinner, TableWrap , Stat } from "../components/ui";
 import { AccountSelect, DimensionSelect } from "../components/pickers";
 import { downloadCsv } from "../lib/csv";
 import { DOC_LABELS, fmtDate, fyStart, qty, today, toInput } from "../lib/format";
@@ -75,7 +75,7 @@ function Shell({ title, controls, onCsv, children, subtitle }: { title: string; 
     <>
       <PageHeader title={title} back={{ to: `/app/${id}/reports`, label: "Reports" }}
         actions={<>
-          {onCsv && <Button variant="secondary" onClick={onCsv}><Download className="h-4 w-4" />CSV</Button>}
+          {onCsv && <DownloadButtons onDownload={onCsv} />}
           <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / PDF</Button>
         </>} />
       {controls && <div className="mb-4 flex flex-wrap items-end gap-3 no-print">{controls}</div>}

@@ -95,7 +95,7 @@ function CompanyBlock({ thermal, center }: { thermal?: boolean; center?: boolean
 }
 
 // ── Invoice, bill, quotation, notes ─────────────────────────────────────────────────────────────────────────────
-function DocumentPrint({ id, format, showQr }: { id: string; format: Format; showQr: boolean }) {
+function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Format; showQr: boolean; showUpi: boolean }) {
   const { path, money, settings } = useCompany();
   const { data, error } = useApi<any>(path(`/documents/${id}`));
   const d = data?.document;
@@ -110,10 +110,10 @@ function DocumentPrint({ id, format, showQr }: { id: string; format: Format; sho
   const upiText = d && sales && d.doc_type === "invoice" && co.upi_id && cur === "INR" && outstanding > 0
     ? `upi://pay?pa=${encodeURIComponent(co.upi_id)}&pn=${encodeURIComponent(co.legal_name || co.name)}&am=${(outstanding / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Invoice ${d.number ?? ""}`)}`
     : null;
-  const generatedUpi = useQr(showQr ? upiText : null);
+  const generatedUpi = useQr(showUpi ? upiText : null);
   const { payment_qr } = useContext(BrandingCtx);
   // The business's own QR image (fixed, no amount) takes precedence; otherwise a UPI QR with the balance due.
-  const upi = showQr && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
+  const upi = showUpi && d && sales && d.doc_type === "invoice" && outstanding > 0 && payment_qr ? payment_qr : generatedUpi;
   const payLabel = payment_qr && upi === payment_qr ? `Scan to pay${co.upi_id ? ` · ${co.upi_id}` : ""}` : null;
   // GST e-invoice: the IRP's signed QR must be printed on the invoice (not for cancelled IRNs).
   const gst = data?.gst_refs as { irn: string | null; ack_no: string | null; ack_date: string | null; signed_qr: string | null; irn_cancelled: number; ewb_no: string | null; ewb_date: string | null } | null | undefined;
@@ -408,7 +408,9 @@ function PrintInner() {
   const def = (settings?.company.print_template as Format | undefined) ?? "modern";
   const asked = params.get("format");
   const format: Format = asked && asked in FORMATS ? (asked as Format) : kind === "payment" ? "a5" : def in FORMATS ? def : "modern";
-  const [showQr, setShowQr] = useState(true);
+  // Company defaults (Settings → Company → printing); either can be switched for this print.
+  const [showQr, setShowQr] = useState(settings?.company.print_qr_verify !== 0);
+  const [showUpi, setShowUpi] = useState(settings?.company.print_qr_upi !== 0);
   const set = (f: Format) => setParams((p) => { p.set("format", f); return p; }, { replace: true });
   const shareText = useMemo(() => `${document.title}\n${location.href}`, []);
   useEffect(() => { if (params.get("auto") === "1") setTimeout(() => window.print(), 600); }, [params]);
@@ -422,7 +424,8 @@ function PrintInner() {
         <select id="fmt" className="input max-w-[12rem] py-1" value={format} onChange={(e) => set(e.target.value as Format)}>
           {Object.entries(FORMATS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
         </select>
-        <label className="ml-2 flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} />QR codes</label>
+        <label className="ml-2 flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} />Verification QR</label>
+        {kind === "document" && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showUpi} onChange={(e) => setShowUpi(e.target.checked)} />UPI payment QR</label>}
         <span className="flex-1" />
         <a className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer"><Share2 className="h-4 w-4" />WhatsApp</a>
         <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / Save PDF</button>
@@ -430,7 +433,7 @@ function PrintInner() {
       <p className="no-print px-4 py-2 text-center text-xs muted">Preview. Choose “Save as PDF” in the print dialog for a PDF. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
       <BrandingCtx.Provider value={branding.data ?? { logo: null, payment_qr: null }}>
       <div className="px-2 print:px-0">
-        {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} />}
+        {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} showUpi={showUpi} />}
         {kind === "payment" && <PaymentPrint id={id} format={format} showQr={showQr} />}
         {kind === "payslip" && <PayslipPrint id={id} format={format} showQr={showQr} />}
       </div>

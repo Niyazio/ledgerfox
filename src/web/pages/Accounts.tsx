@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Plus, Download } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCompany, type Account } from "../lib/company";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, TableWrap, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, Select, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { SUBTYPES, isDebitNormal, type AccountType } from "@shared/coa";
 import { downloadCsv } from "../lib/csv";
 import { toInput } from "../lib/format";
@@ -87,7 +87,7 @@ export default function Accounts() {
     <>
       <PageHeader title="Chart of accounts" subtitle="Group accounts organise the chart; only ledger accounts accept postings."
         actions={<>
-          <Button variant="secondary" onClick={() => downloadCsv("chart-of-accounts.csv", ["Code", "Name", "Type", "Detail type", "Group", "Active", "Balance"], tree.map(({ a }) => [a.code, a.name, a.type, a.subtype, a.is_group ? "yes" : "no", a.is_active ? "yes" : "no", a.is_group ? "" : toInput(balance(a), cur)]))}><Download className="h-4 w-4" />CSV</Button>
+          <DownloadButtons onDownload={() => downloadCsv("chart-of-accounts.csv", ["Code", "Name", "Type", "Detail type", "Group", "Active", "Balance"], tree.map(({ a }) => [a.code, a.name, a.type, a.subtype, a.is_group ? "yes" : "no", a.is_active ? "yes" : "no", a.is_group ? "" : toInput(balance(a), cur)]))} />
           {can("accounts.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New account</Button>}
         </>} />
       <Card padded={false}>

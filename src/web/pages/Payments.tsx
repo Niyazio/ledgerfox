@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { Download, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { HistoryButton } from "../components/History";
 import { ShareButton } from "../components/Share";
@@ -9,7 +9,7 @@ import { downloadCsv } from "../lib/csv";
 import { useApi, useAction } from "../lib/hooks";
 import { api } from "../lib/api";
 import { isQueued, postOrQueue, randomKey } from "../lib/offline";
-import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast } from "../components/ui";
+import { Alert, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, useToast, DownloadButtons } from "../components/ui";
 import { AccountSelect, ContactSelect, isCashOrBank } from "../components/pickers";
 import { fmtDate, today, toInput } from "../lib/format";
 import { parseDecimal } from "@shared/money";
@@ -36,7 +36,7 @@ export function PaymentList() {
     <>
       <PageHeader title={title} subtitle={direction === "in" ? "Money received from customers" : "Money paid to suppliers"}
         actions={<>
-          {data && <Button variant="secondary" loading={exporting} onClick={exportCsv}><Download className="h-4 w-4" />Download CSV</Button>}
+          {data && <DownloadButtons disabled={exporting} onDownload={exportCsv} />}
           {can(direction === "in" ? "sales.post" : "purchase.post") && <LinkButton to={`/app/${id}/payments/${direction}/new`}><Plus className="h-4 w-4" />Record {direction === "in" ? "receipt" : "payment"}</LinkButton>}
         </>} />
       <Card padded={false}>

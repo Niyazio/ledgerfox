@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, Navigate } from "react-router";
 import { useSession } from "../lib/session";
 import { useApi } from "../lib/hooks";
-import { Alert, Badge, Card, EmptyState, Input, Spinner, TableWrap } from "../components/ui";
+import { Alert, Badge, Card, DownloadButtons, EmptyState, Input, Spinner, TableWrap } from "../components/ui";
 import { Wordmark } from "../components/Layout";
 import { ROLE_LABELS, type Role } from "@shared/permissions";
 import { downloadCsv } from "../lib/csv";
@@ -31,9 +31,9 @@ export default function Clients() {
       {data.error && <Alert className="mb-4">{data.error}</Alert>}
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Input className="max-w-xs" placeholder="Search name, organisation or GSTIN" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search clients" />
-        <button className="text-sm text-brand-700 hover:underline disabled:opacity-40 dark:text-brand-300" disabled={!rows.length} onClick={() => downloadCsv(`clients-${data.data?.month}.csv`,
+        <DownloadButtons size="sm" disabled={!rows.length} onDownload={() => downloadCsv(`clients-${data.data?.month}.csv`,
           ["Company", "Organisation", "GSTIN", "Role", "Sales this month", "Receivables", "Payables", "Overdue invoices", "Drafts", "Expenses to approve", "Unmatched bank lines", "Last entry"],
-          rows.map((r) => [r.name, r.org_name, r.gstin ?? "", ROLE_LABELS[r.role] ?? r.role, ...(r.stats ? [r.stats.sales_month / 100, r.stats.receivables / 100, r.stats.payables / 100, r.stats.overdue, r.stats.drafts, r.stats.approvals, r.stats.unmatched, r.stats.last_entry ?? ""] : ["", "", "", "", "", "", "", ""])]))}>Download CSV</button>
+          rows.map((r) => [r.name, r.org_name, r.gstin ?? "", ROLE_LABELS[r.role] ?? r.role, ...(r.stats ? [r.stats.sales_month / 100, r.stats.receivables / 100, r.stats.payables / 100, r.stats.overdue, r.stats.drafts, r.stats.approvals, r.stats.unmatched, r.stats.last_entry ?? ""] : ["", "", "", "", "", "", "", ""])]))} />
       </div>
       <Card padded={false}>
         {data.loading && !data.data ? <Spinner /> : !rows.length ? <EmptyState title="No client companies" body="When a business invites you, it appears here." /> : (

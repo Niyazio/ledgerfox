@@ -4,8 +4,9 @@ import { useSearchParams } from "react-router";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Select, Spinner, TableWrap, Tabs, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
+import { downloadCsv } from "../lib/csv";
 import { AccountSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, qty, today, toInput } from "../lib/format";
 
@@ -179,18 +180,15 @@ function BatchesTab() {
   const r = useApi<{ batches: any[]; counts: { expired: number; expiring: number } }>(path(`/items/batches/report?days=${Number(days) || 30}`));
   const rows = (r.data?.batches ?? []).filter((b) => !only || b.status === only);
   const df = settings?.company.date_format;
-  const csv = () => {
-    const out = [["Item", "Code", "Warehouse", "Batch", "Expiry", "Quantity", "Unit", "Status"], ...rows.map((b) => [b.name, b.code ?? "", b.warehouse_name, b.batch_no, b.expiry_date ?? "", qty(b.qty_milli), b.unit, b.status])];
-    const blob = new Blob(["\uFEFF" + out.map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n")], { type: "text/csv" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `batches-expiry-${today()}.csv`; a.click(); URL.revokeObjectURL(a.href);
-  };
+  const csv = () => downloadCsv(`batches-expiry-${today()}.csv`, ["Item", "Code", "Warehouse", "Batch", "Expiry", "Quantity", "Unit", "Status"],
+    rows.map((b) => [b.name, b.code ?? "", b.warehouse_name, b.batch_no, b.expiry_date ?? "", qty(b.qty_milli), b.unit, b.status]));
   return (
     <Card padded={false}>
       <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
         <Field label="Expiring within (days)">{(id) => <Input id={id} inputMode="numeric" className="w-28" value={days} onChange={(e) => setDays(e.target.value)} />}</Field>
         <Field label="Show">{(id) => <Select id={id} value={only} onChange={(e) => setOnly(e.target.value)}><option value="">All batches</option><option value="expired">Expired</option><option value="expiring">Expiring soon</option><option value="ok">Fine</option></Select>}</Field>
         {r.data && <p className="text-sm"><Badge color="red">{r.data.counts.expired} expired</Badge> <Badge color="amber">{r.data.counts.expiring} expiring</Badge></p>}
-        <Button variant="secondary" size="sm" className="ml-auto" disabled={!rows.length} onClick={csv}>Download CSV</Button>
+        <DownloadButtons size="sm" className="ml-auto" disabled={!rows.length} onDownload={csv} />
       </div>
       {r.loading && !r.data ? <Spinner /> : !rows.length ? <EmptyState title="No batches" body="Tick “Track batch numbers & expiry” on an item, then enter the batch on purchase bills." /> : (
         <TableWrap><table className="table"><thead><tr><th>Item</th><th>Warehouse</th><th>Batch</th><th>Expiry</th><th className="num">Quantity</th><th>Status</th></tr></thead>

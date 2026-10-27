@@ -7,7 +7,7 @@ import { useCompany } from "../lib/company";
 import { downloadCsv } from "../lib/csv";
 import { fmtDate, today, toInput } from "../lib/format";
 import { AccountSelect, isCashOrBank } from "../components/pickers";
-import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, Spinner, Stat, TableWrap, Tabs, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, Spinner, Stat, TableWrap, Tabs, useToast, DownloadButtons } from "../components/ui";
 
 type Tab = "runs" | "employees" | "timesheets" | "report";
 
@@ -146,7 +146,7 @@ function StatutoryFiles({ runId }: { runId: string }) {
       {problems.length > 0 && <Alert kind="warning" className="mb-3"><ul className="ml-4 list-disc">{problems.map((p) => <li key={p}>{p}</li>)}</ul><p className="mt-1">Fix these on the employee and download again.</p></Alert>}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="secondary" disabled={!ecr.rows.length} onClick={() => downloadText(`ECR-${period}.txt`, ecr.text)}>EPF ECR ({ecr.rows.length})</Button>
-        <Button size="sm" variant="secondary" disabled={!esi.rows.length} onClick={() => downloadCsv(`ESIC-${period}.csv`, esi.header, esi.rows.map((r) => [r.ip_number, r.name, r.days, r.wages, r.reason, r.last_working_day]))}>ESIC contribution ({esi.rows.length})</Button>
+        <DownloadButtons size="sm" disabled={!esi.rows.length} onDownload={() => downloadCsv(`ESIC-${period}.csv`, esi.header, esi.rows.map((r) => [r.ip_number, r.name, r.days, r.wages, r.reason, r.last_working_day]))} />
       </div>
       {ecr.rows.length > 0 && <p className="mt-3 text-sm">EPF challan: A/c 1 {inr(s.ac1)} · A/c 2 {inr(s.ac2)} · A/c 10 {inr(s.ac10)} · A/c 21 {inr(s.ac21)} · <b>Total {inr(s.total)}</b></p>}
       {esi.rows.length > 0 && <p className="mt-1 text-sm">ESIC: employee {inr(esi.rows.reduce((t, r) => t + r.employee_share, 0))} + employer {inr(esi.rows.reduce((t, r) => t + r.employer_share, 0))}</p>}
@@ -266,7 +266,7 @@ function Report() {
     <Card padded={false} title="Salary register" actions={<div className="flex flex-wrap items-center gap-2">
       <Input type="month" aria-label="From" className="w-36" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />
       <Input type="month" aria-label="To" className="w-36" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
-      <Button size="sm" variant="secondary" disabled={!rows.length} onClick={() => downloadCsv(`salary-register-${range.from}-${range.to}.csv`, ["Month", "Code", "Name", "Paid days", ...cols.map((c) => c[1])], rows.map((r) => [r.period, r.code, r.name, r.paid_days_milli / 1000, ...cols.map((c) => (r[c[0]] / 100).toFixed(2))]))}>CSV</Button>
+      <DownloadButtons size="sm" disabled={!rows.length} onDownload={() => downloadCsv(`salary-register-${range.from}-${range.to}.csv`, ["Month", "Code", "Name", "Paid days", ...cols.map((c) => c[1])], rows.map((r) => [r.period, r.code, r.name, r.paid_days_milli / 1000, ...cols.map((c) => (r[c[0]] / 100).toFixed(2))]))} />
       <Button size="sm" variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
     </div>}>
       {rows.length ? (
@@ -300,7 +300,7 @@ function Tds24q() {
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Financial year">{(fid) => <Select id={fid} value={v.fy} onChange={(e) => setV({ ...v, fy: e.target.value })}>{[0, 1, 2].map((k) => { const y = currentFy - k; return <option key={y} value={y}>{y}-{String(y + 1).slice(2)}</option>; })}</Select>}</Field>
         <Field label="Quarter">{(fid) => <Select id={fid} value={v.quarter} onChange={(e) => setV({ ...v, quarter: e.target.value })}><option value="1">Q1 Apr–Jun</option><option value="2">Q2 Jul–Sep</option><option value="3">Q3 Oct–Dec</option><option value="4">Q4 Jan–Mar</option></Select>}</Field>
-        <Button variant="secondary" onClick={download}>Download deductee rows</Button>
+        <span className="self-center text-sm muted">Deductee rows:</span><DownloadButtons onDownload={download} />
       </div>
       <p className="mt-2 text-xs muted">Copy the rows into the deductee sheet of NSDL's free Return Preparation Utility, add the challan details, then validate with the FVU. LedgerFox does not file the return.</p>
     </Card>

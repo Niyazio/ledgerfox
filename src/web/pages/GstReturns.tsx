@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
-import { Download, FileJson, Printer } from "lucide-react";
+import { FileJson, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { downloadCsv } from "../lib/csv";
-import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, TableWrap, Tabs } from "../components/ui";
+import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, TableWrap, Tabs, DownloadButtons } from "../components/ui";
 import { INDIA_STATES } from "@shared/tax";
 
 const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
@@ -61,7 +61,7 @@ export default function GstReturns() {
         <div className="space-y-4">
           <Card title={`GSTR-1 · ${g1.data.gstin} · ${period}`} actions={<div className="flex flex-wrap gap-2 no-print">
             <Button onClick={() => saveJson(`GSTR1_${g1.data.gstin}_${fp}.json`, g1.data.json)}><FileJson className="h-4 w-4" />JSON for GST offline tool</Button>
-            {s && <Button variant="secondary" onClick={() => { for (const [k, v] of Object.entries(s as Record<string, { head: string[]; rows: unknown[][] }>)) if (v.rows.length) downloadCsv(`GSTR1_${fp}_${k}.csv`, v.head, v.rows as string[][]); }}><Download className="h-4 w-4" />All sheets (CSV)</Button>}
+            {s && <DownloadButtons onDownload={() => { for (const [k, v] of Object.entries(s as Record<string, { head: string[]; rows: unknown[][] }>)) if (v.rows.length) downloadCsv(`GSTR1_${fp}_${k}.csv`, v.head, v.rows as string[][]); }} />}
           </div>}>
             <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
               {[["B2B invoices", g1.data.summary.b2b.invoices, g1.data.summary.b2b.txval, g1.data.summary.b2b.tax], ["B2C large (B2CL)", g1.data.summary.b2cl.invoices, g1.data.summary.b2cl.txval, g1.data.summary.b2cl.tax], ["B2C small (B2CS) rows", g1.data.summary.b2cs.rows, g1.data.summary.b2cs.txval, g1.data.summary.b2cs.tax], ["Credit notes (registered)", g1.data.summary.cdnr.notes, g1.data.summary.cdnr.txval, g1.data.summary.cdnr.tax], ["Credit notes (unregistered)", g1.data.summary.cdnur.notes, undefined, undefined]].map(([l, n, t, x]) => (

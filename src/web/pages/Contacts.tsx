@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { Plus, Download } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { CURRENCY_OPTIONS } from "../components/pickers";
 import { INDIA_STATES } from "@shared/tax";
 import { DOC_LABELS, fmtDate, toInput } from "../lib/format";
@@ -80,7 +80,7 @@ export function ContactList({ kind }: { kind: "customer" | "supplier" }) {
   return (
     <>
       <PageHeader title={title} actions={<>
-        {data && <Button variant="secondary" onClick={() => downloadCsv(`${title.toLowerCase()}.csv`, ["Name", "Email", "Phone", "Tax ID", "State", "Currency", "Outstanding (doc currency sum)"], data.contacts.map((c) => [c.name, c.email, c.phone, c.tax_id, c.state_code, c.currency, toInput(c[bal], c.currency ?? "INR")]))}><Download className="h-4 w-4" />CSV</Button>}
+        {data && <DownloadButtons onDownload={() => downloadCsv(`${title.toLowerCase()}.csv`, ["Name", "Email", "Phone", "Tax ID", "State", "Currency", "Outstanding (doc currency sum)"], data.contacts.map((c) => [c.name, c.email, c.phone, c.tax_id, c.state_code, c.currency, toInput(c[bal], c.currency ?? "INR")]))} />}
         {can(kind === "customer" ? "customers.write" : "suppliers.write") && <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />New {kind}</Button>}
       </>} />
       <Card padded={false}>

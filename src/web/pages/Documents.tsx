@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { Plus, Trash2, Printer, Download } from "lucide-react";
+import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, ApiError, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
-import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, LinkButton, Modal, MoneyInput, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { DOC_LABELS, SALES_DOCS, fmtDate, fmtDateTime, qty as fmtQty, today, toInput, pct } from "../lib/format";
 import { computeDocument, resolveTaxMode, INDIA_STATES, type TaxMode } from "@shared/tax";
@@ -51,7 +51,7 @@ export function DocumentList() {
   return (
     <>
       <PageHeader title={label.many} actions={<>
-        {data && <Button variant="secondary" loading={exporting} onClick={exportCsv} title="Download every row matching the filters (opens in Excel)"><Download className="h-4 w-4" />Download CSV</Button>}
+        {data && <DownloadButtons disabled={exporting} onDownload={exportCsv} />}
         {can(`${fam}.create`) && <LinkButton to={`/app/${id}/${area(docType)}/${docType}/new`}><Plus className="h-4 w-4" />New {label.one.toLowerCase()}</LinkButton>}
       </>} />
       <Card padded={false}>
