@@ -40,7 +40,7 @@ How plans behave:
    npx wrangler secret put RAZORPAY_KEY_SECRET
    npx wrangler secret put RAZORPAY_WEBHOOK_SECRET
    ```
-5. **Set the plain settings** in `wrangler.jsonc` under `vars`. The automatic deploy (`wrangler deploy`) replaces variables set in the Cloudflare dashboard with the ones in this file. Secrets from step 4 are kept.
+5. **Set the plain settings.** `BILLING_ENABLED` is in `wrangler.jsonc` (switched on 27 Oct 2026). Put the others in the Cloudflare dashboard (Worker → Settings → Variables and Secrets), preferably as encrypted secrets so your email and GST details are not in the public repository. `keep_vars: true` stops the automatic deploy from removing them:
    - `BILLING_ENABLED` = `true`
    - `VENDOR_ADMIN_EMAILS` = your login email(s), comma-separated. These people can open `/vendor` to see subscribers and revenue, record bank-transfer payments, and extend trials.
    - For your invoices to customers: `VENDOR_LEGAL_NAME`, `VENDOR_GSTIN`, `VENDOR_ADDRESS`, `VENDOR_STATE_CODE`. Ask your CA about GST registration and the SAC code (998431 is used for online software services).

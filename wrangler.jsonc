@@ -22,11 +22,15 @@
   // Requires niyazio.com to be an active zone in the same Cloudflare account.
   "routes": [{ "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
+  // Keep variables added in the Cloudflare dashboard (e.g. VENDOR_ADMIN_EMAILS) when CI deploys; values below still win.
+  "keep_vars": true,
   "vars": {
     "BRAND_NAME": "LedgerFox",
     "APP_ENV": "production",
     "PBKDF2_ITERATIONS": "50000",
     "ALLOW_REGISTRATION": "true",
-    "GITHUB_REPO": "Niyazio/ledgerfox"
+    "GITHUB_REPO": "Niyazio/ledgerfox",
+    // Subscriptions on the hosted website (BILLING.md). Razorpay keys are Worker secrets, never in this file.
+    "BILLING_ENABLED": "true"
   }
 }
