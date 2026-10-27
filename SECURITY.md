@@ -15,7 +15,7 @@
 | SQL injection | All queries are parameterised (`prepare().bind()`); dynamic SQL uses fixed table/column whitelists only. Tested. |
 | Rate limiting | D1-backed fixed windows: login 10/15 min per email and 30/15 min per IP; registration 10/h per IP; recovery 10/15 min per IP. |
 | Uploads | PDF/PNG/JPEG/WebP only, magic-byte sniffing, ≤ 1 MB, ≤ 10 per record, served with `nosniff`, sandboxing CSP and company scoping. |
-| Headers | Strict CSP (`script-src 'self'`), `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, Referrer-Policy, Permissions-Policy. |
+| Headers | Strict CSP (`script-src 'self'`), `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, Referrer-Policy, Permissions-Policy, HSTS (`max-age=31536000; includeSubDomains`) on https. |
 | CSV exports | Formula injection neutralised (`=`, `+`, `-`, `@` prefixes). |
 | Errors | Internal errors return a generic message + request ID; details only go to Workers Logs. |
 | Secrets | None required. `.dev.vars`, `.env` and `backups/` are git-ignored. No privileged credentials reach the browser (the browser never talks to D1). |
@@ -27,7 +27,7 @@
    Workers Free 10 ms per-request CPU limit, so the default is 50,000 (~9 ms). This is below current OWASP guidance
    (600,000 for PBKDF2-SHA256). On a paid Workers plan set `PBKDF2_ITERATIONS=100000` (the Workers maximum); hashes
    upgrade automatically at next login.
-2. **No multi-factor authentication** yet.
+2. **Two-factor sign-in is optional** (TOTP authenticator apps; the owner can require it for everyone). There is no SMS or email code.
 3. **No email verification** (no email provider). Invitation acceptance requires the logged-in email to match the
    invited email, but registration itself does not prove email ownership.
 4. Rate limiting is per-isolate-consistent via D1 but is not a WAF; Cloudflare's free DDoS protection applies in front.
@@ -117,6 +117,43 @@
 - **Audit trail:** updates to documents, journals, expenses and items record previous → new values; the record
   history shows IP addresses only to members with `audit.read`.
 - **QR codes on product labels** contain only `LF1|P|<product code>` — no prices, costs or other business data.
+
+## Subscription payments (hosted edition)
+
+- **Card and UPI details never reach LedgerFox.** Payment happens in Razorpay's own window; LedgerFox only receives
+  Razorpay ids and signatures.
+- **Keys stay on the server.** `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` are Worker secrets, never in code,
+  in the repository or in the browser. Only the public key id is sent to the checkout page.
+- **Nothing the browser says is trusted on its own.** The price comes from `src/shared/plans.ts` on the server.
+  One-off payments are checked with Razorpay's HMAC signature over `order_id|payment_id`. Auto-renewal is checked over
+  `payment_id|subscription_id`, then the charge is confirmed by asking Razorpay's API for the payment (status and amount).
+  Webhooks are verified with HMAC-SHA256 over the raw body, compared in constant time, before the JSON is read.
+- **Each payment counts once.** The webhook and the browser may both report a payment. Payment ids are unique in the
+  database, and activation is a single transaction guarded so only the first report extends the plan and takes an
+  invoice number. Charges for the wrong amount are ignored.
+- **Who can pay.** Only the organisation's owner can buy, start or stop auto-renewal; other members get 403, outsiders 404.
+  Starting a checkout is limited to 20 per organisation per hour.
+- **Razorpay's script runs only on `/billing/*` pages**, which have their own CSP and are opened with a full page load.
+  Every other page keeps `script-src 'self'`.
+
+## Advertising
+
+- **No ad network code runs inside the app.** AdSense loads only on the public home, download and privacy pages (no
+  account data is on screen there), and links into the app do a full page load so the ad script is gone first.
+  An ad script inside the app could read invoices, customers and amounts on screen. Google's AdSense rules also do
+  not allow ads inside installed software (the desktop and Android apps).
+- **Free-plan promotions** in the hosted app are plain text cards stored in LedgerFox's own database (title, text and
+  an https link checked by the server), rendered by LedgerFox itself under the same strict CSP. They are shown only
+  to organisations on the Free plan, never to trial or paying organisations or the desktop app. They load no images or
+  trackers from elsewhere. Links open in a new tab with `rel="noopener noreferrer sponsored"`, so the advertiser does
+  not learn which page or company the click came from.
+
+## What "secure" means here
+
+No software can honestly promise 100% security. LedgerFox follows the measures above, is covered by automated security
+tests (tenant isolation, permissions, CSRF, injection, signatures), and fails CI on high-severity dependency advisories.
+It has **not** had an independent penetration test (see "Known limitations"). Before taking real customers' money,
+consider one, and turn on two-factor sign-in for every account that can see financial data.
 
 ## Reporting
 

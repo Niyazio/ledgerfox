@@ -32,7 +32,7 @@ import { verifyPublic, verifyToken } from "./routes/verify";
 import backups from "./routes/backups";
 import { VERSION } from "./version";
 import billing from "./routes/billing";
-import { requireFeature } from "./services/billing";
+import { hasFeature, requireFeature } from "./services/billing";
 
 
 const app = new Hono<AppEnv>();
@@ -45,6 +45,7 @@ app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("X-Frame-Options", "DENY");
+  if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   c.header("Cache-Control", c.res.headers.get("Cache-Control") ?? "no-store");
 });
 
@@ -105,7 +106,12 @@ const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
 // Plan features (hosted edition with billing on); registered before the routes so they run first.
 company.use("/pos/*", async (c, next) => { await requireFeature(c, c.get("company").org_id, "pos"); await next(); });
-company.use("/recurring/*", async (c, next) => { await requireFeature(c, c.get("company").org_id, "recurring"); await next(); });
+company.use("/recurring/*", async (c, next) => {
+  // The app's once-a-day background run has nothing to do on a plan without recurring invoices; say so quietly.
+  if (c.req.method === "POST" && c.req.path.endsWith("/recurring/run") && c.req.query("auto") === "1" && !(await hasFeature(c, c.get("company").org_id, "recurring"))) return c.json({ created: [], errors: [] });
+  await requireFeature(c, c.get("company").org_id, "recurring");
+  await next();
+});
 company.use("/payroll/*", async (c, next) => { if (c.req.method !== "GET") await requireFeature(c, c.get("company").org_id, "payroll"); await next(); });
 company.use("/reports/:gst{gstr1|gstr3b}", async (c, next) => { await requireFeature(c, c.get("company").org_id, "gst_returns"); await next(); });
 

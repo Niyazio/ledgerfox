@@ -43,7 +43,7 @@ export function useRecurringAutoRun() {
     if (!can("sales.create")) return;
     const key = `ledgerfox-recurring-${id}`;
     try { if (localStorage.getItem(key) === today()) return; localStorage.setItem(key, today()); } catch { /* storage unavailable */ }
-    api.post<{ created: unknown[] }>(path("/recurring/run")).then((r) => { if (r.created.length) toast("info", `${r.created.length} recurring invoice(s) created`); }).catch(() => undefined);
+    api.post<{ created: unknown[] }>(path("/recurring/run?auto=1")).then((r) => { if (r.created.length) toast("info", `${r.created.length} recurring invoice(s) created`); }).catch(() => undefined);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
