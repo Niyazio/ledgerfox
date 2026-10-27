@@ -105,6 +105,7 @@ jobs:
     needs: [build, android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -113,4 +114,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version || github.ref_name }}
-        run: gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes "Installers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds."
+        # Release notes come from docs/releases/<version>.md when present (the apps show them under "What's new").
+        run: |
+          NOTES="docs/releases/$VERSION.md"
+          if [ -f "$NOTES" ]; then printf '\n\nInstallers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds.\n' >> "$NOTES"; else NOTES=$(mktemp); echo "Installers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds." > "$NOTES"; fi
+          gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes-file "$NOTES"

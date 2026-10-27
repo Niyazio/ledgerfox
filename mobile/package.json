@@ -1,7 +1,7 @@
 {
   "name": "ledgerfox-mobile",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "LedgerFox Android app: opens LedgerFox Cloud or a LedgerFox desktop on the office network.",
   "license": "MIT",
   "scripts": {
@@ -10,7 +10,9 @@
   "dependencies": {
     "@capacitor/android": "8.5.3",
     "@capacitor/core": "8.5.3",
-    "@capacitor/browser": "8.0.5"
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.3"

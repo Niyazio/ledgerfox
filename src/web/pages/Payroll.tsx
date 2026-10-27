@@ -8,6 +8,7 @@ import { downloadCsv } from "../lib/csv";
 import { fmtDate, today, toInput } from "../lib/format";
 import { AccountSelect, isCashOrBank } from "../components/pickers";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, Spinner, Stat, TableWrap, Tabs, useToast, DownloadButtons } from "../components/ui";
+import { printPage, saveFile } from "../lib/download";
 
 type Tab = "runs" | "employees" | "timesheets" | "report";
 
@@ -128,8 +129,7 @@ function Timesheets() {
 }
 
 function downloadText(name: string, text: string) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  void saveFile(new Blob([text], { type: "text/plain" }), name);
 }
 
 /** EPF ECR and ESIC files for a posted payroll (India). */
@@ -267,7 +267,7 @@ function Report() {
       <Input type="month" aria-label="From" className="w-36" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />
       <Input type="month" aria-label="To" className="w-36" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
       <DownloadButtons size="sm" disabled={!rows.length} onDownload={() => downloadCsv(`salary-register-${range.from}-${range.to}.csv`, ["Month", "Code", "Name", "Paid days", ...cols.map((c) => c[1])], rows.map((r) => [r.period, r.code, r.name, r.paid_days_milli / 1000, ...cols.map((c) => (r[c[0]] / 100).toFixed(2))]))} />
-      <Button size="sm" variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
+      <Button size="sm" variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print</Button>
     </div>}>
       {rows.length ? (
         <TableWrap><table className="table text-xs">

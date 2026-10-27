@@ -6,16 +6,14 @@ import { useApi } from "../lib/hooks";
 import { downloadCsv } from "../lib/csv";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner, TableWrap, Tabs, DownloadButtons } from "../components/ui";
 import { INDIA_STATES } from "@shared/tax";
+import { printPage, saveFile } from "../lib/download";
 
 const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const inr = (n: number | undefined) => (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const state = (code: string) => `${code}-${INDIA_STATES[code] ?? ""}`;
 
 function saveJson(name: string, data: unknown) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  void saveFile(new Blob([JSON.stringify(data)], { type: "application/json" }), name);
 }
 
 function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
@@ -48,7 +46,7 @@ export default function GstReturns() {
   return (
     <>
       <PageHeader title="GST returns" subtitle="Prepare GSTR-1 and GSTR-3B from posted invoices, credit notes, bills and expenses." back={{ to: `/app/${id}/reports`, label: "Reports" }}
-        actions={<Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print / PDF</Button>} />
+        actions={<Button variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print / PDF</Button>} />
       <div className="mb-4 flex flex-wrap items-end gap-3 no-print">
         <Field label="Return period (month)">{(fid) => <Input id={fid} type="month" value={period} onChange={(e) => set("period", e.target.value)} />}</Field>
         {(g1.data?.gstins?.length ?? 0) > 1 && <Field label="GSTIN">{(fid) => (

@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, 
 import { Wordmark } from "../components/Layout";
 import { FEATURE_LABELS, PAID_PLANS, withGst, type Interval, type Plan } from "@shared/plans";
 import { fmtDate, money as fmt } from "../lib/format";
+import { printPage } from "../lib/download";
 
 const inr = (paise: number) => fmt(paise, "INR");
 
@@ -161,7 +162,7 @@ export function BillingInvoice() {
   const intra = s.state_code && b.state_code && s.state_code === b.state_code;
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-sm text-slate-900">
-      <div className="no-print mb-4 flex justify-end"><Button onClick={() => window.print()}><Printer className="h-4 w-4" />Print / Save PDF</Button></div>
+      <div className="no-print mb-4 flex justify-end"><Button onClick={printPage}><Printer className="h-4 w-4" />Print / Save PDF</Button></div>
       <div className="flex justify-between"><div><p className="text-lg font-semibold">{s.name}</p>{s.address && <p>{s.address}</p>}{s.gstin && <p>GSTIN {s.gstin}</p>}<p>{s.email}</p></div>
         <div className="text-right"><p className="text-xl font-semibold">{s.gstin ? "Tax Invoice" : "Invoice"}</p><p>No. {p.invoice_number}</p><p>Date {fmtDate(p.paid_at.slice(0, 10))}</p></div></div>
       <div className="mt-6"><p className="text-slate-500">Bill to</p><p className="font-medium">{b.legal_name || b.name || b.org_name}</p>{b.address && <p>{[b.address, b.city].filter(Boolean).join(", ")}</p>}{b.tax_id && <p>GSTIN {b.tax_id}</p>}</div>

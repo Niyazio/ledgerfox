@@ -7,6 +7,7 @@ import { useApi } from "../lib/hooks";
 import { ProductCredit, Wordmark } from "../components/Layout";
 import { Spinner } from "../components/ui";
 import { fmtDate, money } from "../lib/format";
+import { printPage } from "../lib/download";
 
 interface Result {
   valid: boolean; kind: string; number: string; date: string; status: string; currency: string; amount: number; settled?: number; gross?: number; party: string;
@@ -62,7 +63,7 @@ function SharedDocument({ data }: { data: Result }) {
         </div>
       )}
       {data.terms && <p className="mt-4 whitespace-pre-line text-xs muted">{data.terms}</p>}
-      <button onClick={() => window.print()} className="no-print mt-4 inline-flex items-center gap-2 text-sm text-brand-700 hover:underline dark:text-brand-300"><Printer className="h-4 w-4" />Print or save as PDF</button>
+      <button onClick={printPage} className="no-print mt-4 inline-flex items-center gap-2 text-sm text-brand-700 hover:underline dark:text-brand-300"><Printer className="h-4 w-4" />Print or save as PDF</button>
     </div>
   );
 }

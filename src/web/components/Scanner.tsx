@@ -9,39 +9,71 @@ interface Detected { rawValue: string }
 interface Detector { detect(source: CanvasImageSource): Promise<Detected[]> }
 declare global { interface Window { BarcodeDetector?: new (opts: { formats: string[] }) => Detector } }
 
-export const cameraScanSupported = () => typeof window !== "undefined" && "BarcodeDetector" in window && !!navigator.mediaDevices?.getUserMedia;
+/** Live video needs a secure page (https or this computer); otherwise the phone's camera app takes a photo. */
+const liveCameraPossible = () => typeof window !== "undefined" && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
+/** Scanning is always offered: live where possible, from a photo everywhere else. */
+export const cameraScanSupported = () => typeof window !== "undefined";
 
 /** Camera scanner in a modal: calls `onCode` once with the first code it reads. */
 function CameraScan({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
+  const [mode, setMode] = useState<"live" | "photo">(liveCameraPossible() ? "live" : "photo");
   const [error, setError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
   const done = useRef(onCode);
   done.current = onCode;
   useEffect(() => {
+    if (mode !== "live") return;
     let stream: MediaStream | null = null;
     let stop = false;
     (async () => {
       try {
-        const detector = new window.BarcodeDetector!({ formats: ["qr_code", "code_128", "ean_13", "ean_8", "upc_a", "upc_e", "code_39"] });
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        if (!video.current) return;
+        // The browser's own detector when it has one (fast); otherwise ZXing on video frames.
+        const native = window.BarcodeDetector ? new window.BarcodeDetector({ formats: ["qr_code", "code_128", "ean_13", "ean_8", "upc_a", "upc_e", "code_39"] }) : null;
+        const { decodeVideoFrame } = await import("../lib/scanDecode");
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } });
+        if (!video.current || stop) return;
         video.current.srcObject = stream;
         await video.current.play();
         while (!stop) {
-          const found = await detector.detect(video.current).catch(() => []);
-          if (found[0]?.rawValue) { done.current(found[0].rawValue); return; }
-          await new Promise((r) => setTimeout(r, 200));
+          const code = native ? (await native.detect(video.current).catch(() => []))[0]?.rawValue ?? null : await decodeVideoFrame(video.current).catch(() => null);
+          if (code) { done.current(code); return; }
+          await new Promise((r) => setTimeout(r, native ? 200 : 300));
         }
       } catch (e) {
-        setError((e as Error).name === "NotAllowedError" ? "Camera permission was refused." : `Camera unavailable: ${(e as Error).message}`);
+        const name = (e as Error).name;
+        setError(name === "NotAllowedError" ? "Camera permission was refused. Allow the camera for this site, or use a photo." : "The live camera is not available here. Take a photo of the code instead.");
+        setMode("photo");
       }
     })();
     return () => { stop = true; stream?.getTracks().forEach((t) => t.stop()); };
-  }, []);
+  }, [mode]);
+  const fromPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setReading(true); setError(null);
+    try {
+      const { decodeImageFile } = await import("../lib/scanDecode");
+      const code = await decodeImageFile(file);
+      if (code) done.current(code);
+      else setError("No code found in the photo. Hold the phone steady, close to the code, in good light, and try again.");
+    } catch (e) { setError(`Could not read the photo: ${(e as Error).message}`); }
+    finally { setReading(false); }
+  };
   return (
     <Modal open title="Scan with camera" onClose={onClose}>
-      {error ? <p className="text-sm text-red-600">{error}</p> : <video ref={video} className="w-full rounded-lg bg-black" muted playsInline />}
-      <p className="mt-2 text-xs muted">Point the camera at the product QR code or barcode.</p>
+      {mode === "live" ? <>
+        <video ref={video} className="w-full rounded-lg bg-black" muted playsInline />
+        <p className="mt-2 text-xs muted">Point the camera at the product QR code or barcode.</p>
+        <button className="mt-1 text-xs text-brand-700 underline dark:text-brand-300" onClick={() => setMode("photo")}>Use a photo instead</button>
+      </> : <>
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-[var(--border)] p-6 text-center hover:border-brand-500">
+          <Camera className="h-8 w-8 text-brand-600" />
+          <span className="font-medium">{reading ? "Reading…" : "Take a photo of the code"}</span>
+          <span className="text-xs muted">Opens the camera. Fill most of the photo with the QR code or barcode.</span>
+          <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={reading} onChange={(e) => { void fromPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
+      </>}
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </Modal>
   );
 }
