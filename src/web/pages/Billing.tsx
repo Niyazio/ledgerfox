@@ -211,6 +211,7 @@ export function CheckoutPage() {
             <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your LedgerFox plan" : "Pay for your LedgerFox plan"}</p>
             <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay. You are charged each period until you turn it off in Plan & billing; if your trial or paid period is still running, the first charge waits until it ends." : "Secure payment by Razorpay (UPI, cards, net banking)."} LedgerFox never sees your card details or UPI PIN.</p>
             {message && <Alert className="mt-4 text-left">{message}</Alert>}
+            {autopay && state === "error" && <Button variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}`)}>Pay once instead (no auto-renew)</Button>}
             <Button className="mt-4 w-full" loading={state === "loading" || state === "paying"} onClick={() => void pay()}>Continue to payment</Button>
             <button className="mt-3 text-sm muted hover:underline" onClick={() => nav(-1)}>Cancel</button>
           </>}
@@ -269,6 +270,7 @@ function SetupCheck() {
         <OK ok={r.key_id}>RAZORPAY_KEY_ID {r.key_id ? <>found — <strong>{r.mode === "live" ? "LIVE mode" : r.mode === "test" ? "TEST mode (no real money)" : "unknown key type"}</strong></> : "missing — the Pay buttons stay hidden until it is added as a secret of the ledgerfox Worker"}</OK>
         <OK ok={r.key_secret}>RAZORPAY_KEY_SECRET {r.key_secret ? "found" : "missing"}</OK>
         <OK ok={r.api === "ok"}>Razorpay accepts the keys: {{ ok: "yes", rejected: "no — the key id and secret do not match, or belong to a different mode", unreachable: "could not reach Razorpay", not_checked: "not checked (keys missing)" }[r.api as string]}</OK>
+        <OK ok={r.subscriptions === "ok"}>Auto-renew (Razorpay Subscriptions): {r.subscriptions === "ok" ? "available" : r.subscriptions === "unavailable" ? <>not available{r.subscriptions_detail ? ` (${r.subscriptions_detail})` : ""} — switch on Subscriptions in the Razorpay dashboard; until then customers can untick “Renew automatically” and pay once</> : "not checked"}</OK>
         <OK ok={r.webhook_secret}>RAZORPAY_WEBHOOK_SECRET {r.webhook_secret ? "found" : "missing — payments made after the browser is closed, and auto-renew charges, are not recorded"}. Webhook URL: <span className="select-all font-mono text-xs">{data.webhook_url}</span></OK>
         <OK ok={data.email.enabled}>Email {data.email.enabled ? <>on, from {data.email.from}</> : "off — add RESEND_API_KEY (secret) and EMAIL_FROM for reset links, receipts and reminders"}</OK>
         <OK ok={Boolean(data.vendor.legal_name && data.vendor.gstin && data.vendor.address && data.vendor.state_code)}>Seller details on invoices (VENDOR_LEGAL_NAME, VENDOR_GSTIN, VENDOR_ADDRESS, VENDOR_STATE_CODE)</OK>

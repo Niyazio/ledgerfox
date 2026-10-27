@@ -230,15 +230,25 @@ vendor.get("/setup", async (c) => {
   const e = c.env;
   const keyId = e.RAZORPAY_KEY_ID ?? "";
   let api: "ok" | "rejected" | "unreachable" | "not_checked" = "not_checked";
+  let subscriptions: "ok" | "unavailable" | "not_checked" = "not_checked";
+  let subscriptionsDetail: string | null = null;
   if (keyId && e.RAZORPAY_KEY_SECRET) {
+    const auth = { authorization: `Basic ${btoa(`${keyId}:${e.RAZORPAY_KEY_SECRET}`)}` };
     try {
-      const r = await fetch("https://api.razorpay.com/v1/plans?count=1", { headers: { authorization: `Basic ${btoa(`${keyId}:${e.RAZORPAY_KEY_SECRET}`)}` } });
+      const r = await fetch("https://api.razorpay.com/v1/orders?count=1", { headers: auth });
       api = r.ok ? "ok" : r.status === 401 ? "rejected" : "unreachable";
     } catch { api = "unreachable"; }
+    if (api === "ok") {
+      try {
+        const r = await fetch("https://api.razorpay.com/v1/subscriptions?count=1", { headers: auth });
+        subscriptions = r.ok ? "ok" : "unavailable";
+        if (!r.ok) subscriptionsDetail = ((await r.json().catch(() => ({}))) as { error?: { description?: string } }).error?.description ?? `HTTP ${r.status}`;
+      } catch { subscriptions = "unavailable"; }
+    }
   }
   return c.json({
     billing_enabled: billingOn(e),
-    razorpay: { key_id: Boolean(keyId), mode: keyId.startsWith("rzp_live_") ? "live" : keyId.startsWith("rzp_test_") ? "test" : keyId ? "unknown" : null, key_secret: Boolean(e.RAZORPAY_KEY_SECRET), webhook_secret: Boolean(e.RAZORPAY_WEBHOOK_SECRET), api },
+    razorpay: { key_id: Boolean(keyId), mode: keyId.startsWith("rzp_live_") ? "live" : keyId.startsWith("rzp_test_") ? "test" : keyId ? "unknown" : null, key_secret: Boolean(e.RAZORPAY_KEY_SECRET), webhook_secret: Boolean(e.RAZORPAY_WEBHOOK_SECRET), api, subscriptions, subscriptions_detail: subscriptionsDetail },
     email: { enabled: emailOn(e), api_key: Boolean(e.RESEND_API_KEY), from: e.EMAIL_FROM ?? null },
     vendor: { legal_name: e.VENDOR_LEGAL_NAME ?? null, gstin: Boolean(e.VENDOR_GSTIN), address: Boolean(e.VENDOR_ADDRESS), state_code: e.VENDOR_STATE_CODE ?? null },
     app_url: e.APP_URL ?? null,

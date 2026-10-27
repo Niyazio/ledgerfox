@@ -1,5 +1,16 @@
 # Test report
 
+## PDF sharing and clearer Razorpay errors (branch `feature/pdf-share-razorpay-errors`, 27 Oct 2026)
+
+| Command | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck`, desktop `tsc` | ✅ 0 problems / 0 errors |
+| `npm test` / `npm run test:desktop` | ✅ **241 passed**, 1 skipped (both engines) |
+| `npm audit --omit=dev --audit-level=high` | ✅ 0 vulnerabilities (adds `html-to-image` 1.11.13, MIT, pinned) |
+| `test/pdf.test.ts` | PDF structure (header, cross-reference offsets, A4 size, image length, safe title); page cuts at blank rows |
+| `test/autopay-promos.test.ts` | Razorpay's own error description is shown; a bad key pair gets a clear message; no secret in any response |
+| Browser check (desktop server build, Chromium) | Invoice PDF from a computer and from a phone-sized screen are identical, A4, about 180 KB; a 70-line invoice makes 4 A4 pages with no row split across pages; thermal 80 mm makes one long page; "Share PDF" in a browser that cannot share files saves the PDF and explains; no console errors. Real WhatsApp share sheet not tested (needs a phone) |
+
 ## Email, reminders and billing set-up check (branch `feature/email-billing`, 27 Oct 2026)
 
 | Command | Result |

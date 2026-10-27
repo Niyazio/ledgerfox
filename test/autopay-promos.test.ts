@@ -158,6 +158,22 @@ describe("Free-plan promotions", () => {
 });
 
 describe("payment hardening", () => {
+  it("explains Razorpay's refusal instead of a bare status code", async () => {
+    const W = await billedWorld();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url: any) => {
+      if (String(url).endsWith("/plans")) return Response.json({ error: { code: "BAD_REQUEST_ERROR", description: "The requested URL was not found on the server." } }, { status: 400 });
+      if (String(url).endsWith("/orders")) return Response.json({ error: { description: "Authentication failed" } }, { status: 401 });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const auto = await W.owner.post(`/api/billing/org/${W.orgId}/autopay`, { plan: "starter", interval: "monthly" });
+    expect(auto.status).toBe(502);
+    expect(auto.json.error.message).toContain("The requested URL was not found on the server.");
+    expect(auto.json.error.message).toContain("untick “Renew automatically” to pay once");
+    const once = await W.owner.post(`/api/billing/org/${W.orgId}/checkout`, { plan: "starter", interval: "monthly" });
+    expect(once.json.error.message).toMatch(/did not accept the API keys/);
+    expect(JSON.stringify([auto.json, once.json])).not.toContain(SECRET);
+  });
+
   it("limits how many checkouts an organisation can start in an hour", async () => {
     const W = await billedWorld();
     mockRazorpay();

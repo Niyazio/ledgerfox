@@ -18,6 +18,7 @@ function mockOut(opts: { mailStatus?: number } = {}) {
       mails.push({ to: b.to[0], subject: b.subject, text: b.text });
       return new Response("{}", { status: opts.mailStatus ?? 200 });
     }
+    if (u === "https://api.razorpay.com/v1/orders?count=1") return new Response("{}", { status: 401 });
     if (u === "https://api.razorpay.com/v1/orders") return Response.json({ id: `order_${mails.length}_${Math.random().toString(36).slice(2, 8)}` });
     if (u.startsWith("https://api.razorpay.com/v1/plans")) return init?.method === "POST" ? Response.json({ id: "plan_1" }) : new Response("{}", { status: 401 });
     if (u === "https://api.razorpay.com/v1/subscriptions") return Response.json({ id: "sub_1", status: "created" });
