@@ -34,7 +34,7 @@ How plans behave:
    - Choose a secret.
    - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. LedgerFox creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.
    - UPI AutoPay allows up to ₹15,000 a charge without extra approval. The yearly Multi-branch plan (₹23,599 with GST) is above that, so those customers will pay with a card or bank mandate, or pay once.
-4. **Store the keys as Worker secrets.** They are never put in code or in the browser:
+4. **Store the keys as Worker secrets.** Either add them in Cloudflare → Workers & Pages → `ledgerfox` → Settings → **Variables and Secrets** (type *Secret*), or as GitHub repository secrets with the same names (Settings → Secrets and variables → Actions); every deploy copies the GitHub ones to the Worker. They are never put in code or in the browser. From the command line:
    ```sh
    npx wrangler secret put RAZORPAY_KEY_ID
    npx wrangler secret put RAZORPAY_KEY_SECRET
