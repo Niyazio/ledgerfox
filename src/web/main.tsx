@@ -6,7 +6,7 @@ import { SessionProvider, useSession } from "./lib/session";
 import { Spinner, ToastProvider } from "./components/ui";
 import { CompanyLayout } from "./components/Layout";
 import Landing from "./pages/Landing";
-import { Login, Register, Forgot, ResetWithToken, AcceptInvite, ChangePasswordFirst } from "./pages/Auth";
+import { Login, Register, Forgot, ResetWithToken, VerifyEmail, AcceptInvite, ChangePasswordFirst } from "./pages/Auth";
 import { AppHome, NewCompany } from "./pages/Onboarding";
 import { startOfflineSync } from "./lib/offline";
 function named<M, K extends keyof M>(p: Promise<M>, k: K) {
@@ -87,6 +87,7 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot" element={<Forgot />} />
       <Route path="/reset" element={<ResetWithToken />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/invite" element={<AcceptInvite />} />
       <Route path="/app" element={<RequireAuth><AppHome /></RequireAuth>} />
       <Route path="/app/new-company" element={<RequireAuth><NewCompany /></RequireAuth>} />

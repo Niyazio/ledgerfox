@@ -40,11 +40,29 @@ How plans behave:
    npx wrangler secret put RAZORPAY_KEY_SECRET
    npx wrangler secret put RAZORPAY_WEBHOOK_SECRET
    ```
-5. **Set the plain settings.** `BILLING_ENABLED` is in `wrangler.jsonc` (switched on 27 Oct 2026). Put the others in the Cloudflare dashboard (Worker → Settings → Variables and Secrets), preferably as encrypted secrets so your email and GST details are not in the public repository. `keep_vars: true` stops the automatic deploy from removing them:
+5. **Check the set-up** on `/vendor` → Set-up check. It shows whether the live server sees each key, test or live mode, and whether Razorpay accepts the keys. Common mistakes:
+   - adding the keys to GitHub secrets or to Workers *Build* variables instead of the Worker's runtime **Variables and Secrets**;
+   - a typo in the name;
+   - a test key id with a live secret.
+6. **Set the plain settings.** `BILLING_ENABLED` is in `wrangler.jsonc` (switched on 27 Oct 2026). Put the others in the Cloudflare dashboard (Worker → Settings → Variables and Secrets), preferably as encrypted secrets so your email and GST details are not in the public repository. `keep_vars: true` stops the automatic deploy from removing them:
    - `BILLING_ENABLED` = `true`
    - `VENDOR_ADMIN_EMAILS` = your login email(s), comma-separated. These people can open `/vendor` to see subscribers and revenue, record bank-transfer payments, and extend trials.
    - For your invoices to customers: `VENDOR_LEGAL_NAME`, `VENDOR_GSTIN`, `VENDOR_ADDRESS`, `VENDOR_STATE_CODE`. Ask your CA about GST registration and the SAC code (998431 is used for online software services).
-6. **Test the whole flow in test mode** with Razorpay's test UPI ID / test cards. Then switch the keys to live mode.
+7. **Test the whole flow in test mode** with Razorpay's test UPI ID / test cards. Then switch the keys to live mode.
+
+## Email (password reset links, receipts, reminders)
+
+LedgerFox sends email through [Resend](https://resend.com). The free plan covers 3,000 emails a month and 100 a day, with no card needed. Until it is set up, password reset works only with recovery codes or admin-issued links, and no receipts or reminders are sent.
+
+1. Create a Resend account. Add your domain (for example `niyazio.com`) and add the DNS records Resend shows. Your DNS is on Cloudflare, so this takes a few clicks.
+2. Create an API key with "Sending access" only.
+3. In Cloudflare → Worker `ledgerfox` → Settings → Variables and Secrets, add:
+   - `RESEND_API_KEY` (**Secret**)
+   - `EMAIL_FROM`, for example `LedgerFox <billing@niyazio.com>` (the domain must be the one verified in Resend)
+   - optional `EMAIL_REPLY_TO`, for example `info@niyazio.com`
+4. Open `/vendor`. The Set-up check should show "Email on".
+
+What is sent: address confirmation at sign-up, password reset links (one hour, single use), a receipt for every payment, failed auto-renew warnings, and daily reminders (trial ending, plan ending, plan ended). A daily Cloudflare cron at 03:17 UTC sends the reminders, and each reminder goes out only once. See `docs/ACCOUNTS_AND_BILLING_GUIDE.md` for what customers see.
 
 ## Not included yet
 

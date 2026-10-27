@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { api, ApiError } from "../lib/api";
 import { useAction } from "../lib/hooks";
@@ -88,7 +88,7 @@ export function Register() {
   };
   if (codes) {
     return (
-      <AuthCard title="Save your recovery codes" subtitle="There is no email-based password reset. These one-time codes are the way to recover your account if you forget your password.">
+      <AuthCard title="Save your recovery codes" subtitle={me?.email_enabled ? "We sent you an email to confirm your address; reset links go there. Keep these one-time codes too: they work even if you lose access to your email." : "There is no email-based password reset here. These one-time codes are the way to recover your account if you forget your password."}>
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-[var(--surface-2)] p-4 font-mono text-sm">
           {codes.map((c) => <span key={c}>{c}</span>)}
         </div>
@@ -117,17 +117,36 @@ export function Register() {
 }
 
 export function Forgot() {
+  const { me } = useSession();
   const [form, setForm] = useState({ email: "", recovery_code: "", new_password: "" });
   const [done, setDone] = useState(false);
+  const [mailed, setMailed] = useState(false);
+  const [useCode, setUseCode] = useState(false);
   const { busy, error, run } = useAction();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (await run(() => api.post("/api/auth/recover", form))) setDone(true);
   };
+  const byEmail = me?.email_enabled && !useCode;
   return (
-    <AuthCard title="Recover your account" subtitle="Use one of the recovery codes you saved when you registered. If you have none left, ask your organisation's owner or administrator for a reset link.">
+    <AuthCard title="Forgot your password?" subtitle={byEmail ? "Enter the email address of your account and we will send you a link to choose a new password." : "Use one of the recovery codes you saved when you registered. If you have none left, ask your organisation's owner or administrator for a reset link."}>
       {done ? (
         <div className="space-y-4"><Alert kind="success">Password changed. All existing sessions were signed out.</Alert><Link to="/login" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Sign in</Link></div>
+      ) : byEmail ? (
+        mailed ? (
+          <div className="space-y-4">
+            <Alert kind="success">If an account uses {form.email}, a reset link is on its way. It works once, for one hour. Check your spam folder if it does not arrive in a few minutes.</Alert>
+            <Link to="/login" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Back to sign in</Link>
+          </div>
+        ) : (
+          <form onSubmit={async (e) => { e.preventDefault(); if (await run(() => api.post("/api/auth/forgot", { email: form.email }))) setMailed(true); }} className="space-y-4">
+            {error && <Alert>{error}</Alert>}
+            <Field label="Email">{(id) => <Input id={id} type="email" required autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />}</Field>
+            <Button type="submit" loading={busy} className="w-full">Email me a reset link</Button>
+            <button type="button" className="w-full text-center text-sm muted hover:underline" onClick={() => setUseCode(true)}>Use a recovery code instead</button>
+            <p className="text-center text-xs muted">Staff accounts that sign in with a username: ask your owner or administrator for a reset link.</p>
+          </form>
+        )
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {error && <Alert>{error}</Alert>}
@@ -135,8 +154,29 @@ export function Forgot() {
           <Field label="Recovery code">{(id) => <Input id={id} required placeholder="XXXX-XXXX-XXXX" className="font-mono uppercase" value={form.recovery_code} onChange={(e) => setForm({ ...form, recovery_code: e.target.value })} />}</Field>
           <Field label="New password">{(id) => <Input id={id} type="password" required minLength={10} autoComplete="new-password" value={form.new_password} onChange={(e) => setForm({ ...form, new_password: e.target.value })} />}</Field>
           <Button type="submit" loading={busy} className="w-full">Reset password</Button>
+          {me?.email_enabled && <button type="button" className="w-full text-center text-sm muted hover:underline" onClick={() => setUseCode(false)}>Email me a link instead</button>}
         </form>
       )}
+    </AuthCard>
+  );
+}
+
+/** /verify-email?token=… — the link from the confirmation email. */
+export function VerifyEmail() {
+  const [params] = useSearchParams();
+  const { refresh } = useSession();
+  const [state, setState] = useState<"working" | "done" | "error">("working");
+  const [message, setMessage] = useState("");
+  const token = params.get("token") ?? "";
+  useEffect(() => {
+    api.post("/api/auth/verify-email", { token }).then(() => { setState("done"); void refresh(); })
+      .catch((e) => { setState("error"); setMessage(e instanceof ApiError ? e.message : "Something went wrong"); });
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <AuthCard title="Confirm your email">
+      {state === "working" ? <p className="text-sm muted">Checking the link…</p>
+        : state === "done" ? <div className="space-y-4"><Alert kind="success">Thank you — your email address is confirmed.</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open LedgerFox</Link></div>
+        : <div className="space-y-4"><Alert>{message}</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open LedgerFox</Link></div>}
     </AuthCard>
   );
 }

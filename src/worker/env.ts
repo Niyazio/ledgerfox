@@ -27,6 +27,12 @@ export interface Env {
   VENDOR_GSTIN?: string;
   VENDOR_ADDRESS?: string;
   VENDOR_STATE_CODE?: string;
+  /** Outgoing email through Resend (secret) and the sender, e.g. "LedgerFox <billing@niyazio.com>". Off when unset. */
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  EMAIL_REPLY_TO?: string;
+  /** Public https address used in links inside emails, e.g. https://ledgerfox.niyazio.com */
+  APP_URL?: string;
 }
 
 export interface SessionUser {

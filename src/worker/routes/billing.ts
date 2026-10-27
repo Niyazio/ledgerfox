@@ -10,13 +10,15 @@ import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
 import { PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
 import { billingOn, cancelRazorpaySubscription, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { sendAutopayProblem } from "../services/notices";
+import { emailOn, siteUrl } from "../services/email";
 
 /** Subscriptions for the hosted edition: plan status, checkout through Razorpay, and the vendor's subscriber admin. */
 const billing = new Hono<AppEnv>();
 
 const gstPercent = (c: Context<AppEnv>) => Number(c.env.BILLING_GST_PERCENT ?? "18") || 0;
 
-billing.get("/plans", (c) => c.json({ enabled: billingOn(c.env), plans: Object.values(PLANS), gst_percent: gstPercent(c), trial_days: TRIAL_DAYS }));
+billing.get("/plans", (c) => c.json({ enabled: billingOn(c.env), online: Boolean(c.env.RAZORPAY_KEY_ID), plans: Object.values(PLANS), gst_percent: gstPercent(c), trial_days: TRIAL_DAYS }));
 
 /**
  * Razorpay webhook. One-off payments: payment.captured / order.paid. Auto-renewal: subscription.charged extends the
@@ -38,6 +40,7 @@ billing.post("/webhook", async (c) => {
     const status = { "subscription.activated": "active", "subscription.charged": "active", "subscription.resumed": "active", "subscription.pending": "pending",
       "subscription.halted": "halted", "subscription.cancelled": "cancelled", "subscription.completed": "completed", "subscription.paused": "paused" }[evt.event];
     if (status) await run(c.env.DB, `UPDATE org_subscriptions SET autopay_status = ?, updated_at = ? WHERE autopay_id = ?`, status, new Date().toISOString(), sub.id);
+    if (status === "pending" || status === "halted") await sendAutopayProblem(c.env, sub.id, status);
   } else if ((evt.event === "payment.captured" || evt.event === "order.paid") && pay?.order_id) {
     const row = await first<{ id: string; total: number }>(c.env.DB, `SELECT id, total FROM billing_payments WHERE provider_order_id = ?`, pay.order_id);
     if (row && pay.amount === row.total) await markPaid(c.env, row.id, pay.id);
@@ -60,10 +63,10 @@ org.get("/:orgId", async (c) => {
   const m = await member(c, orgId);
   const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
   const payments = m.role === "owner"
-    ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, period_start, period_end, created_at, paid_at FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
+    ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, period_start, period_end, created_at, paid_at, provider_payment_id, provider_order_id, provider_subscription_id FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
     : [];
-  const autopay = await first(c.env.DB, `SELECT autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
-  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay });
+  const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
+  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId });
 });
 
 /** Each checkout asks Razorpay to create an order or subscription; keep that to a sensible number per organisation. */
@@ -220,6 +223,27 @@ vendor.use("*", requireAuth, async (c, next) => {
   const allowed = (c.env.VENDOR_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
   if (!allowed.includes(c.get("user").email.toLowerCase())) throw notFound("Page");
   await next();
+});
+
+/** What this server can see of the billing set-up (never the secret values), and whether Razorpay accepts the keys. */
+vendor.get("/setup", async (c) => {
+  const e = c.env;
+  const keyId = e.RAZORPAY_KEY_ID ?? "";
+  let api: "ok" | "rejected" | "unreachable" | "not_checked" = "not_checked";
+  if (keyId && e.RAZORPAY_KEY_SECRET) {
+    try {
+      const r = await fetch("https://api.razorpay.com/v1/plans?count=1", { headers: { authorization: `Basic ${btoa(`${keyId}:${e.RAZORPAY_KEY_SECRET}`)}` } });
+      api = r.ok ? "ok" : r.status === 401 ? "rejected" : "unreachable";
+    } catch { api = "unreachable"; }
+  }
+  return c.json({
+    billing_enabled: billingOn(e),
+    razorpay: { key_id: Boolean(keyId), mode: keyId.startsWith("rzp_live_") ? "live" : keyId.startsWith("rzp_test_") ? "test" : keyId ? "unknown" : null, key_secret: Boolean(e.RAZORPAY_KEY_SECRET), webhook_secret: Boolean(e.RAZORPAY_WEBHOOK_SECRET), api },
+    email: { enabled: emailOn(e), api_key: Boolean(e.RESEND_API_KEY), from: e.EMAIL_FROM ?? null },
+    vendor: { legal_name: e.VENDOR_LEGAL_NAME ?? null, gstin: Boolean(e.VENDOR_GSTIN), address: Boolean(e.VENDOR_ADDRESS), state_code: e.VENDOR_STATE_CODE ?? null },
+    app_url: e.APP_URL ?? null,
+    webhook_url: `${siteUrl(e, c.req.url)}/api/billing/webhook`,
+  });
 });
 
 vendor.get("/subscribers", async (c) => {

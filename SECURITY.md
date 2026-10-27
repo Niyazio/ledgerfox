@@ -6,7 +6,7 @@
 |---|---|
 | Passwords | PBKDF2-SHA256 with per-user 16-byte salt; minimum 10 characters; constant-time comparison; equal-time response for unknown emails. Work factor stored per user and **upgraded on next login** when `PBKDF2_ITERATIONS` increases. |
 | Sessions | 256-bit random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie with the `__Host-` prefix on HTTPS; only its SHA-256 is stored. 14-day expiry. Password change/recovery revokes other sessions. "Sign out everywhere". |
-| Account recovery | No email dependency: 8 one-time recovery codes (stored hashed) and owner/admin-issued one-time reset links (24 h, hashed; refused for users who belong to other organisations). |
+| Account recovery | Email reset links when email is on (256-bit token stored hashed, single use, 1 hour, same response for unknown addresses, 3 per address per hour, 10 per IP per 15 min); 8 one-time recovery codes (stored hashed); owner/admin-issued one-time reset links (24 h, hashed; refused for users who belong to other organisations). Every reset signs the account out everywhere. |
 | CSRF | Mutations require `X-Requested-With: ledgerfox` (forces a CORS preflight that is never approved cross-origin) and a same-host `Origin` when present; plus `SameSite=Lax`. |
 | Tenant isolation | Every company route resolves the company **through the caller's membership**; non-members get 404. All queries filter by `company_id`; composite foreign keys reject cross-company references in the database. Tested by direct cross-tenant inserts. D1 has no row-level security, so isolation relies on server code + constraints. |
 | Authorisation | Seven roles and 39 permissions (`src/shared/permissions.ts`), resolved per request with the organisation's customisations and checked server-side on reads and writes; members limited to branches cannot list, open, edit or report on other branches' records; admins cannot create admins; only the owner customises roles; segregation of duties for expense and purchase approval. |
@@ -28,8 +28,7 @@
    (600,000 for PBKDF2-SHA256). On a paid Workers plan set `PBKDF2_ITERATIONS=100000` (the Workers maximum); hashes
    upgrade automatically at next login.
 2. **Two-factor sign-in is optional** (TOTP authenticator apps; the owner can require it for everyone). There is no SMS or email code.
-3. **No email verification** (no email provider). Invitation acceptance requires the logged-in email to match the
-   invited email, but registration itself does not prove email ownership.
+3. **Email verification is not required.** With email on, new accounts get a confirmation link and a reminder bar, but they can use LedgerFox before confirming. Invitation acceptance requires the logged-in email to match the invited email.
 4. Rate limiting is per-isolate-consistent via D1 but is not a WAF; Cloudflare's free DDoS protection applies in front.
 5. Attachments are stored in D1 (not encrypted at the application layer; D1 encrypts at rest per Cloudflare).
 6. Audit log immutability is enforced by triggers; someone with Cloudflare account access could still alter the database.
