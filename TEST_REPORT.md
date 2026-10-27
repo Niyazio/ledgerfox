@@ -1,6 +1,6 @@
 # Test report
 
-## Release run (branch `release/v0.4.0`, 27 Oct 2026)
+## Release run (v0.4.1 keyboard shortcuts, branch `feature/shortcuts`, 27 Oct 2026)
 
 | Command | Result |
 |---|---|
