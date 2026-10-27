@@ -189,8 +189,8 @@ export function JournalForm() {
             : <span className="text-amber-600">Out of balance by {toInput(Math.abs(diff), base)}</span>}
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <Button variant="secondary" loading={busy} onClick={() => submit(false)}>Save draft</Button>
-          <Button loading={busy} onClick={() => submit(true)} disabled={!fxLines && (diff !== 0 || totals.dr === 0)}>Post journal</Button>
+          <Button variant="secondary" data-shortcut="save" loading={busy} onClick={() => submit(false)}>Save draft</Button>
+          <Button data-shortcut="post" loading={busy} onClick={() => submit(true)} disabled={!fxLines && (diff !== 0 || totals.dr === 0)}>Post journal</Button>
         </div>
       </Card>
     </>
