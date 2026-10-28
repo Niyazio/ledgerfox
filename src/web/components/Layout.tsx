@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
 import {
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
-  Menu, X, Moon, Sun, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
+  Menu, X, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
   CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory,
 } from "lucide-react";
 import { useSession } from "../lib/session";
@@ -17,6 +17,7 @@ import { HINTS } from "../lib/shortcuts";
 import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner, TrialGate, VerifyEmailBanner } from "../pages/Billing";
+import { ThemePicker } from "./ThemePicker";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -275,7 +276,6 @@ function Shell() {
   const { me, logout } = useSession();
   const { settings, id: companyId } = useCompany();
   const { pathname } = useLocation();
-  const { dark, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
   const pending = useOutbox();
@@ -317,9 +317,8 @@ function Shell() {
             <Shortcuts items={GOTO_ITEMS} />
             <UpdateCenter />
             <LangPicker />
-            <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+            <ThemePicker />
+            {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}
             <span className="hidden max-w-[12rem] truncate px-2 text-sm muted sm:inline">{me?.user?.name}</span>
             <button onClick={signOut} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Sign out" title="Sign out"><LogOut className="h-4 w-4" /></button>
           </div>

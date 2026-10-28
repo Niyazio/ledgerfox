@@ -6,6 +6,8 @@ export interface Me {
   user: { id: string; email: string; name: string; username?: string | null; must_change_password?: boolean; email_verified?: boolean; email_deliverable?: boolean } | null;
   /** The hosted website can send email (reset links, receipts); off on desktop and when not set up. */
   email_enabled?: boolean;
+  /** Signed-in person is LedgerFox's own staff (VENDOR_ADMIN_EMAILS): show the admin panel link. */
+  is_vendor?: boolean;
   organisations: { org_id: string; org_name: string; role: string }[];
   companies: { id: string; name: string; org_id: string; base_currency: string; country: string; business_type?: string; is_demo?: number }[];
   brand: string;

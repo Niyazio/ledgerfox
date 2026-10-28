@@ -67,6 +67,37 @@
   .table tfoot td { font-weight: 600; border-top: 2px solid var(--border); border-bottom: none; }
 }
 
+/* Appearance: accent colours (data-accent) and background styles (data-bg), chosen in the top bar. */
+@layer base {
+  :root[data-accent="emerald"] { --color-brand-50: #ecfdf5; --color-brand-100: #d1fae5; --color-brand-200: #a7f3d0; --color-brand-300: #6ee7b7; --color-brand-400: #34d399; --color-brand-500: #10b981; --color-brand-600: #059669; --color-brand-700: #047857; --color-brand-800: #065f46; --color-brand-900: #064e3b; }
+  :root[data-accent="violet"] { --color-brand-50: #f5f3ff; --color-brand-100: #ede9fe; --color-brand-200: #ddd6fe; --color-brand-300: #c4b5fd; --color-brand-400: #a78bfa; --color-brand-500: #8b5cf6; --color-brand-600: #7c3aed; --color-brand-700: #6d28d9; --color-brand-800: #5b21b6; --color-brand-900: #4c1d95; }
+  :root[data-accent="rose"] { --color-brand-50: #fff1f2; --color-brand-100: #ffe4e6; --color-brand-200: #fecdd3; --color-brand-300: #fda4af; --color-brand-400: #fb7185; --color-brand-500: #f43f5e; --color-brand-600: #e11d48; --color-brand-700: #be123c; --color-brand-800: #9f1239; --color-brand-900: #881337; }
+  :root[data-accent="amber"] { --color-brand-50: #fff7ed; --color-brand-100: #ffedd5; --color-brand-200: #fed7aa; --color-brand-300: #fdba74; --color-brand-400: #fb923c; --color-brand-500: #f97316; --color-brand-600: #ea580c; --color-brand-700: #c2410c; --color-brand-800: #9a3412; --color-brand-900: #7c2d12; }
+  :root[data-accent="teal"] { --color-brand-50: #f0fdfa; --color-brand-100: #ccfbf1; --color-brand-200: #99f6e4; --color-brand-300: #5eead4; --color-brand-400: #2dd4bf; --color-brand-500: #14b8a6; --color-brand-600: #0d9488; --color-brand-700: #0f766e; --color-brand-800: #115e59; --color-brand-900: #134e4a; }
+  :root[data-accent="indigo"] { --color-brand-50: #eef2ff; --color-brand-100: #e0e7ff; --color-brand-200: #c7d2fe; --color-brand-300: #a5b4fc; --color-brand-400: #818cf8; --color-brand-500: #6366f1; --color-brand-600: #4f46e5; --color-brand-700: #4338ca; --color-brand-800: #3730a3; --color-brand-900: #312e81; }
+  :root[data-accent="slate"] { --color-brand-50: #f8fafc; --color-brand-100: #f1f5f9; --color-brand-200: #e2e8f0; --color-brand-300: #cbd5e1; --color-brand-400: #94a3b8; --color-brand-500: #64748b; --color-brand-600: #475569; --color-brand-700: #334155; --color-brand-800: #1e293b; --color-brand-900: #0f172a; }
+  :root[data-bg="paper"] { --bg: #faf7f0; --surface-2: #fbf8f2; --border: #e9e2d3; }
+  .dark:root[data-bg="paper"] { --bg: #14110c; --surface: #1c1812; --surface-2: #17140f; --border: #2c261d; }
+  :root[data-bg="glow"] body {
+    background-image: radial-gradient(60rem 40rem at 100% -10%, color-mix(in srgb, var(--color-brand-400) 22%, transparent), transparent 70%),
+      radial-gradient(50rem 35rem at -10% 110%, color-mix(in srgb, var(--color-brand-300) 18%, transparent), transparent 70%);
+    background-attachment: fixed;
+  }
+  :root[data-bg="gradient"] body {
+    background-image: linear-gradient(135deg, color-mix(in srgb, var(--color-brand-100) 80%, var(--bg)) 0%, var(--bg) 45%, color-mix(in srgb, var(--color-brand-200) 55%, var(--bg)) 100%);
+    background-attachment: fixed;
+  }
+  .dark:root[data-bg="gradient"] body {
+    background-image: linear-gradient(135deg, color-mix(in srgb, var(--color-brand-900) 70%, var(--bg)) 0%, var(--bg) 50%, color-mix(in srgb, var(--color-brand-800) 45%, var(--bg)) 100%);
+  }
+  :root[data-bg="dots"] body {
+    background-image: radial-gradient(color-mix(in srgb, var(--color-brand-500) 22%, transparent) 1px, transparent 1.2px);
+    background-size: 18px 18px;
+    background-attachment: fixed;
+  }
+  @media print { body { background: #fff !important; background-image: none !important; } }
+}
+
 /* Print: documents and reports render cleanly; app chrome is hidden. */
 @media print {
   @page { margin: 14mm; }
