@@ -4,13 +4,15 @@ import { join } from "node:path";
 import { PRINT_WORDS, UI_WORDS, bilingual, translate } from "../src/shared/i18n";
 import { world } from "./helpers";
 
-const DEVANAGARI = /[ऀ-ॿ]/, TAMIL = /[஀-௿]/;
+const DEVANAGARI = /[ऀ-ॿ]/, TAMIL = /[஀-௿]/, MALAYALAM = /[ഀ-ൿ]/, KANNADA = /[ಀ-೿]/;
 
-describe("Hindi and Tamil wording", () => {
+describe("Hindi, Tamil, Malayalam and Kannada wording", () => {
   it("has both languages, in the right script, for every entry", () => {
     for (const [en, t] of Object.entries({ ...PRINT_WORDS, ...UI_WORDS })) {
       expect(DEVANAGARI.test(t.hi), `${en} hi`).toBe(true);
       expect(TAMIL.test(t.ta), `${en} ta`).toBe(true);
+      expect(MALAYALAM.test(t.ml), `${en} ml`).toBe(true);
+      expect(KANNADA.test(t.kn), `${en} kn`).toBe(true);
     }
   });
 
@@ -25,6 +27,9 @@ describe("Hindi and Tamil wording", () => {
   it("prints English with the chosen language and falls back to English", () => {
     expect(bilingual("Qty", "hi")).toBe("Qty / मात्रा");
     expect(bilingual("Qty", "ta")).toBe("Qty / அளவு");
+    expect(bilingual("Qty", "ml")).toBe("Qty / അളവ്");
+    expect(bilingual("Qty", "kn")).toBe("Qty / ಪ್ರಮಾಣ");
+    expect(translate("Customers", "kn")).toBe("ಗ್ರಾಹಕರು");
     expect(bilingual("Qty", "en")).toBe("Qty");
     expect(bilingual("Something new", "hi")).toBe("Something new");
     expect(translate("Customers", "ta")).toBe("வாடிக்கையாளர்கள்");
@@ -38,5 +43,10 @@ describe("Hindi and Tamil wording", () => {
     expect((await W.owner.patch(W.c("/settings"), { name: "Acme Traders", state_code: "29" })).status).toBe(200);
     expect((await W.owner.get(W.c("/settings"))).json.company.print_language).toBe("ta");
     expect((await W.owner.patch(W.c("/settings"), { name: "Acme Traders", print_language: "fr" })).status).toBe(400);
+    // Malayalam and Kannada are kept too (in the newer column), and switching back works.
+    for (const l of ["ml", "kn", "hi", "en"]) {
+      expect((await W.owner.patch(W.c("/settings"), { name: "Acme Traders", state_code: "29", print_language: l })).status).toBe(200);
+      expect((await W.owner.get(W.c("/settings"))).json.company.print_language).toBe(l);
+    }
   });
 });

@@ -73,6 +73,8 @@ export interface CompanyRow {
   upi_id: string | null;
   print_template: string;
   print_language?: "en" | "hi" | "ta";
+  /** Bill language (any supported); falls back to print_language. */
+  print_lang?: "en" | "hi" | "ta" | "ml" | "kn" | null;
   purchase_approval_limit: number | null;
   billing_discount_limit_bp: number | null;
   created_at: string;
