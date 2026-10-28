@@ -16,7 +16,7 @@ Prices exclude GST (`BILLING_GST_PERCENT`, default 18).
 
 How plans behave:
 
-- **Trial.** A new organisation gets 14 days of Business. An existing organisation gets 14 days from the first time it is seen after billing is switched on.
+- **Trial.** A new organisation gets **30 days** of Business. With `BILLING_REQUIRE_AUTOPAY=true` (on for ledgerfox.niyazio.com), the owner first chooses the plan to continue with and approves auto-pay. Razorpay takes ₹5 to check the UPI or card and refunds it, and the first real charge is when the trial ends. Until then everything can be viewed, but new entries wait. The vendor's own staff are never held back.
 - **Grace period.** When a paid period ends, there are 7 days of grace. After that the organisation drops to the Free plan.
 - **Free plan.** Billing, accounts, reports and data export keep working. Data is never deleted or locked. Creating more users, branches or companies than the plan allows, and the paid features, answer with a clear "upgrade" message.
 - **Payment.** Two ways, both through Razorpay's own window:
@@ -30,7 +30,7 @@ How plans behave:
 3. **Add the webhook.**
    - Go to **Account & Settings → Webhooks**.
    - URL: `https://ledgerfox.niyazio.com/api/billing/webhook`
-   - Events: `payment.captured`, `order.paid`, `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.paused` and `subscription.resumed`
+   - Events: `payment.captured`, `order.paid`, `subscription.authenticated`, `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.paused` and `subscription.resumed`
    - Choose a secret.
    - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. LedgerFox creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.
    - UPI AutoPay allows up to ₹15,000 a charge without extra approval. The yearly Multi-branch plan (₹23,599 with GST) is above that, so those customers will pay with a card or bank mandate, or pay once.
@@ -69,6 +69,17 @@ What is sent: address confirmation at sign-up, password reset links (one hour, s
 - Coupons, a per-branch add-on and refunds from inside LedgerFox. Make refunds in the Razorpay dashboard.
 - Changing the plan of a running auto-renewal: turn it off and start a new one. Proration is not supported.
 - Tested against Razorpay with a mocked API and real HMAC signatures only. A real test-mode payment, mandate or webhook has not been made yet.
+
+## Admin panel (`/vendor`)
+
+For the emails in `VENDOR_ADMIN_EMAILS`:
+- **Overview:** organisations, accounts, companies, paying / trial / free counts, auto-pay count, revenue, sign-ups and active accounts over 7 and 30 days, and a sign-ups chart.
+- **Organisations:** owner, email, phone, city, signed-up date, last sign-in, users, documents, status, trial/paid end, auto-pay and revenue. Search, filter, and Excel/CSV export. Click a row for people (role, last sign-in, number of sign-ins), companies (GSTIN, place, contact, counts, last activity), the subscription and auto-pay ids, payments with invoices, and emails sent. From there you can extend a trial or record a bank transfer.
+- **Accounts:** every sign-in with its organisations, created date, last sign-in, sign-in count, email confirmation and two-factor. Excel/CSV export.
+- **Payments:** every payment with invoice number and Razorpay ids. Excel/CSV export.
+- **Set-up & promotions:** the set-up check and Free-plan promotions.
+
+Customers' books (invoice lines, ledgers, amounts) are only counted, never shown. Passwords and two-factor secrets never leave the server.
 
 ## Promotions on the Free plan
 

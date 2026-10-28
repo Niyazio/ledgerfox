@@ -6,7 +6,8 @@ This is for the hosted website (ledgerfox.niyazio.com). The desktop app has no s
 1. The customer opens the website and chooses **Create account**. They enter their name, email and a password of at least 10 characters.
 2. They save the 8 **recovery codes** shown once. These work even if they lose access to their email.
 3. With email switched on, they also get a "Confirm your email" message. Until they click it, a thin blue bar in the app offers to send the link again.
-4. They create their company. The organisation starts a **14-day free trial** with every Business-plan feature. No card is needed.
+4. They create their company. The organisation starts a **30-day free trial** with every Business-plan feature.
+5. A "Start your 30-day free trial" screen asks the owner to choose the plan for after the trial and set up **auto-pay** (UPI AutoPay, card or bank mandate). Razorpay takes **₹5 to check it and refunds it**; the first charge is on the day the trial ends. Until auto-pay is set up, they can look around but not add entries. Staff see a note asking the owner to do it.
 
 ## Signing in
 - **Login:** email (or username for staff accounts) plus password. Two-factor sign-in with an authenticator app is optional, and the owner can require it for everyone.

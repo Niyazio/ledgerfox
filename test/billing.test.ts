@@ -31,10 +31,10 @@ describe("subscriptions", () => {
     expect(b).toMatchObject({ enabled: false, subscription: { enforced: false, status: "unlimited" } });
   });
 
-  it("starts with a 14-day trial, then falls back to the Free plan limits", async () => {
+  it("starts with a 30-day trial, then falls back to the Free plan limits", async () => {
     const W = await billedWorld();
     const b = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
-    expect(b.subscription).toMatchObject({ enforced: true, status: "trial", plan: "business", days_left: 14 });
+    expect(b.subscription).toMatchObject({ enforced: true, status: "trial", plan: "business", days_left: 30 });
     const item = (await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" })).json.id;
     expect((await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: item, quantity: "1" }], payments: [{ mode: "cash", amount: "10" }] })).status).toBe(201);
     await rawQuery(W, `UPDATE org_subscriptions SET trial_ends_at = ? WHERE org_id = ?`, "2020-01-01T00:00:00Z", W.orgId);

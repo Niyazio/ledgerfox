@@ -1,0 +1,107 @@
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { createHmac } from "node:crypto";
+import { world, rawQuery, register, Client } from "./helpers";
+
+const SECRET = "test_key_secret", HOOK = "test_webhook_secret";
+const sign = (s: string, data: string) => createHmac("sha256", s).update(data).digest("hex");
+
+async function requiredWorld() {
+  const W = await world();
+  Object.assign(W.env, { BILLING_ENABLED: "true", BILLING_REQUIRE_AUTOPAY: "true", RAZORPAY_KEY_ID: "rzp_test_x", RAZORPAY_KEY_SECRET: SECRET, RAZORPAY_WEBHOOK_SECRET: HOOK, VENDOR_ADMIN_EMAILS: "vendor@ledgerfox.example", VENDOR_UDYAM: "UDYAM-KR-11-0094729" });
+  return W;
+}
+function mockRazorpay() {
+  let n = 0;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url: any) => {
+    const u = String(url);
+    if (u.endsWith("/plans")) return Response.json({ id: "plan_1" });
+    if (u.endsWith("/subscriptions")) return Response.json({ id: `sub_${++n}`, status: "created" });
+    if (u.includes("/payments/")) return Response.json({ id: "pay_auth", amount: 500, status: "captured" });
+    if (u.endsWith("/orders")) return Response.json({ id: `order_${++n}` });
+    throw new Error(`unexpected fetch ${u}`);
+  });
+}
+afterEach(() => vi.restoreAllMocks());
+
+describe("30-day free trial that starts with auto-pay", () => {
+  it("holds new entries until the owner sets up auto-pay; the ₹5 check is not a charge and the trial keeps running", async () => {
+    const W = await requiredWorld();
+    mockRazorpay();
+    const b = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
+    expect(b).toMatchObject({ autopay_required: true, trial_days: 30, subscription: { status: "trial", days_left: 30 } });
+    // Viewing works; creating does not.
+    expect((await W.owner.get(W.c("/items"))).status).toBe(200);
+    const blocked = await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" });
+    expect([blocked.status, blocked.json.error.code]).toEqual([402, "AUTOPAY_REQUIRED"]);
+    expect(blocked.json.error.message).toContain("₹5");
+
+    const start = (await W.owner.post(`/api/billing/org/${W.orgId}/autopay`, { plan: "business", interval: "monthly" })).json;
+    expect(Date.parse(start.starts_at) - Date.now()).toBeGreaterThan(29 * 86_400_000); // first charge when the trial ends
+    await W.owner.post(`/api/billing/org/${W.orgId}/autopay/verify`, { razorpay_subscription_id: start.subscription_id, razorpay_payment_id: "pay_auth", razorpay_signature: sign(SECRET, `pay_auth|${start.subscription_id}`) });
+    const after = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
+    expect(after).toMatchObject({ autopay_required: false, subscription: { status: "trial" }, payments: [] });
+    expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" })).status).toBe(201);
+  });
+
+  it("also unlocks when Razorpay reports the mandate approved (browser closed early)", async () => {
+    const W = await requiredWorld();
+    mockRazorpay();
+    const start = (await W.owner.post(`/api/billing/org/${W.orgId}/autopay`, { plan: "starter", interval: "monthly" })).json;
+    const evt = { event: "subscription.authenticated", payload: { subscription: { entity: { id: start.subscription_id, status: "authenticated" } } } };
+    await new Client(W.env).req("POST", "/api/billing/webhook", evt, { "x-razorpay-signature": sign(HOOK, JSON.stringify(evt)), "x-requested-with": "" });
+    expect((await W.owner.get(`/api/billing/org/${W.orgId}`)).json.autopay_required).toBe(false);
+  });
+
+  it("never holds back the vendor's own staff, paying organisations, or anyone when the rule is off", async () => {
+    const W = await requiredWorld();
+    W.env.VENDOR_ADMIN_EMAILS = (await W.owner.get("/api/auth/me")).json.user.email;
+    expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "A", sale_price: "1" })).status).toBe(201);
+    W.env.VENDOR_ADMIN_EMAILS = "";
+    W.env.BILLING_REQUIRE_AUTOPAY = "false";
+    expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "B", sale_price: "1" })).status).toBe(201);
+    W.env.BILLING_REQUIRE_AUTOPAY = "true";
+    await W.owner.get(`/api/billing/org/${W.orgId}`);
+    await rawQuery(W, `UPDATE org_subscriptions SET plan = 'starter', paid_until = ? WHERE org_id = ?`, new Date(Date.now() + 10 * 86_400_000).toISOString(), W.orgId);
+    expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "C", sale_price: "1" })).status).toBe(201);
+  });
+});
+
+describe("admin panel", () => {
+  it("tracks organisations, accounts, sign-ins, companies and payments for vendor staff only", async () => {
+    const W = await requiredWorld();
+    mockRazorpay();
+    const me = (await W.owner.get("/api/auth/me")).json.user;
+    const { client: other } = await register(W.env, "Second Shop");
+    expect((await W.owner.get("/api/billing/vendor/overview")).status).toBe(404);
+    W.env.VENDOR_ADMIN_EMAILS = me.email;
+
+    const o = (await W.owner.get("/api/billing/vendor/overview")).json;
+    expect(o.totals).toMatchObject({ organisations: 1, users: 2, companies: 1, signups_7d: 2, active_7d: 2 });
+    expect(o.statuses.trial).toBe(1);
+
+    const orgs = (await W.owner.get("/api/billing/vendor/orgs")).json.organisations;
+    expect(orgs[0]).toMatchObject({ id: W.orgId, owner_email: me.email, users: 1, companies: 1, subscription: { status: "trial" } });
+    expect(orgs[0].last_login_at).toBeTruthy();
+
+    const detail = (await W.owner.get(`/api/billing/vendor/orgs/${W.orgId}/detail`)).json;
+    expect(detail.members[0]).toMatchObject({ email: me.email, role: "owner", login_count: 1 });
+    expect(detail.companies[0]).toMatchObject({ name: "Acme Traders", documents: 0 });
+    expect(detail.companies[0]).not.toHaveProperty("password_hash");
+    expect(JSON.stringify(detail)).not.toMatch(/password_hash|totp_secret|token/);
+
+    const users = (await W.owner.get("/api/billing/vendor/users")).json.users;
+    expect(users).toHaveLength(2);
+    expect(JSON.stringify(users)).not.toMatch(/password|totp_secret/);
+
+    // A bank transfer recorded from the panel shows in payments, and its invoice carries the Udyam number.
+    await W.owner.post(`/api/billing/vendor/orgs/${W.orgId}/activate`, { plan: "starter", interval: "monthly", note: "UTR 1" });
+    const pays = (await W.owner.get("/api/billing/vendor/payments")).json.payments;
+    expect(pays[0]).toMatchObject({ org_id: W.orgId, status: "paid", provider: "manual" });
+    const inv = (await W.owner.get(`/api/billing/org/${W.orgId}/invoice/${pays[0].id}`)).json;
+    expect(inv.seller.udyam).toBe("UDYAM-KR-11-0094729");
+    // Other customers cannot use any of it.
+    expect((await other.get("/api/billing/vendor/orgs")).status).toBe(404);
+    expect((await other.get(`/api/billing/vendor/orgs/${W.orgId}/detail`)).status).toBe(404);
+    expect([403, 404]).toContain((await other.get(`/api/billing/org/${W.orgId}/invoice/${pays[0].id}`)).status);
+  });
+});

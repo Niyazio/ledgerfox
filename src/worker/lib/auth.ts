@@ -36,6 +36,7 @@ export async function createSession(c: Context<AppEnv>, userId: string): Promise
     `INSERT INTO sessions (id, user_id, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
     id, userId, expires, clientIp(c), (c.req.header("user-agent") ?? "").slice(0, 200),
   );
+  await run(c.env.DB, `UPDATE users SET last_login_at = ?, login_count = login_count + 1 WHERE id = ?`, new Date().toISOString(), userId);
   if (offline(c)) { c.header(SESSION_HEADER, token); return token; }
   setCookie(c, cookieName(c), token, {
     httpOnly: true,

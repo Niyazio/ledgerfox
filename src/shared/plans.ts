@@ -21,7 +21,7 @@ export const PLANS: Record<PlanId, Plan> = {
 };
 export const PAID_PLANS: PlanId[] = ["starter", "business", "multi_branch"];
 export const TRIAL_PLAN: PlanId = "business";
-export const TRIAL_DAYS = 14;
+export const TRIAL_DAYS = 30;
 export const GRACE_DAYS = 7;
 
 export const FEATURE_LABELS: Record<Feature, string> = {

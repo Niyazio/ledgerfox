@@ -1,5 +1,12 @@
 # Test report
 
+## 30-day trial with auto-pay, admin panel, Udyam on invoices (branch `feature/trial-autopay-admin`, 28 Oct 2026)
+
+| Check | Result |
+|---|---|
+| `test/trial-admin.test.ts` | New entries return 402 `AUTOPAY_REQUIRED` during the trial until auto-pay is set up (viewing works); the ₹5 check records no payment and the trial continues; `subscription.authenticated` webhook also unlocks; vendor staff, paying organisations and the rule switched off are never held back; admin overview/organisations/detail/accounts/payments for vendor staff only, with no password or two-factor secrets in any response; Udyam number on the invoice; vendor staff can open a customer's invoice, other customers cannot |
+| Browser check (local `wrangler dev`, Chromium) | New sign-up sees "Start your 30-day free trial" with plans and the ₹5 explanation; the button opens checkout in auto-pay mode; admin panel overview, organisations list with filters and export, organisation detail; no page errors |
+
 ## PDF sharing and clearer Razorpay errors (branch `feature/pdf-share-razorpay-errors`, 27 Oct 2026)
 
 | Command | Result |

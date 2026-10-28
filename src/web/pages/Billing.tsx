@@ -4,7 +4,7 @@ import { CheckCircle2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Spinner, TableWrap, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Spinner, TableWrap, useToast } from "../components/ui";
 import { Wordmark } from "../components/Layout";
 import { FEATURE_LABELS, PAID_PLANS, withGst, type Interval, type Plan } from "@shared/plans";
 import { fmtDate, money as fmt } from "../lib/format";
@@ -20,6 +20,8 @@ interface BillingInfo {
   payments: { id: string; plan: string; billing_interval: string; total: number; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }[];
   autopay: { id: string; status: string; plan: string; interval: Interval; total: number } | null;
   account_id: string;
+  autopay_required?: boolean;
+  trial_days?: number;
 }
 
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Last charge failed — Razorpay is retrying", halted: "Stopped after failed charges", paused: "Paused", cancelled: "Off", completed: "Finished" };
@@ -117,6 +119,51 @@ export function PlanBillingTab() {
   );
 }
 
+/**
+ * Start-of-trial screen: with auto-pay required, a new organisation chooses the plan to continue with and approves a
+ * Razorpay mandate (₹5 check, refunded). Nothing is charged until the trial ends; it can be cancelled before then.
+ * Everything stays viewable behind it; new entries are held by the server until auto-pay is set up.
+ */
+export function TrialGate() {
+  const { settings } = useCompany();
+  const { logout } = useSession();
+  const orgId = settings?.company.org_id;
+  const { data } = useApi<BillingInfo>(orgId ? `/api/billing/org/${orgId}` : null);
+  const [interval, setInterval] = useState<Interval>("monthly");
+  const [plan, setPlan] = useState("business");
+  if (!data?.autopay_required) return null;
+  const ends = data.subscription.trial_ends_at ? fmtDate(data.subscription.trial_ends_at.slice(0, 10)) : "";
+  return (
+    <div className="no-print fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="trial-title">
+      <div className="w-full max-w-3xl rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
+        <h2 id="trial-title" className="text-xl font-semibold">Start your {data.trial_days ?? 30}-day free trial</h2>
+        <p className="mt-1 text-sm muted">Every feature is free until <b>{ends}</b>. Choose the plan to continue with after that and set up auto-pay with UPI AutoPay, a card or a bank mandate.</p>
+        <ul className="mt-3 space-y-1 text-sm">
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Razorpay takes <b>₹5 to check</b> your UPI or card and <b>refunds it</b>.</li>
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />No charge until {ends}. Turn off auto-renew any time before that in Settings → Plan & billing.</li>
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Your data is never deleted, whatever you decide.</li>
+        </ul>
+        {data.can_buy ? <>
+          <div className="mt-4 flex gap-1">{(["monthly", "yearly"] as const).map((i) => <Button key={i} size="sm" variant={interval === i ? "primary" : "secondary"} onClick={() => setInterval(i)}>{i === "monthly" ? "Monthly" : "Yearly (2 months free)"}</Button>)}</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {data.plans.filter((p) => PAID_PLANS.includes(p.id)).map((p) => (
+              <button key={p.id} onClick={() => setPlan(p.id)} className={`rounded-xl border p-3 text-left ${plan === p.id ? "border-brand-600 ring-2 ring-brand-600/30" : "border-[var(--border)] hover:bg-[var(--surface-2)]"}`}>
+                <p className="font-semibold">{p.name}</p>
+                <p className="text-sm">{inr(withGst(p.price[interval], data.gst_percent).total)} / {interval === "monthly" ? "month" : "year"}</p>
+                <p className="mt-1 text-xs muted">{p.limits.users} users · {p.limits.branches} branch{p.limits.branches > 1 ? "es" : ""}{p.features.length ? ` · ${p.features.map((f) => FEATURE_LABELS[f]).join(", ")}` : ""}</p>
+              </button>
+            ))}
+          </div>
+          {data.online
+            ? <Button className="mt-5 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}&mode=autopay`)}>Start free trial — set up auto-pay</Button>
+            : <Alert className="mt-4">Online payment is not available right now. Write to info@niyazio.com with your account ID {data.account_id}.</Alert>}
+        </> : <Alert kind="info" className="mt-4">Your organisation's owner needs to start the free trial (Settings → Plan & billing). You can look around meanwhile.</Alert>}
+        <div className="mt-3 flex justify-between text-sm"><span className="muted">Account ID {data.account_id}</span><button className="muted hover:underline" onClick={() => void logout()}>Sign out</button></div>
+      </div>
+    </div>
+  );
+}
+
 /** Thin banner when the trial is about to end or a renewal is due. */
 export function PlanBanner() {
   const { settings, id } = useCompany();
@@ -204,12 +251,12 @@ export function CheckoutPage() {
         <Card>
           {state === "done" ? <>
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
-            <p className="mt-3 text-lg font-semibold">{autopay ? (startsAt ? "Auto-renew is set up" : "Payment received — auto-renew is on") : "Payment received — your plan is active"}</p>
-            {autopay && <p className="mt-1 text-sm muted">{startsAt ? `The first charge will be taken on ${fmtDate(startsAt.slice(0, 10))}, when your current period ends.` : "Your plan is active. It will renew by itself; you can turn this off in Plan & billing."} It can take a minute to show in LedgerFox.</p>}
+            <p className="mt-3 text-lg font-semibold">{autopay ? (startsAt ? "Auto-pay is set up — enjoy your free trial" : "Payment received — auto-renew is on") : "Payment received — your plan is active"}</p>
+            {autopay && <p className="mt-1 text-sm muted">{startsAt ? `Your free trial is running. The ₹5 check is refunded by Razorpay; the first charge is on ${fmtDate(startsAt.slice(0, 10))}.` : "Your plan is active. It will renew by itself; you can turn this off in Plan & billing."} It can take a minute to show in LedgerFox.</p>}
             <Button className="mt-4" onClick={() => nav(-1)}>Back to LedgerFox</Button>
           </> : <>
             <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your LedgerFox plan" : "Pay for your LedgerFox plan"}</p>
-            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay. You are charged each period until you turn it off in Plan & billing; if your trial or paid period is still running, the first charge waits until it ends." : "Secure payment by Razorpay (UPI, cards, net banking)."} LedgerFox never sees your card details or UPI PIN.</p>
+            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay. If your free trial or paid period is still running, Razorpay only takes ₹5 now to check it (refunded) and the first charge waits until the period ends. You are then charged each period until you turn it off in Plan & billing." : "Secure payment by Razorpay (UPI, cards, net banking)."} LedgerFox never sees your card details or UPI PIN.</p>
             {message && <Alert className="mt-4 text-left">{message}</Alert>}
             {autopay && state === "error" && <Button variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}`)}>Pay once instead (no auto-renew)</Button>}
             <Button className="mt-4 w-full" loading={state === "loading" || state === "paying"} onClick={() => void pay()}>Continue to payment</Button>
@@ -232,7 +279,7 @@ export function BillingInvoice() {
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-sm text-slate-900">
       <div className="no-print mb-4 flex justify-end"><Button onClick={printPage}><Printer className="h-4 w-4" />Print / Save PDF</Button></div>
-      <div className="flex justify-between"><div><p className="text-lg font-semibold">{s.name}</p>{s.address && <p>{s.address}</p>}{s.gstin && <p>GSTIN {s.gstin}</p>}<p>{s.email}</p></div>
+      <div className="flex justify-between"><div><p className="text-lg font-semibold">{s.name}</p>{s.address && <p>{s.address}</p>}{s.gstin && <p>GSTIN {s.gstin}</p>}{s.udyam && <p>Udyam {s.udyam}</p>}<p>{s.email}</p></div>
         <div className="text-right"><p className="text-xl font-semibold">{s.gstin ? "Tax Invoice" : "Invoice"}</p><p>No. {p.invoice_number}</p><p>Date {fmtDate(p.paid_at.slice(0, 10))}</p></div></div>
       <div className="mt-6"><p className="text-slate-500">Bill to</p><p className="font-medium">{b.legal_name || b.name || b.org_name}</p>{b.address && <p>{[b.address, b.city].filter(Boolean).join(", ")}</p>}{b.tax_id && <p>GSTIN {b.tax_id}</p>}</div>
       <table className="mt-6 w-full border-collapse"><thead><tr className="border-b border-slate-300 text-left"><th className="py-2">Description</th><th>SAC</th><th className="text-right">Amount</th></tr></thead>
@@ -258,7 +305,7 @@ const OK = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
 );
 
 /** What the live server can see of the payment and email set-up (never secret values). */
-function SetupCheck() {
+export function SetupCheck() {
   const { data, error, reload, loading } = useApi<any>("/api/billing/vendor/setup");
   if (error) return <Alert className="mb-4">{error}</Alert>;
   if (!data) return null;
@@ -273,7 +320,8 @@ function SetupCheck() {
         <OK ok={r.subscriptions === "ok"}>Auto-renew (Razorpay Subscriptions): {r.subscriptions === "ok" ? "available" : r.subscriptions === "unavailable" ? <>not available{r.subscriptions_detail ? ` (${r.subscriptions_detail})` : ""} — switch on Subscriptions in the Razorpay dashboard; until then customers can untick “Renew automatically” and pay once</> : "not checked"}</OK>
         <OK ok={r.webhook_secret}>RAZORPAY_WEBHOOK_SECRET {r.webhook_secret ? "found" : "missing — payments made after the browser is closed, and auto-renew charges, are not recorded"}. Webhook URL: <span className="select-all font-mono text-xs">{data.webhook_url}</span></OK>
         <OK ok={data.email.enabled}>Email {data.email.enabled ? <>on, from {data.email.from}</> : "off — add RESEND_API_KEY (secret) and EMAIL_FROM for reset links, receipts and reminders"}</OK>
-        <OK ok={Boolean(data.vendor.legal_name && data.vendor.gstin && data.vendor.address && data.vendor.state_code)}>Seller details on invoices (VENDOR_LEGAL_NAME, VENDOR_GSTIN, VENDOR_ADDRESS, VENDOR_STATE_CODE)</OK>
+        <OK ok={Boolean(data.vendor.legal_name && data.vendor.address && data.vendor.state_code && (data.vendor.gstin || !data.vendor.gst_registered))}>Seller details on invoices: {data.vendor.legal_name ?? "VENDOR_LEGAL_NAME missing"}{data.vendor.gst_registered ? (data.vendor.gstin ? " · GSTIN set" : " · VENDOR_GSTIN missing (GST is being charged)") : " · not GST-registered, no GST charged"}{data.vendor.udyam ? ` · Udyam ${data.vendor.udyam}` : ""}</OK>
+        <OK ok>Free trial: {data.trial_days} days{data.require_autopay ? " · auto-pay (₹5 refundable check) required to start it" : " · auto-pay optional"}</OK>
       </ul>
       <Button className="mt-3" size="sm" variant="secondary" loading={loading} onClick={reload}>Check again</Button>
     </Card>
@@ -283,7 +331,7 @@ function SetupCheck() {
 const EMPTY_PROMO = { title: "", body: "", cta: "Learn more", link_url: "https://", sponsor: "", starts_on: "", ends_on: "", weight: 1, is_active: true };
 
 /** Promotions shown to Free-plan organisations: text and an https link only. */
-function PromotionsAdmin() {
+export function PromotionsAdmin() {
   const toast = useToast();
   const { data, reload } = useApi<{ promotions: any[] }>("/api/billing/vendor/promotions");
   const [edit, setEdit] = useState<(typeof EMPTY_PROMO & { id?: string }) | null>(null);
@@ -326,43 +374,3 @@ function PromotionsAdmin() {
   );
 }
 
-/** /vendor — subscribers, revenue and manual activation, for the people selling LedgerFox. */
-export function VendorAdmin() {
-  const toast = useToast();
-  const { data, error, reload } = useApi<any>("/api/billing/vendor/subscribers");
-  const [act, setAct] = useState<{ org: string; plan: string; interval: Interval; note: string } | null>(null);
-  if (error) return <div className="p-8"><Alert>{error}</Alert></div>;
-  if (!data) return <Spinner />;
-  return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <PageHeader title="Subscribers" subtitle={data.enabled ? "Billing is on." : "Billing is off (BILLING_ENABLED is not set) — nobody is limited yet."} />
-      <SetupCheck />
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        <Card><p className="text-xs muted">Revenue, last 30 days (before GST)</p><p className="text-xl font-semibold">{inr(data.revenue.month)}</p></Card>
-        <Card><p className="text-xs muted">Revenue, all time</p><p className="text-xl font-semibold">{inr(data.revenue.total)}</p></Card>
-        <Card><p className="text-xs muted">Paying</p><p className="text-xl font-semibold">{(data.counts.active ?? 0) + (data.counts.grace ?? 0)}</p></Card>
-        <Card><p className="text-xs muted">On trial / free</p><p className="text-xl font-semibold">{data.counts.trial ?? 0} / {data.counts.free ?? 0}</p></Card>
-      </div>
-      <Card padded={false}><TableWrap><table className="table text-sm">
-        <thead><tr><th>Organisation</th><th>Owner</th><th>Since</th><th>Users</th><th>Plan</th><th>Status</th><th>Until</th><th /></tr></thead>
-        <tbody>{data.subscribers.map((s: any) => (
-          <tr key={s.org_id}><td>{s.org_name}</td><td>{s.owner_name}<span className="block text-xs muted">{s.owner_email}</span></td><td>{fmtDate(s.created_at.slice(0, 10))}</td><td>{s.users}</td>
-            <td>{s.subscription.plan}</td><td>{STATUS[s.subscription.status]}</td><td>{s.subscription.paid_until?.slice(0, 10) ?? s.subscription.trial_ends_at?.slice(0, 10) ?? "—"}</td>
-            <td className="whitespace-nowrap text-right"><Button size="sm" variant="ghost" onClick={() => setAct({ org: s.org_id, plan: "business", interval: "yearly", note: "" })}>Record payment</Button>
-              <Button size="sm" variant="ghost" onClick={async () => { const d = Number(prompt("Extend the trial by how many days?", "14")); if (d) { try { await api.post(`/api/billing/vendor/orgs/${s.org_id}/trial`, { days: d }); reload(); } catch (e) { toast("error", errorMessage(e)); } } }}>Extend trial</Button></td></tr>
-        ))}</tbody></table></TableWrap></Card>
-      {act && (
-        <Card title="Record a payment received outside Razorpay" className="mt-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Plan">{(fid) => <Select id={fid} value={act.plan} onChange={(e) => setAct({ ...act, plan: e.target.value })}>{PAID_PLANS.map((p) => <option key={p}>{p}</option>)}</Select>}</Field>
-            <Field label="Period">{(fid) => <Select id={fid} value={act.interval} onChange={(e) => setAct({ ...act, interval: e.target.value as Interval })}><option value="monthly">1 month</option><option value="yearly">1 year</option></Select>}</Field>
-            <Field label="Note (e.g. UTR)">{(fid) => <Input id={fid} value={act.note} onChange={(e) => setAct({ ...act, note: e.target.value })} />}</Field>
-            <Button onClick={async () => { try { await api.post(`/api/billing/vendor/orgs/${act.org}/activate`, { plan: act.plan, interval: act.interval, note: act.note || null }); setAct(null); reload(); toast("success", "Activated"); } catch (e) { toast("error", errorMessage(e)); } }}>Activate</Button>
-            <Button variant="secondary" onClick={() => setAct(null)}>Cancel</Button>
-          </div>
-        </Card>
-      )}
-      <PromotionsAdmin />
-    </div>
-  );
-}
