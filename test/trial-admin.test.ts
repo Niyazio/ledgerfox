@@ -56,7 +56,15 @@ describe("30-day free trial that starts with auto-pay", () => {
     const W = await requiredWorld();
     W.env.VENDOR_ADMIN_EMAILS = (await W.owner.get("/api/auth/me")).json.user.email;
     expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "A", sale_price: "1" })).status).toBe(201);
+    // Staff of the vendor's own organisation are not held back either.
+    const u = await W.owner.post(`/api/orgs/${W.orgId}/users`, { name: "Staff", username: "vendor.staff", role: "admin" });
+    const staff = new Client(W.env);
+    await staff.post("/api/auth/login", { login: "vendor.staff", password: u.json.temporary_password });
+    await staff.post("/api/auth/change-password", { current_password: u.json.temporary_password, new_password: "vendor staff pass 1" });
+    expect((await staff.post(W.c("/items"), { kind: "goods", name: "S", sale_price: "1" })).status).toBe(201);
+    expect((await staff.get(`/api/billing/org/${W.orgId}`)).json.autopay_required).toBe(false);
     W.env.VENDOR_ADMIN_EMAILS = "";
+    expect((await staff.post(W.c("/items"), { kind: "goods", name: "S2", sale_price: "1" })).json.error.code).toBe("AUTOPAY_REQUIRED");
     W.env.BILLING_REQUIRE_AUTOPAY = "false";
     expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "B", sale_price: "1" })).status).toBe(201);
     W.env.BILLING_REQUIRE_AUTOPAY = "true";

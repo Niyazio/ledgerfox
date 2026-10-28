@@ -54,6 +54,9 @@ const LIVE_AUTOPAY_STATES = ["active", "pending", "halted", "paused"];
  */
 export async function autopayRequired(env: Env, orgId: string, email?: string | null) {
   if (env.BILLING_REQUIRE_AUTOPAY !== "true" || !billingOn(env) || isVendor(env, email)) return false;
+  // The vendor's own organisation (owned by vendor staff) is never held back, for any of its members.
+  const owner = await first<{ email: string }>(env.DB, `SELECT u.email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId);
+  if (isVendor(env, owner?.email)) return false;
   const s = await subscription(env, orgId);
   if (s.status !== "trial") return false;
   const row = await first<{ autopay_status: string | null }>(env.DB, `SELECT autopay_status FROM org_subscriptions WHERE org_id = ?`, orgId);

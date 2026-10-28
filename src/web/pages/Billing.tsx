@@ -33,6 +33,9 @@ const autopayLive = (a: BillingInfo["autopay"]) => !!a && ["active", "pending", 
  */
 const goCheckout = (url: string) => { window.location.assign(url); };
 
+/** Largest amount a UPI AutoPay mandate can charge without extra approval (paise). */
+const UPI_AUTOPAY_LIMIT = 15_000_00;
+
 const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", grace: "Payment due", free: "Free plan", unlimited: "Unlimited" };
 
 /** Settings → Plan & billing. */
@@ -154,6 +157,8 @@ export function TrialGate() {
               </button>
             ))}
           </div>
+          {(() => { const chosen = data.plans.find((p) => p.id === plan); return chosen && withGst(chosen.price[interval], data.gst_percent).total > UPI_AUTOPAY_LIMIT
+            ? <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">UPI AutoPay allows up to ₹15,000 a charge, so for this plan use a debit/credit card or a bank mandate (or choose monthly).</p> : null; })()}
           {data.online
             ? <Button className="mt-5 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}&mode=autopay`)}>Start free trial — set up auto-pay</Button>
             : <Alert className="mt-4">Online payment is not available right now. Write to info@niyazio.com with your account ID {data.account_id}.</Alert>}
