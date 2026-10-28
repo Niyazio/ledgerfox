@@ -27,6 +27,10 @@ export interface Env {
   VENDOR_GSTIN?: string;
   VENDOR_ADDRESS?: string;
   VENDOR_STATE_CODE?: string;
+  /** Udyam (MSME) registration number printed on subscription invoices. */
+  VENDOR_UDYAM?: string;
+  /** "true": during the free trial, organisations must set up auto-pay (₹5 refundable check) before entering data. */
+  BILLING_REQUIRE_AUTOPAY?: string;
   /** Outgoing email through Resend (secret) and the sender, e.g. "LedgerFox <billing@niyazio.com>". Off when unset. */
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;

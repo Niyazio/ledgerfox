@@ -41,6 +41,25 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
   return { ...base, plan: "free", paid_plan: null, status: "free", days_left: null };
 }
 
+/** The vendor's own staff (VENDOR_ADMIN_EMAILS). */
+export const isVendor = (env: Env, email: string | null | undefined) =>
+  !!email && (env.VENDOR_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
+
+const LIVE_AUTOPAY_STATES = ["active", "pending", "halted", "paused"];
+
+/**
+ * With BILLING_REQUIRE_AUTOPAY, an organisation on its free trial must first set up auto-pay (Razorpay mandate with a
+ * ₹5 refundable check; the first real charge is at the end of the trial). True when that is still missing.
+ * Paying, free-plan and vendor organisations are never held back.
+ */
+export async function autopayRequired(env: Env, orgId: string, email?: string | null) {
+  if (env.BILLING_REQUIRE_AUTOPAY !== "true" || !billingOn(env) || isVendor(env, email)) return false;
+  const s = await subscription(env, orgId);
+  if (s.status !== "trial") return false;
+  const row = await first<{ autopay_status: string | null }>(env.DB, `SELECT autopay_status FROM org_subscriptions WHERE org_id = ?`, orgId);
+  return !LIVE_AUTOPAY_STATES.includes(row?.autopay_status ?? "");
+}
+
 const upgradeHint = (s: Subscription) => (s.status === "free" && s.paid_plan === null ? "Choose a plan in Settings → Plan & billing." : "Upgrade in Settings → Plan & billing.");
 
 export async function hasFeature(c: Context<AppEnv>, orgId: string, feature: Feature) {

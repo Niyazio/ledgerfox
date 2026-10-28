@@ -16,7 +16,7 @@ import { Shortcuts } from "./Shortcuts";
 import { HINTS } from "../lib/shortcuts";
 import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
-import { PlanBanner, VerifyEmailBanner } from "../pages/Billing";
+import { PlanBanner, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -327,6 +327,7 @@ function Shell() {
         {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
         {settings && me?.edition !== "offline" && <RecurringRunner />}
         {settings && me?.edition === "cloud" && <PlanBanner />}
+        {settings && me?.edition === "cloud" && <TrialGate />}
         {me?.edition === "cloud" && <VerifyEmailBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>

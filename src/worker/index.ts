@@ -32,7 +32,7 @@ import { verifyPublic, verifyToken } from "./routes/verify";
 import backups from "./routes/backups";
 import { VERSION } from "./version";
 import billing from "./routes/billing";
-import { hasFeature, requireFeature } from "./services/billing";
+import { autopayRequired, hasFeature, requireFeature } from "./services/billing";
 
 
 const app = new Hono<AppEnv>();
@@ -104,6 +104,13 @@ app.route("/api/clients", clients);
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
+// Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
+company.use("*", async (c, next) => {
+  if (c.req.method !== "GET" && !c.req.path.endsWith("/recurring/run") && (await autopayRequired(c.env, c.get("company").org_id, c.get("user").email))) {
+    throw new AppError(402, "AUTOPAY_REQUIRED", "Start your free trial first: set up auto-pay in Settings → Plan & billing. Razorpay takes ₹5 to check your UPI or card and refunds it; nothing is charged until the trial ends.");
+  }
+  await next();
+});
 // Plan features (hosted edition with billing on); registered before the routes so they run first.
 company.use("/pos/*", async (c, next) => { await requireFeature(c, c.get("company").org_id, "pos"); await next(); });
 company.use("/recurring/*", async (c, next) => {

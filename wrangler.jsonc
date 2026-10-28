@@ -35,6 +35,10 @@
     // Subscriptions on the hosted website (BILLING.md). Razorpay keys are Worker secrets, never in this file.
     "BILLING_ENABLED": "true",
     // Public address used in links inside emails.
-    "APP_URL": "https://ledgerfox.niyazio.com"
+    "APP_URL": "https://ledgerfox.niyazio.com",
+    // Printed on subscription invoices (public business registration number).
+    "VENDOR_UDYAM": "UDYAM-KR-11-0094729",
+    // New organisations set up auto-pay (₹5 refundable check) to start the 30-day free trial.
+    "BILLING_REQUIRE_AUTOPAY": "true"
   }
 }

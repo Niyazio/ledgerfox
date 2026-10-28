@@ -9,7 +9,7 @@ import { newId } from "../lib/crypto";
 import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
 import { PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
-import { billingOn, cancelRazorpaySubscription, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { autopayRequired, billingOn, cancelRazorpaySubscription, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
 
@@ -37,7 +37,7 @@ billing.post("/webhook", async (c) => {
   const sub = evt.payload?.subscription?.entity;
   if (evt.event.startsWith("subscription.") && sub?.id) {
     if (evt.event === "subscription.charged" && pay?.id && pay.status === "captured") await recordAutopayCharge(c.env, sub.id, pay.id, pay.amount);
-    const status = { "subscription.activated": "active", "subscription.charged": "active", "subscription.resumed": "active", "subscription.pending": "pending",
+    const status = { "subscription.authenticated": "active", "subscription.activated": "active", "subscription.charged": "active", "subscription.resumed": "active", "subscription.pending": "pending",
       "subscription.halted": "halted", "subscription.cancelled": "cancelled", "subscription.completed": "completed", "subscription.paused": "paused" }[evt.event];
     if (status) await run(c.env.DB, `UPDATE org_subscriptions SET autopay_status = ?, updated_at = ? WHERE autopay_id = ?`, status, new Date().toISOString(), sub.id);
     if (status === "pending" || status === "halted") await sendAutopayProblem(c.env, sub.id, status);
@@ -66,7 +66,8 @@ org.get("/:orgId", async (c) => {
     ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, period_start, period_end, created_at, paid_at, provider_payment_id, provider_order_id, provider_subscription_id FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
     : [];
   const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
-  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId });
+  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId,
+    autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS });
 });
 
 /** Each checkout asks Razorpay to create an order or subscription; keep that to a sensible number per organisation. */
@@ -175,11 +176,12 @@ org.post("/:orgId/autopay/cancel", async (c) => {
 /** Tax invoice data for one paid subscription payment (printed by the browser). */
 org.get("/:orgId/invoice/:paymentId", async (c) => {
   const orgId = c.req.param("orgId");
-  if ((await member(c, orgId)).role !== "owner") throw forbidden();
+  // The organisation's owner, or the vendor's own staff (admin panel).
+  if (!isVendor(c.env, c.get("user").email) && (await member(c, orgId)).role !== "owner") throw forbidden();
   const p = await first(c.env.DB, `SELECT * FROM billing_payments WHERE id = ? AND org_id = ? AND status = 'paid'`, c.req.param("paymentId"), orgId);
   if (!p) throw notFound("Invoice");
   const buyer = await first(c.env.DB, `SELECT o.name AS org_name, co.legal_name, co.name, co.tax_id, co.address, co.city, co.state_code FROM organisations o LEFT JOIN companies co ON co.org_id = o.id AND co.is_demo = 0 WHERE o.id = ? ORDER BY co.created_at LIMIT 1`, orgId);
-  return c.json({ payment: p, buyer, seller: { name: c.env.VENDOR_LEGAL_NAME ?? "Niyazio", gstin: c.env.VENDOR_GSTIN ?? null, address: c.env.VENDOR_ADDRESS ?? null, state_code: c.env.VENDOR_STATE_CODE ?? null, email: "info@niyazio.com" }, sac: "998431" });
+  return c.json({ payment: p, buyer, seller: { name: c.env.VENDOR_LEGAL_NAME ?? "Niyazio", gstin: c.env.VENDOR_GSTIN ?? null, address: c.env.VENDOR_ADDRESS ?? null, state_code: c.env.VENDOR_STATE_CODE ?? null, udyam: c.env.VENDOR_UDYAM ?? null, email: "info@niyazio.com" }, sac: "998431" });
 });
 
 // ── Promotions for the Free plan: first-party text cards, no ad scripts inside the app ──
@@ -220,8 +222,7 @@ billing.route("/org", org);
 // ── Vendor admin: the people who sell LedgerFox (emails listed in VENDOR_ADMIN_EMAILS) ──
 const vendor = new Hono<AppEnv>();
 vendor.use("*", requireAuth, async (c, next) => {
-  const allowed = (c.env.VENDOR_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
-  if (!allowed.includes(c.get("user").email.toLowerCase())) throw notFound("Page");
+  if (!isVendor(c.env, c.get("user").email)) throw notFound("Page");
   await next();
 });
 
@@ -250,7 +251,8 @@ vendor.get("/setup", async (c) => {
     billing_enabled: billingOn(e),
     razorpay: { key_id: Boolean(keyId), mode: keyId.startsWith("rzp_live_") ? "live" : keyId.startsWith("rzp_test_") ? "test" : keyId ? "unknown" : null, key_secret: Boolean(e.RAZORPAY_KEY_SECRET), webhook_secret: Boolean(e.RAZORPAY_WEBHOOK_SECRET), api, subscriptions, subscriptions_detail: subscriptionsDetail },
     email: { enabled: emailOn(e), api_key: Boolean(e.RESEND_API_KEY), from: e.EMAIL_FROM ?? null },
-    vendor: { legal_name: e.VENDOR_LEGAL_NAME ?? null, gstin: Boolean(e.VENDOR_GSTIN), address: Boolean(e.VENDOR_ADDRESS), state_code: e.VENDOR_STATE_CODE ?? null },
+    vendor: { legal_name: e.VENDOR_LEGAL_NAME ?? null, gstin: Boolean(e.VENDOR_GSTIN), gst_registered: gstPercent(c) > 0, address: Boolean(e.VENDOR_ADDRESS), state_code: e.VENDOR_STATE_CODE ?? null, udyam: e.VENDOR_UDYAM ?? null },
+    require_autopay: e.BILLING_REQUIRE_AUTOPAY === "true", trial_days: TRIAL_DAYS,
     app_url: e.APP_URL ?? null,
     webhook_url: `${siteUrl(e, c.req.url)}/api/billing/webhook`,
   });
@@ -326,6 +328,90 @@ vendor.put("/promotions/:id", async (c) => {
 vendor.delete("/promotions/:id", async (c) => {
   await run(c.env.DB, `DELETE FROM promotions WHERE id = ?`, c.req.param("id"));
   return c.json({ ok: true });
+});
+
+// ── Admin panel: everything about the vendor's customers (accounts, organisations, companies, subscriptions) ──
+// Business records (invoices, ledgers) are counted, never shown: customers' books stay private.
+
+vendor.get("/overview", async (c) => {
+  const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const totals = await first<Record<string, number>>(c.env.DB,
+    `SELECT (SELECT COUNT(*) FROM organisations) AS organisations, (SELECT COUNT(*) FROM users) AS users,
+       (SELECT COUNT(*) FROM companies WHERE is_demo = 0) AS companies, (SELECT COUNT(*) FROM documents) AS documents,
+       (SELECT COUNT(*) FROM users WHERE created_at >= ?) AS signups_7d, (SELECT COUNT(*) FROM users WHERE created_at >= ?) AS signups_30d,
+       (SELECT COUNT(*) FROM users WHERE last_login_at >= ?) AS active_7d, (SELECT COUNT(*) FROM users WHERE last_login_at >= ?) AS active_30d,
+       (SELECT COUNT(*) FROM org_subscriptions WHERE autopay_status = 'active') AS autopay_active,
+       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid') AS revenue_total,
+       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid' AND paid_at >= ?) AS revenue_30d,
+       (SELECT COUNT(*) FROM billing_payments WHERE status = 'paid') AS payments`,
+    since(7), since(30), since(7), since(30), since(30));
+  const orgs = await all<{ id: string }>(c.env.DB, `SELECT id FROM organisations`);
+  const statuses: Record<string, number> = {};
+  for (const o of orgs) { const st = (await subscription(c.env, o.id)).status; statuses[st] = (statuses[st] ?? 0) + 1; }
+  const daily = await all(c.env.DB, `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM organisations WHERE created_at >= ? GROUP BY day ORDER BY day`, since(30));
+  const recent = await all(c.env.DB,
+    `SELECT o.id, o.name, o.created_at, u.name AS owner_name, u.email AS owner_email FROM organisations o JOIN users u ON u.id = o.owner_user_id ORDER BY o.created_at DESC LIMIT 8`);
+  return c.json({ enabled: billingOn(c.env), totals, statuses, daily, recent });
+});
+
+/** Every organisation with its owner, size, activity and subscription. */
+vendor.get("/orgs", async (c) => {
+  const rows = await all<Record<string, any>>(c.env.DB,
+    `SELECT o.id, o.name, o.created_at, u.name AS owner_name, u.email AS owner_email, u.username AS owner_username, u.email_verified_at AS owner_verified,
+       (SELECT COUNT(*) FROM memberships m WHERE m.org_id = o.id) AS users,
+       (SELECT COUNT(*) FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0) AS companies,
+       (SELECT COUNT(*) FROM documents d JOIN companies co ON co.id = d.company_id WHERE co.org_id = o.id) AS documents,
+       (SELECT MAX(uu.last_login_at) FROM memberships m JOIN users uu ON uu.id = m.user_id WHERE m.org_id = o.id) AS last_login_at,
+       (SELECT co.phone FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 AND co.phone IS NOT NULL ORDER BY co.created_at LIMIT 1) AS phone,
+       (SELECT co.city FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 ORDER BY co.created_at LIMIT 1) AS city,
+       (SELECT COALESCE(SUM(p.amount),0) FROM billing_payments p WHERE p.org_id = o.id AND p.status = 'paid') AS revenue,
+       s.autopay_status, s.autopay_id
+     FROM organisations o JOIN users u ON u.id = o.owner_user_id LEFT JOIN org_subscriptions s ON s.org_id = o.id
+     ORDER BY o.created_at DESC LIMIT 5000`);
+  const out = await Promise.all(rows.map(async (r) => ({ ...r, subscription: await subscription(c.env, r.id) })));
+  return c.json({ organisations: out });
+});
+
+/** One organisation in full: people, companies, subscription, payments and billing notices. */
+vendor.get("/orgs/:orgId/detail", async (c) => {
+  const orgId = c.req.param("orgId");
+  const org = await first(c.env.DB, `SELECT o.*, u.name AS owner_name, u.email AS owner_email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId);
+  if (!org) throw notFound("Organisation");
+  const [members, companies, payments, notices, sub, subRow] = await Promise.all([
+    all(c.env.DB, `SELECT u.id, u.name, u.email, u.username, m.role, u.created_at, u.last_login_at, u.login_count, u.email_verified_at, u.totp_enabled, u.is_disabled
+       FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.role = 'owner' DESC, u.name`, orgId),
+    all(c.env.DB, `SELECT co.id, co.name, co.legal_name, co.tax_id, co.state_code, co.address, co.city, co.postal_code, co.phone, co.email, co.business_type, co.is_demo, co.created_at,
+         (SELECT COUNT(*) FROM documents d WHERE d.company_id = co.id) AS documents,
+         (SELECT COUNT(*) FROM contacts ct WHERE ct.company_id = co.id) AS contacts,
+         (SELECT COUNT(*) FROM items it WHERE it.company_id = co.id) AS items,
+         (SELECT COUNT(*) FROM branches b WHERE b.company_id = co.id AND b.is_active = 1) AS branches,
+         (SELECT MAX(created_at) FROM audit_logs a WHERE a.company_id = co.id) AS last_activity
+       FROM companies co WHERE co.org_id = ? ORDER BY co.created_at`, orgId),
+    all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, provider_payment_id, provider_order_id, provider_subscription_id, period_start, period_end, created_at, paid_at
+       FROM billing_payments WHERE org_id = ? ORDER BY created_at DESC LIMIT 200`, orgId),
+    all(c.env.DB, `SELECT notice_key, sent_at FROM billing_notices WHERE org_id = ? ORDER BY sent_at DESC LIMIT 50`, orgId),
+    subscription(c.env, orgId),
+    first(c.env.DB, `SELECT * FROM org_subscriptions WHERE org_id = ?`, orgId),
+  ]);
+  return c.json({ organisation: org, members, companies, payments, notices, subscription: sub, subscription_row: subRow });
+});
+
+/** Every sign-in account, with the organisations it belongs to. */
+vendor.get("/users", async (c) => {
+  const users = await all(c.env.DB,
+    `SELECT u.id, u.name, u.email, u.username, u.created_at, u.last_login_at, u.login_count, u.email_verified_at, u.totp_enabled, u.is_disabled,
+       (SELECT group_concat(o.name || ' (' || m.role || ')', '; ') FROM memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = u.id) AS organisations
+     FROM users u ORDER BY u.created_at DESC LIMIT 10000`);
+  return c.json({ users });
+});
+
+/** Every subscription payment. */
+vendor.get("/payments", async (c) => {
+  const payments = await all(c.env.DB,
+    `SELECT p.id, p.org_id, o.name AS org_name, p.plan, p.billing_interval, p.amount, p.gst, p.total, p.provider, p.status, p.invoice_number,
+       p.provider_payment_id, p.provider_order_id, p.provider_subscription_id, p.period_start, p.period_end, p.created_at, p.paid_at
+     FROM billing_payments p JOIN organisations o ON o.id = p.org_id ORDER BY p.created_at DESC LIMIT 5000`);
+  return c.json({ payments });
 });
 
 billing.route("/vendor", vendor);
