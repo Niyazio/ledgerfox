@@ -1,18 +1,19 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import QRCode from "qrcode";
 import { bilingual, type Lang } from "@shared/i18n";
-import { ArrowLeft, Printer, Share2 } from "lucide-react";
+import { ArrowLeft, Download, Printer, Share2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
 import { useCompany, CompanyProvider } from "../lib/company";
 import { useSession } from "../lib/session";
 import { DOC_LABELS, SALES_DOCS, fmtDate, qty as fmtQty, pct } from "../lib/format";
-import { Alert, Spinner } from "../components/ui";
+import { Alert, Spinner, useToast } from "../components/ui";
 import { INDIA_STATES } from "@shared/tax";
 import { amountInWords } from "@shared/words";
 import { currencyExponent } from "@shared/currencies";
-import { printPage } from "../lib/download";
+import { printPage, saveFile, shareFile } from "../lib/download";
+import { elementToPdf } from "../lib/pdf";
 
 /** Paper formats. Thermal formats suit 80 mm and 58 mm receipt printers (POS, restaurant, retail counters). */
 export const FORMATS = {
@@ -53,13 +54,13 @@ function useVerifyLink(kind: Kind, id: string, enabled: boolean, summary: string
   return `${location.origin}/verify/${token}`;
 }
 
-function Sheet({ format, children }: { format: Format; children: ReactNode }) {
+function Sheet({ format, name, text, children }: { format: Format; name?: string; text?: string; children: ReactNode }) {
   const f = FORMATS[format];
   const thermal = format.startsWith("thermal");
   return (
     <>
       <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } }`}</style>
-      <div className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
+      <div data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
         style={{ width: f.width, maxWidth: "100%", minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm" }}>
         {children}
       </div>
@@ -131,7 +132,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
 
   if (thermal) {
     return (
-      <Sheet format={format}>
+      <Sheet name={`${title}-${d.number ?? "DRAFT"}`} text={summary} format={format}>
         <CompanyBlock thermal center />
         <Rule />
         <p className="text-center font-bold uppercase">{L(title)}</p>
@@ -166,7 +167,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
 
   const classic = format === "classic";
   return (
-    <Sheet format={format}>
+    <Sheet name={`${title}-${d.number ?? "DRAFT"}`} text={summary} format={format}>
       <div className="relative">
         {watermark && <p className="pointer-events-none absolute inset-x-0 top-1/3 -rotate-12 text-center text-7xl font-black tracking-widest text-red-500/15">{watermark}</p>}
         {classic ? (
@@ -291,7 +292,7 @@ function PaymentPrint({ id, format, showQr }: { id: string; format: Format; show
   );
   if (thermal) {
     return (
-      <Sheet format={format}>
+      <Sheet name={`${p.direction === "in" ? "Receipt" : "Payment"}-${p.number}`} text={summary} format={format}>
         <CompanyBlock thermal center />
         <Rule />
         <p className="text-center font-bold uppercase">{title}</p>
@@ -303,7 +304,7 @@ function PaymentPrint({ id, format, showQr }: { id: string; format: Format; show
     );
   }
   return (
-    <Sheet format={format === "modern" || format === "classic" ? "a5" : format}>
+    <Sheet name={`${p.direction === "in" ? "Receipt" : "Payment"}-${p.number}`} text={summary} format={format === "modern" || format === "classic" ? "a5" : format}>
       <header className="flex items-start justify-between gap-4 border-b-4 border-brand-700 pb-4">
         <CompanyBlock />
         <div className="text-right">
@@ -336,7 +337,7 @@ function PayslipPrint({ id, format, showQr }: { id: string; format: Format; show
   const thermal = format.startsWith("thermal");
   if (thermal) {
     return (
-      <Sheet format={format}>
+      <Sheet name={`Payslip-${s.code}-${month}`} format={format}>
         <CompanyBlock thermal center />
         <Rule />
         <p className="text-center font-bold uppercase">Payslip · {month}</p>
@@ -352,7 +353,7 @@ function PayslipPrint({ id, format, showQr }: { id: string; format: Format; show
     );
   }
   return (
-    <Sheet format={format}>
+    <Sheet name={`Payslip-${s.code}-${month}`} format={format}>
       {s.run_status === "draft" && <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-amber-600">Draft — payroll not yet posted</p>}
       <header className="flex items-start justify-between gap-6 border-b-4 border-brand-700 pb-5">
         <CompanyBlock />
@@ -413,7 +414,34 @@ function PrintInner() {
   const [showQr, setShowQr] = useState(settings?.company.print_qr_verify !== 0);
   const [showUpi, setShowUpi] = useState(settings?.company.print_qr_upi !== 0);
   const set = (f: Format) => setParams((p) => { p.set("format", f); return p; }, { replace: true });
-  const shareText = useMemo(() => `${document.title}\n${location.href}`, []);
+  const toast = useToast();
+  const [pdf, setPdf] = useState<{ key: string; blob: Blob; name: string; text: string } | null>(null);
+  const [making, setMaking] = useState(false);
+  const pdfKey = `${format}|${showQr}|${showUpi}`;
+  /** The PDF of what is on screen (made once per layout and kept, so a second tap shares at once). */
+  const makePdf = async () => {
+    if (pdf?.key === pdfKey) return pdf;
+    const sheet = document.querySelector<HTMLElement>(".print-sheet");
+    if (!sheet) throw new Error("Wait for the document to load");
+    const f = FORMATS[(sheet.dataset.format as Format) ?? format];
+    const name = (sheet.dataset.pdfName || "document").replace(/[^\w.-]+/g, "_");
+    const made = { key: pdfKey, name: `${name}.pdf`, text: sheet.dataset.shareText ?? "",
+      blob: await elementToPdf(sheet, { widthMm: parseFloat(f.width), pageHeightMm: f.page === "A4" ? 297 : f.page === "A5" ? 210 : null, title: name }) };
+    setPdf(made);
+    return made;
+  };
+  const pdfAction = async (mode: "share" | "download") => {
+    setMaking(true);
+    try {
+      const p = await makePdf();
+      if (mode === "download") { await saveFile(p.blob, p.name); return; }
+      const r = await shareFile(p.blob, p.name, { title: p.name, text: p.text });
+      if (r === "saved") toast("info", "PDF saved. Attach it in WhatsApp, email or any app (this browser cannot share files directly).");
+    } catch (e) {
+      if ((e as DOMException)?.name === "NotAllowedError") toast("info", "The PDF is ready — tap “Share PDF” once more to send it.");
+      else toast("error", (e as Error).message || "Could not make the PDF");
+    } finally { setMaking(false); }
+  };
   useEffect(() => { if (params.get("auto") === "1") setTimeout(printPage, 600); }, [params]);
   if (!settings) return <Spinner />;
   return (
@@ -428,10 +456,11 @@ function PrintInner() {
         <label className="ml-2 flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} />Verification QR</label>
         {kind === "document" && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={showUpi} onChange={(e) => setShowUpi(e.target.checked)} />UPI payment QR</label>}
         <span className="flex-1" />
-        <a className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-[var(--surface-2)]" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer"><Share2 className="h-4 w-4" />WhatsApp</a>
+        <button className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60" disabled={making} onClick={() => void pdfAction("share")} title="Send as a PDF file to WhatsApp, email or any app"><Share2 className="h-4 w-4" />{making ? "Making PDF…" : "Share PDF"}</button>
+        <button className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-[var(--surface-2)] disabled:opacity-60" disabled={making} onClick={() => void pdfAction("download")}><Download className="h-4 w-4" />PDF</button>
         <button className="flex items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800" onClick={printPage}><Printer className="h-4 w-4" />Print / Save PDF</button>
       </div>
-      <p className="no-print px-4 py-2 text-center text-xs muted">Preview. Choose “Save as PDF” in the print dialog for a PDF. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
+      <p className="no-print px-4 py-2 text-center text-xs muted">Preview. “Share PDF” sends this document as a PDF file to WhatsApp, email or any app; “PDF” saves it. Thermal layouts fit 80 mm / 58 mm receipt printers (set the printer’s paper to the roll width).</p>
       <BrandingCtx.Provider value={branding.data ?? { logo: null, payment_qr: null }}>
       <div className="px-2 print:px-0">
         {kind === "document" && <DocumentPrint id={id} format={format} showQr={showQr} showUpi={showUpi} />}

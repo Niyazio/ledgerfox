@@ -1,6 +1,6 @@
 {
   "name": "ledgerfox",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "type": "module",
   "description": "LedgerFox — free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
@@ -36,6 +36,7 @@
     "@zxing/library": "0.23.0",
     "electron-updater": "^6.8.9",
     "hono": "^4.13.13",
+    "html-to-image": "1.11.13",
     "lucide-react": "^1.60.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",

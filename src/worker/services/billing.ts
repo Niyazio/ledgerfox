@@ -105,6 +105,15 @@ export async function verifyWebhookSignature(secret: string, rawBody: string, si
   return safeEqual(await hmacHex(secret, rawBody), signature);
 }
 
+/** A clear message from a failed Razorpay call (Razorpay's own description, never our keys). */
+async function providerError(res: Response, what: string, hint = ""): Promise<AppError> {
+  let detail = "";
+  try { detail = ((await res.json()) as { error?: { description?: string } }).error?.description ?? ""; } catch { /* not JSON */ }
+  console.error(JSON.stringify({ level: "error", code: "PAYMENT_PROVIDER", what, status: res.status, detail: detail.slice(0, 300) }));
+  if (res.status === 401) return new AppError(502, "PAYMENT_PROVIDER", "Razorpay did not accept the API keys. The key id and key secret must be a pair from the same mode (test or live).");
+  return new AppError(502, "PAYMENT_PROVIDER", `Razorpay could not ${what}${detail ? `: ${detail}` : ` (${res.status})`}.${hint ? ` ${hint}` : ""}`);
+}
+
 export async function createRazorpayOrder(env: Env, amount: number, receipt: string, notes: Record<string, string>): Promise<{ id: string }> {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) throw new AppError(503, "BILLING_NOT_CONFIGURED", "Online payment is not set up yet. Contact support to pay by bank transfer.");
   const res = await fetch("https://api.razorpay.com/v1/orders", {
@@ -112,7 +121,7 @@ export async function createRazorpayOrder(env: Env, amount: number, receipt: str
     headers: { "content-type": "application/json", authorization: `Basic ${btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`)}` },
     body: JSON.stringify({ amount, currency: "INR", receipt, notes }),
   });
-  if (!res.ok) throw new AppError(502, "PAYMENT_PROVIDER", `Razorpay refused the order (${res.status})`);
+  if (!res.ok) throw await providerError(res, "create the payment");
   return (await res.json()) as { id: string };
 }
 
@@ -158,7 +167,8 @@ async function razorpay<T>(env: Env, method: "GET" | "POST", path: string, paylo
     headers: { "content-type": "application/json", authorization: `Basic ${btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`)}` },
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
-  if (!res.ok) throw new AppError(502, "PAYMENT_PROVIDER", `Razorpay refused the request (${res.status})`);
+  if (!res.ok) throw await providerError(res, method === "GET" ? "find the payment" : path.startsWith("/plans") || path.startsWith("/subscriptions") ? "set up auto-renew" : "complete the request",
+    path.startsWith("/plans") || path.startsWith("/subscriptions") ? "Auto-renew needs Razorpay Subscriptions switched on for your Razorpay account; meanwhile, untick “Renew automatically” to pay once." : "");
   return (await res.json()) as T;
 }
 

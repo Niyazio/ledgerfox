@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Copy, Mail, MessageCircle, Send, Share2 } from "lucide-react";
+import { Copy, FileText, Mail, MessageCircle, Send, Share2 } from "lucide-react";
+import { useNavigate } from "react-router";
 import { useCompany } from "../lib/company";
 import { useSession } from "../lib/session";
 import { api, errorMessage } from "../lib/api";
@@ -15,7 +16,8 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
   doc: Omit<ShareDoc, "link" | "company" | "upiId">;
   phone?: string | null; email?: string | null; reminder?: boolean; label?: string;
 }) {
-  const { path, settings } = useCompany();
+  const { path, settings, id: companyId } = useCompany();
+  const nav = useNavigate();
   const { me } = useSession();
   const toast = useToast();
   const [text, setText] = useState<string | null>(null);
@@ -38,7 +40,13 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
       <Button variant="secondary" loading={busy} onClick={() => void open()}>{reminder ? <Send className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}{label ?? (reminder ? "Send reminder" : "Share")}</Button>
       {text !== null && (
         <Modal open title={reminder ? "Send payment reminder" : `Share ${doc.number}`} onClose={() => setText(null)}>
-          <p className="mb-2 text-sm muted">Edit the message if you like, then choose how to send it. It opens in your own WhatsApp or email app; nothing is sent until you press Send there.</p>
+          {entity && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+              <span className="flex-1">Send the {entity.type === "payment" ? "receipt" : "bill"} itself as a <b>PDF file</b> to WhatsApp, email or any app.</span>
+              <Button size="sm" onClick={() => nav(`/print/${companyId}/${entity.type}/${entity.id}`)}><FileText className="h-4 w-4" />Send as PDF</Button>
+            </div>
+          )}
+          <p className="mb-2 text-sm muted">Or send a message with a link: edit it if you like, then choose how to send it. It opens in your own WhatsApp or email app; nothing is sent until you press Send there.</p>
           <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} aria-label="Message" />
           <div className="mt-3 flex flex-wrap gap-2">
             <a className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700" href={whatsappUrl(text, phone)} target="_blank" rel="noreferrer"><MessageCircle className="h-4 w-4" />WhatsApp{phone ? "" : " (choose chat)"}</a>
@@ -46,7 +54,7 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
             <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(text); toast("success", "Copied — paste it into SMS or any app"); }}><Copy className="h-4 w-4" />Copy</Button>
             {"share" in navigator && <Button variant="secondary" onClick={() => void navigator.share({ title: subject, text }).catch(() => undefined)}><Share2 className="h-4 w-4" />More apps</Button>}
           </div>
-          {me?.edition !== "cloud" && <p className="mt-3 text-xs muted">The desktop edition is not on the internet, so the message has no online link. Attach the PDF from Print preview (Save as PDF) if needed.</p>}
+          {me?.edition !== "cloud" && <p className="mt-3 text-xs muted">The desktop edition is not on the internet, so the message has no online link. Use “Send as PDF” to send the bill itself.</p>}
         </Modal>
       )}
     </>
