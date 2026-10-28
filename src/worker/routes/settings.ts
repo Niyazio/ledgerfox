@@ -28,7 +28,7 @@ settings.get("/", async (c) => {
     all(c.env.DB, `SELECT * FROM units WHERE company_id = ? ORDER BY code`, company.id),
   ]);
   return c.json({
-    company,
+    company: { ...company, print_language: company.print_lang ?? company.print_language },
     role,
     permissions: c.get("perms"),
     branch_scope: c.get("branches"),
@@ -43,7 +43,7 @@ settings.patch("/", async (c) => {
   const company = c.get("company");
   const input = await body(c, companySchema.omit({ country: true, base_currency: true, fiscal_year_start_month: true, is_demo: true, business_type: true }).extend({
     print_template: z.enum(["modern", "classic", "compact"]).optional(),
-    print_language: z.enum(["en", "hi", "ta"]).optional(),
+    print_language: z.enum(["en", "hi", "ta", "ml", "kn"]).optional(),
     print_qr_verify: z.boolean().optional(),
     print_qr_upi: z.boolean().optional(),
     round_off_invoices: z.boolean().optional(),
@@ -65,7 +65,7 @@ settings.patch("/", async (c) => {
       c.env.DB,
       `UPDATE companies SET name = ?, legal_name = ?, tax_id = ?, state_code = ?, address = ?, city = ?, postal_code = ?, phone = ?, email = ?,
          round_off_invoices = COALESCE(?, round_off_invoices), invoice_terms = ?, date_format = COALESCE(?, date_format), number_locale = COALESCE(?, number_locale),
-         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template), print_language = COALESCE(?, print_language),
+         upi_id = CASE WHEN ? THEN ? ELSE upi_id END, print_template = COALESCE(?, print_template), print_language = COALESCE(?, print_language), print_lang = COALESCE(?, print_lang),
          print_qr_verify = COALESCE(?, print_qr_verify), print_qr_upi = COALESCE(?, print_qr_upi),
          purchase_approval_limit = CASE WHEN ? THEN ? ELSE purchase_approval_limit END,
          billing_discount_limit_bp = CASE WHEN ? THEN ? ELSE billing_discount_limit_bp END
@@ -74,7 +74,9 @@ settings.patch("/", async (c) => {
       input.postal_code ?? null, input.phone ?? null, input.email || null,
       input.round_off_invoices === undefined ? null : input.round_off_invoices ? 1 : 0, input.invoice_terms ?? null,
       input.date_format ?? null, input.number_locale ?? null,
-      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null, input.print_language ?? null,
+      input.upi_id === undefined ? 0 : 1, input.upi_id || null, input.print_template ?? null,
+      // The old column accepts only en/hi/ta; the new one holds any supported language.
+      input.print_language === undefined ? null : ["en", "hi", "ta"].includes(input.print_language) ? input.print_language : "en", input.print_language ?? null,
       input.print_qr_verify === undefined ? null : input.print_qr_verify ? 1 : 0, input.print_qr_upi === undefined ? null : input.print_qr_upi ? 1 : 0,
       limits.purchase === undefined ? 0 : 1, limits.purchase ?? null, limits.discount === undefined ? 0 : 1, limits.discount ?? null, company.id,
     ),

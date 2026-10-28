@@ -134,7 +134,7 @@ function LangPicker() {
   return (
     <select aria-label={t("Language")} title={t("Language")} value={lang} onChange={(e) => setLang(e.target.value as Lang)}
       className="rounded-lg border-0 bg-transparent py-1 pl-1 pr-6 text-sm hover:bg-[var(--surface-2)]">
-      {LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "EN" : l.value === "hi" ? "हि" : "த"}</option>)}
+      {LANGS.map((l) => <option key={l.value} value={l.value} title={l.label}>{l.short}</option>)}
     </select>
   );
 }
