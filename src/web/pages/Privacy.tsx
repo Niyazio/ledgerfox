@@ -19,7 +19,7 @@ export default function Privacy() {
         <section><h2 className="text-lg font-semibold">QR verification</h2>
           <p className="mt-1">Scanning the QR code on a document shows its number, date, amount, status, the issuer and the party name, so the recipient can confirm it is genuine. Each code is random and works only for that document.</p></section>
         <section><h2 className="text-lg font-semibold">Contact</h2>
-          <p className="mt-1">LedgerFox is a product of <a className="underline" href="https://niyazio.com">Niyazio</a>. For privacy or support questions, email <a className="underline" href="mailto:info@niyazio.com">info@niyazio.com</a>.</p></section>
+          <p className="mt-1">LedgerFox is a product of <a className="underline" href="https://niyazio.com">Niyazio</a>. For privacy or support questions, email <a className="underline" href="mailto:info@niyazio.com">info@niyazio.com</a>. How your data is protected: <Link className="underline" to="/security">Security</Link>.</p></section>
       </div>
     </div>
   );
