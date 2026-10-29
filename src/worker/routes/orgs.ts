@@ -108,6 +108,15 @@ orgs.post("/", async (c) => {
   const input = await body(c, z.object({ name: reqText(160), company: companySchema }));
   validateCompanyInput(input.company);
   const user = c.get("user");
+  // A demo company joins the organisation the person already owns, so trial and subscription stay in one place.
+  if (input.company.is_demo) {
+    const own = await first<{ id: string }>(c.env.DB, `SELECT id FROM organisations WHERE owner_user_id = ? ORDER BY created_at LIMIT 1`, user.id);
+    if (own) {
+      const setup = companySetupStatements(c.env.DB, { ...input.company, email: input.company.email || null, org_id: own.id }, todayIso());
+      await batch(c.env.DB, [...setup.stmts, audit(c, "company.create", "company", setup.companyId, { name: input.company.name }, { orgId: own.id, companyId: setup.companyId })]);
+      return c.json({ org_id: own.id, company_id: setup.companyId }, 201);
+    }
+  }
   const count = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM organisations WHERE owner_user_id = ?`, user.id);
   if ((count?.n ?? 0) >= 10) throw forbidden("Organisation limit reached for this account");
   const orgId = newId();

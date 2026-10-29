@@ -9,7 +9,7 @@ import { newId } from "../lib/crypto";
 import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
 import { PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
-import { autopayRequired, billingOn, cancelRazorpaySubscription, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { autopayRequired, billingOn, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
 
@@ -67,12 +67,16 @@ org.get("/:orgId", async (c) => {
     : [];
   const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
   return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId,
-    autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS });
+    autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS, demo_only: !(await hasRealCompany(c.env, orgId)) });
 });
 
 /** Each checkout asks Razorpay to create an order or subscription; keep that to a sensible number per organisation. */
 async function paymentRate(c: Context<AppEnv>, orgId: string) {
   if (!(await rateLimit(c.env.DB, `billing:${orgId}`, 20, 3600))) throw new AppError(429, "RATE_LIMITED", "Too many payment attempts. Try again in an hour.");
+}
+
+async function requireRealCompany(c: Context<AppEnv>, orgId: string) {
+  if (!(await hasRealCompany(c.env, orgId))) throw new AppError(409, "DEMO_ONLY", "This is a demo company. Open your own company and choose a plan there.");
 }
 
 const choice = z.object({ plan: z.enum(PAID_PLANS as [PlanId, ...PlanId[]]), interval: z.enum(["monthly", "yearly"]) });
@@ -81,6 +85,7 @@ org.post("/:orgId/checkout", async (c) => {
   const orgId = c.req.param("orgId");
   if ((await member(c, orgId)).role !== "owner") throw forbidden("Only the owner can buy a plan");
   if (!billingOn(c.env)) throw badRequest("Subscriptions are not switched on");
+  await requireRealCompany(c, orgId);
   await paymentRate(c, orgId);
   const input = await body(c, choice);
   const price = withGst(PLANS[input.plan].price[input.interval as Interval], gstPercent(c));
@@ -118,6 +123,7 @@ org.post("/:orgId/autopay", async (c) => {
   const orgId = c.req.param("orgId");
   if ((await member(c, orgId)).role !== "owner") throw forbidden("Only the owner can buy a plan");
   if (!billingOn(c.env)) throw badRequest("Subscriptions are not switched on");
+  await requireRealCompany(c, orgId);
   await paymentRate(c, orgId);
   const input = await body(c, choice);
   const current = await subscription(c.env, orgId);

@@ -78,6 +78,27 @@ describe("30-day free trial that starts with auto-pay", () => {
   });
 });
 
+describe("demo companies and subscriptions", () => {
+  it("puts a demo company in the person's own organisation and never asks a demo-only organisation to subscribe", async () => {
+    const W = await requiredWorld();
+    mockRazorpay();
+    const demo = { name: "FreshMart (demo)", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_demo: true };
+    const r = await W.owner.post("/api/orgs", { name: "Demo organisation", company: demo });
+    expect(r.json.org_id).toBe(W.orgId); // not a second organisation
+    expect((await rawQuery(W, `SELECT COUNT(*) AS n FROM organisations`))[0].n).toBe(1);
+
+    // Someone whose only organisation holds demo companies: no trial screen, no checkout.
+    const { client: fresh } = await register(W.env, "Fresh");
+    const d = (await fresh.post("/api/orgs", { name: "Demo organisation", company: demo })).json;
+    const b = (await fresh.get(`/api/billing/org/${d.org_id}`)).json;
+    expect(b).toMatchObject({ demo_only: true, autopay_required: false });
+    expect((await fresh.post(`/api/c/${d.company_id}/items`, { kind: "goods", name: "Soap", sale_price: "10" })).status).toBe(201);
+    const buy = await fresh.post(`/api/billing/org/${d.org_id}/autopay`, { plan: "starter", interval: "monthly" });
+    expect([buy.status, buy.json.error.code]).toEqual([409, "DEMO_ONLY"]);
+    expect((await fresh.post(`/api/billing/org/${d.org_id}/checkout`, { plan: "starter", interval: "monthly" })).json.error.code).toBe("DEMO_ONLY");
+  });
+});
+
 describe("admin panel", () => {
   it("tracks organisations, accounts, sign-ins, companies and payments for vendor staff only", async () => {
     const W = await requiredWorld();
