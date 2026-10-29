@@ -229,6 +229,10 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
               <tbody>{data.payments.map((p: any) => <tr key={p.id}><td>{day(p.paid_at ?? p.created_at)}</td><td>{p.invoice_number ? <Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/billing/${id}/invoice/${p.id}`} target="_blank">{p.invoice_number}</Link> : "—"}</td>
                 <td>{p.plan} ({p.billing_interval})</td><td className="num">{inr(p.total)}</td><td>{p.status}</td><td className="font-mono">{p.provider_payment_id ?? "—"}</td></tr>)}</tbody></table></TableWrap> : <p className="muted">None yet.</p>}
           </section>
+          {data.devices?.length > 0 && <section><h3 className="mb-1 font-semibold">Desktop computers ({data.devices.length})</h3>
+            <TableWrap><table className="table text-xs"><thead><tr><th>Computer</th><th>Connected by</th><th>Since</th><th>Last check</th><th>Status</th></tr></thead>
+              <tbody>{data.devices.map((d: any) => <tr key={d.id}><td>{d.device_name ?? "—"}</td><td>{d.email}</td><td>{day(d.created_at)}</td><td>{ago(d.last_seen_at)}</td><td>{d.revoked_at ? "Disconnected" : "Connected"}</td></tr>)}</tbody></table></TableWrap>
+          </section>}
           {data.notices.length > 0 && <section><h3 className="mb-1 font-semibold">Emails sent</h3><ul className="text-xs muted">{data.notices.map((n: any) => <li key={n.notice_key}>{day(n.sent_at)} — {n.notice_key}</li>)}</ul></section>}
         </div>
       )}

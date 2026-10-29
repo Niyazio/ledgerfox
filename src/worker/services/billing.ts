@@ -4,6 +4,7 @@ import { first, run, stmt } from "../lib/db";
 import { AppError } from "../lib/errors";
 import { newId } from "../lib/crypto";
 import { sendReceipt } from "./notices";
+import { desktopLicenceState, licenceDays, licensingOn, refreshInBackground } from "./licence";
 import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, withGst, type Feature, type Interval, type PlanId } from "@shared/plans";
 
 /** Billing applies only to the hosted edition with BILLING_ENABLED=true; desktop and phone copies are never limited. */
@@ -23,6 +24,14 @@ export interface Subscription {
 const DAY = 86_400_000;
 
 export async function subscription(env: Env, orgId: string): Promise<Subscription> {
+  // Desktop app: the plan comes from the licence for this computer (Free plan without one).
+  if (licensingOn(env)) {
+    const st = await desktopLicenceState(env);
+    if (st.connected) refreshInBackground(env, st.last_checked_at);
+    const paid = st.status === "active" || st.status === "grace";
+    return { enforced: true, plan: st.plan, paid_plan: paid ? st.plan : null, status: st.status, interval: null,
+      trial_ends_at: st.status === "trial" ? st.plan_until : null, paid_until: paid ? st.plan_until : null, days_left: licenceDays(st.plan_until) };
+  }
   if (!billingOn(env)) return { enforced: false, plan: "multi_branch", paid_plan: null, status: "unlimited", interval: null, trial_ends_at: null, paid_until: null, days_left: null };
   let row = await first<{ plan: PlanId; billing_interval: Interval | null; trial_ends_at: string | null; paid_until: string | null }>(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
   if (!row) {

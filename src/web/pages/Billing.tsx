@@ -10,6 +10,7 @@ import { FEATURE_LABELS, PAID_PLANS, withGst, type Interval, type Plan } from "@
 import { fmtDate, money as fmt } from "../lib/format";
 import { printPage } from "../lib/download";
 import { useSession } from "../lib/session";
+import { DesktopPlanTab } from "./DesktopPlan";
 
 const inr = (paise: number) => fmt(paise, "INR");
 
@@ -41,6 +42,11 @@ const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", 
 
 /** Settings → Plan & billing. */
 export function PlanBillingTab() {
+  const { me } = useSession();
+  return me?.edition === "desktop" ? <DesktopPlanTab /> : <CloudPlanTab />;
+}
+
+function CloudPlanTab() {
   const { settings } = useCompany();
   const orgId = settings!.company.org_id;
   const { data, error, reload } = useApi<BillingInfo>(`/api/billing/org/${orgId}`);

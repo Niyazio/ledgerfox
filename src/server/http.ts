@@ -5,7 +5,7 @@
 import { serve, type ServerType } from "@hono/node-server";
 import type { IncomingMessage } from "node:http";
 import { readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { dirname, extname, join, normalize, sep } from "node:path";
@@ -87,6 +87,9 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     // First sign-in is "admin" with a random one-time password shown on this computer; more users come from Settings → Users.
     ALLOW_REGISTRATION: "false",
     PASSWORD_MIN_LENGTH: "6",
+    // Plans come from a licence issued by the LedgerFox website; the computer's name shows in the vendor's admin panel.
+    DEVICE_NAME: hostname().slice(0, 80),
+    ...(process.env.LEDGERFOX_LICENCE_SERVER ? { LICENCE_SERVER: process.env.LEDGERFOX_LICENCE_SERVER } : {}),
     ...opts.env,
   };
   await ensureDefaultAdmin(env);

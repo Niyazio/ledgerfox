@@ -1,6 +1,6 @@
 # Selling LedgerFox subscriptions
 
-Subscriptions apply only to the hosted website. The desktop app and the phone copy are never limited.
+Subscriptions apply to the hosted website **and the desktop app** (one plan covers both). The desktop app connects to the customer's LedgerFox account in Settings → Plan & billing and receives a signed licence for that organisation's plan; without one, or after 15 days without an online check, it runs on the Free plan (nothing is locked or deleted). The phone's offline copy is view-only and never limited. Self-built copies can set `DESKTOP_LICENSING=off`.
 **Billing is off until you switch it on.** While it is off, every organisation has every feature.
 
 ## Plans (edit `src/shared/plans.ts`)
@@ -69,6 +69,14 @@ What is sent: address confirmation at sign-up, password reset links (one hour, s
 - Coupons, a per-branch add-on and refunds from inside LedgerFox. Make refunds in the Razorpay dashboard.
 - Changing the plan of a running auto-renewal: turn it off and start a new one. Proration is not supported.
 - Tested against Razorpay with a mocked API and real HMAC signatures only. A real test-mode payment, mandate or webhook has not been made yet.
+
+## Desktop licences
+
+- **Connect:** the owner or an admin on the computer opens Settings → Plan & billing and signs in with their LedgerFox website account (same password, two-factor and rate limits as the website). If they manage several organisations, they choose one.
+- **The licence:** the website issues a licence signed with an Ed25519 key. The key is created on first use and stored in the `licence_keys` table; its public half is sent to the computer when it connects. The licence holds the plan, its end date (trial end, or paid-until plus 7 days of grace) and a check-by date 15 days ahead.
+- **Checks:** the computer verifies the signature offline, and refreshes the licence in the background at most every 6 hours when it is online. An edited licence fails the signature check and the computer falls back to the Free plan.
+- **On the website:** each connected computer appears in the `desktop_devices` table and in the admin panel's organisation details. Set `revoked_at` to disconnect one; it keeps its last licence only until its check-by date.
+- **Limits:** the source code is open, so someone who builds LedgerFox themselves can switch licensing off. The official installers enforce it.
 
 ## Admin panel (`/vendor`)
 
