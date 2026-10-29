@@ -32,7 +32,7 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
       `SELECT 1 FROM org_subscriptions s JOIN organisations o ON o.id = s.org_id
        WHERE o.owner_user_id = (SELECT owner_user_id FROM organisations WHERE id = ?) AND s.org_id <> ? AND s.trial_ends_at IS NOT NULL
          AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = s.org_id AND c.is_demo = 0) LIMIT 1`, orgId, orgId);
-    const trialEnds = hadTrial ? new Date().toISOString() : new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
+    const trialEnds = hadTrial ? null : new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
     await run(env.DB, `INSERT INTO org_subscriptions (org_id, plan, trial_ends_at) VALUES (?, 'free', ?) ON CONFLICT (org_id) DO NOTHING`, orgId, trialEnds);
     row = await first(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
   }
