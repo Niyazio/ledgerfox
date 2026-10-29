@@ -99,6 +99,44 @@ describe("demo companies and subscriptions", () => {
   });
 });
 
+describe("one free trial", () => {
+  it("is given once per owner: a second organisation starts on the Free plan, and stopping auto-pay never restarts it", async () => {
+    const W = await requiredWorld();
+    mockRazorpay();
+    const first = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json.subscription;
+    expect(first.status).toBe("trial");
+    // Stop and restart auto-pay: the trial end date does not move.
+    const start = (await W.owner.post(`/api/billing/org/${W.orgId}/autopay`, { plan: "starter", interval: "monthly" })).json;
+    await W.owner.post(`/api/billing/org/${W.orgId}/autopay/verify`, { razorpay_subscription_id: start.subscription_id, razorpay_payment_id: "pay_auth", razorpay_signature: sign(SECRET, `pay_auth|${start.subscription_id}`) });
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: start.subscription_id, status: "cancelled" }));
+    expect((await W.owner.post(`/api/billing/org/${W.orgId}/autopay/cancel`)).status).toBe(200);
+    expect((await W.owner.get(`/api/billing/org/${W.orgId}`)).json.subscription.trial_ends_at).toBe(first.trial_ends_at);
+
+    // A new organisation for the same owner: no second trial.
+    const second = (await W.owner.post("/api/orgs", { name: "Second Org", company: { name: "Second Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" } })).json;
+    const s2 = (await W.owner.get(`/api/billing/org/${second.org_id}`)).json;
+    expect(s2.subscription.status).toBe("free");
+    expect(s2.autopay_required).toBe(false);
+
+    // A different person still gets their own first trial.
+    const { client } = await register(W.env, "Other owner");
+    const o = (await client.post("/api/orgs", { name: "Other", company: { name: "Other Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" } })).json;
+    expect((await client.get(`/api/billing/org/${o.org_id}`)).json.subscription.status).toBe("trial");
+  });
+
+  it("is not used up by a demo company loaded first", async () => {
+    const W = await requiredWorld();
+    const { client } = await register(W.env, "Demo first");
+    const demo = { name: "FreshMart (demo)", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_demo: true };
+    const d = (await client.post("/api/orgs", { name: "Demo organisation", company: demo })).json;
+    await client.get(`/api/billing/org/${d.org_id}`);
+    const real = (await client.post(`/api/orgs/${d.org_id}/companies`, { name: "Real Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" })).json;
+    expect(real.company_id).toBeTruthy();
+    expect((await client.get(`/api/billing/org/${d.org_id}`)).json.subscription.status).toBe("trial");
+  });
+});
+
 describe("admin panel", () => {
   it("tracks organisations, accounts, sign-ins, companies and payments for vendor staff only", async () => {
     const W = await requiredWorld();

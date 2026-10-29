@@ -51,6 +51,11 @@ A daily job runs at 08:47 India time and sends each reminder only once:
 
 The app also shows a yellow bar near the end of the trial or plan.
 
+## One free trial per customer
+- **Once per owner:** the 30-day trial is given once, to the owner's first real organisation. Another organisation by the same owner starts on the Free plan; demo companies don't count.
+- **Stopping and restarting auto-pay never restarts the trial.** During the trial, the first charge stays on the original trial end date. After the trial, it is charged at once.
+- **Not covered:** someone who signs up again with a different email gets a new trial. Watch for repeat sign-ups (same company name, phone or GSTIN) in the admin panel.
+
 ## Turning auto-renew off, and the end of a plan
 - **Turning off auto-renew:** Plan & billing → **Turn off auto-renew**. No more charges are taken, and the days already paid are kept.
 - **Grace period:** when a paid period ends without renewal, everything works for 7 more days.

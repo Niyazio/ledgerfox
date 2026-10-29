@@ -26,8 +26,13 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
   if (!billingOn(env)) return { enforced: false, plan: "multi_branch", paid_plan: null, status: "unlimited", interval: null, trial_ends_at: null, paid_until: null, days_left: null };
   let row = await first<{ plan: PlanId; billing_interval: Interval | null; trial_ends_at: string | null; paid_until: string | null }>(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
   if (!row) {
-    // First look after billing is switched on: every organisation starts with a free trial.
-    const trialEnds = new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
+    // First look after billing is switched on: the free trial, once per owner. An owner whose other (non-demo)
+    // organisation already had a trial starts this one on the Free plan; stopping auto-pay never restarts a trial.
+    const hadTrial = await first(env.DB,
+      `SELECT 1 FROM org_subscriptions s JOIN organisations o ON o.id = s.org_id
+       WHERE o.owner_user_id = (SELECT owner_user_id FROM organisations WHERE id = ?) AND s.org_id <> ? AND s.trial_ends_at IS NOT NULL
+         AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = s.org_id AND c.is_demo = 0) LIMIT 1`, orgId, orgId);
+    const trialEnds = hadTrial ? null : new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
     await run(env.DB, `INSERT INTO org_subscriptions (org_id, plan, trial_ends_at) VALUES (?, 'free', ?) ON CONFLICT (org_id) DO NOTHING`, orgId, trialEnds);
     row = await first(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
   }
