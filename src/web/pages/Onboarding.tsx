@@ -3,7 +3,7 @@ import { Navigate, useNavigate, Link } from "react-router";
 import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
-import { Alert, Button, Card, Field, Input, Select, Spinner } from "../components/ui";
+import { Alert, Button, Card, Field, Input, Select, Spinner, useToast } from "../components/ui";
 import { Wordmark } from "../components/Layout";
 import { INDIA_STATES } from "@shared/tax";
 import { CURRENCY_OPTIONS } from "../components/pickers";
@@ -84,8 +84,11 @@ export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, br
   );
 }
 
-async function saveBranding(companyId: string, b: BrandingValue) {
-  if (b.logo || b.payment_qr) await api.put(`/api/c/${companyId}/settings/branding`, { logo: b.logo ?? null, payment_qr: b.payment_qr ?? null });
+/** Logo and payment QR after the company exists. A failure here never undoes the sign-up: it is reported and can be redone in Settings. */
+async function saveBranding(companyId: string, b: BrandingValue): Promise<string | null> {
+  if (!b.logo && !b.payment_qr) return null;
+  try { await api.put(`/api/c/${companyId}/settings/branding`, { logo: b.logo ?? null, payment_qr: b.payment_qr ?? null }); return null; }
+  catch (e) { return `Your company is ready, but the logo / payment QR could not be saved (${errorMessage(e)}). Add it in Settings → Company.`; }
 }
 
 /** One click: a sample company of the chosen type with invoices, bills, receipts, expenses and a posted payroll. */
@@ -117,6 +120,7 @@ export function AppHome() {
   const { me, loading, refresh } = useSession();
   const nav = useNavigate();
   const { busy, error, run } = useAction();
+  const toast = useToast();
   if (loading) return <Spinner />;
   if (!me?.user) return <Navigate to="/login?next=/app" replace />;
   if (me.companies.length === 1 && !me.companies[0].is_demo) return <Navigate to={`/app/${me.companies[0].id}/dashboard`} replace />;
@@ -148,8 +152,8 @@ export function AppHome() {
       {error && <Alert className="mb-4">{error}</Alert>}
       <div className="mb-6"><DemoLoader orgId={null} /></div>
       <Card><CompanyForm withOrg busy={busy} onSubmit={async (v, branding) => {
-        const r = await run(async () => { const c = await api.post<{ company_id: string }>("/api/orgs", v); await saveBranding(c.company_id, branding); return c; });
-        if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
+        const r = await run(async () => { const c = await api.post<{ company_id: string }>("/api/orgs", v); return { ...c, brandingError: await saveBranding(c.company_id, branding) }; });
+        if (r) { if (r.brandingError) toast("error", r.brandingError); await refresh(); nav(`/app/${r.company_id}/dashboard`); }
       }} /></Card>
     </div>
   );
@@ -159,6 +163,7 @@ export function NewCompany() {
   const { me, refresh } = useSession();
   const nav = useNavigate();
   const { busy, error, run } = useAction();
+  const toast = useToast();
   const [org, setOrg] = useState(me?.organisations[0]?.org_id ?? "");
   if (!me?.user) return <Navigate to="/login" replace />;
   if (!me.organisations.length) return <Navigate to="/app" replace />;
@@ -172,8 +177,8 @@ export function NewCompany() {
       )}
       <div className="mb-6"><DemoLoader orgId={org} /></div>
       <Card><CompanyForm busy={busy} onSubmit={async (v, branding) => {
-        const r = await run(async () => { const c = await api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v); await saveBranding(c.company_id, branding); return c; });
-        if (r) { await refresh(); nav(`/app/${r.company_id}/dashboard`); }
+        const r = await run(async () => { const c = await api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v); return { ...c, brandingError: await saveBranding(c.company_id, branding) }; });
+        if (r) { if (r.brandingError) toast("error", r.brandingError); await refresh(); nav(`/app/${r.company_id}/dashboard`); }
       }} /></Card>
     </div>
   );

@@ -29,6 +29,10 @@ describe("30-day free trial that starts with auto-pay", () => {
     mockRazorpay();
     const b = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
     expect(b).toMatchObject({ autopay_required: true, trial_days: 30, subscription: { status: "trial", days_left: 30 } });
+    // Company set-up right after sign-up (details, logo) is allowed before the trial screen.
+    expect((await W.owner.patch(W.c("/settings"), { name: "Acme Traders", state_code: "29", upi_id: "acme@okhdfcbank" })).status).toBe(200);
+    const png = "data:image/png;base64," + Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]).toString("base64");
+    expect((await W.owner.put(W.c("/settings/branding"), { logo: png, payment_qr: null })).status).not.toBe(402);
     // Viewing works; creating does not.
     expect((await W.owner.get(W.c("/items"))).status).toBe(200);
     const blocked = await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" });
