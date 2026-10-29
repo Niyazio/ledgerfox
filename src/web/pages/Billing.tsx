@@ -22,6 +22,7 @@ interface BillingInfo {
   account_id: string;
   autopay_required?: boolean;
   trial_days?: number;
+  demo_only?: boolean;
 }
 
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Last charge failed — Razorpay is retrying", halted: "Stopped after failed charges", paused: "Paused", cancelled: "Off", completed: "Finished" };
@@ -50,6 +51,7 @@ export function PlanBillingTab() {
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
   if (!data.enabled) return <Card><p className="text-sm">All features are available. Subscriptions are not switched on for this LedgerFox.</p></Card>;
+  if (data.demo_only) return <Card><p className="text-sm">This is a demo company, so there is nothing to subscribe for here. Open your own company (company switcher at the top) and choose a plan in its Settings → Plan & billing.</p></Card>;
   const s = data.subscription;
   const current = data.plans.find((p) => p.id === s.plan)!;
   return (

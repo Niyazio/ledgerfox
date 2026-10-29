@@ -47,6 +47,11 @@ export const isVendor = (env: Env, email: string | null | undefined) =>
 
 const LIVE_AUTOPAY_STATES = ["active", "pending", "halted", "paused"];
 
+/** False for an organisation that holds only demo companies: there is nothing to subscribe for. */
+export async function hasRealCompany(env: Env, orgId: string) {
+  return Boolean(await first(env.DB, `SELECT 1 FROM companies WHERE org_id = ? AND is_demo = 0 LIMIT 1`, orgId));
+}
+
 /**
  * With BILLING_REQUIRE_AUTOPAY, an organisation on its free trial must first set up auto-pay (Razorpay mandate with a
  * ₹5 refundable check; the first real charge is at the end of the trial). True when that is still missing.
@@ -57,6 +62,7 @@ export async function autopayRequired(env: Env, orgId: string, email?: string | 
   // The vendor's own organisation (owned by vendor staff) is never held back, for any of its members.
   const owner = await first<{ email: string }>(env.DB, `SELECT u.email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId);
   if (isVendor(env, owner?.email)) return false;
+  if (!(await hasRealCompany(env, orgId))) return false;
   const s = await subscription(env, orgId);
   if (s.status !== "trial") return false;
   const row = await first<{ autopay_status: string | null }>(env.DB, `SELECT autopay_status FROM org_subscriptions WHERE org_id = ?`, orgId);
