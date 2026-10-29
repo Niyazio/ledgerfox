@@ -93,7 +93,7 @@ export default function Landing() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/privacy" className="underline">Privacy</Link><ProductCredit className="mt-2" /></footer>
+      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/privacy" className="underline">Privacy</Link> · <Link to="/security" className="underline">Security</Link><ProductCredit className="mt-2" /></footer>
     </div>
   );
 }
