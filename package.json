@@ -1,6 +1,6 @@
 {
   "name": "ledgerfox",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "private": true,
   "type": "module",
   "description": "LedgerFox accounting by Niyazio — GST billing, inventory and double-entry accounts",

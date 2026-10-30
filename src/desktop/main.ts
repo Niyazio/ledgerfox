@@ -2,8 +2,8 @@
  * LedgerFox desktop app (Windows, macOS, Linux). It works online: the window shows the LedgerFox website, signed in
  * with the same account, and the data is the same everyone in the business sees, on the LedgerFox cloud. Without
  * internet, recently opened screens still show from this computer's cache, and new invoices, payments and entries
- * wait on this computer and are sent when the connection returns (each once only). File → Save a backup copies the
- * open company to a file on this computer.
+ * wait on this computer and are sent when the connection returns (each once only). Every company is also copied
+ * automatically to a folder on this computer (see localcopy.ts).
  * Data files from older versions (one SQLite file, e.g. C:\LedgerFox\MyBusiness.ledgerfox) open view-only, to look
  * things up and export them; the same server as the cloud version runs on this computer for that.
  */
@@ -15,11 +15,14 @@ import QRCode from "qrcode";
 import { startServer, type RunningServer } from "../server/http";
 import { ensureCloudflared, startTunnel, type Tunnel } from "./tunnel";
 import { checkForUpdatesNow, desktopUpdater, setupAutoUpdate } from "./updates";
+import { saveLocalCopy } from "./localcopy";
 
 const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
 
-interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number; toldOnlineOnly?: boolean }
+interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number; toldOnlineOnly?: boolean;
+  /** Automatic local copy of the cloud data (default Documents\LedgerFox Data). */
+  localFolder?: string; lastLocalCopy?: string; localCopyError?: string | null; toldLocalCopy?: boolean }
 
 /** The LedgerFox website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
 const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
@@ -161,15 +164,44 @@ async function tellOnlineOnly() {
   });
 }
 
-/** Copy the open company's full data to a file on this computer (online mode). */
-async function saveBackup() {
-  if (!win) return;
-  const m = /\/app\/([0-9a-f-]{36})(\/|$)/.exec(new URL(win.webContents.getURL()).pathname);
-  if (!online() || !m) {
-    await dialog.showMessageBox({ type: "info", message: "Open a company first", detail: "Open the company you want to back up, then choose File → Save a backup to this computer again." });
+const localFolder = () => config.localFolder ?? join(app.getPath("documents"), "LedgerFox Data");
+let copying = false;
+
+/** Copy every company the signed-in person can open to the local folder (online mode only; quietly skipped offline). */
+async function runLocalCopy(manual = false) {
+  if (copying || !win || !online() || !win.webContents.getURL().startsWith(ONLINE_URL)) {
+    if (manual) await dialog.showMessageBox({ type: "info", message: "Sign in first", detail: "The local copy is made while you are signed in and online." });
     return;
   }
-  win.webContents.downloadURL(`${ONLINE_URL}/api/c/${m[1]}/export`);
+  copying = true;
+  try {
+    const n = await saveLocalCopy(win.webContents, localFolder());
+    if (n) { config.lastLocalCopy = new Date().toISOString(); config.localCopyError = null; saveConfig(); buildMenu(); }
+    if (n && !manual && !config.toldLocalCopy) {
+      config.toldLocalCopy = true;
+      saveConfig();
+      const r = await dialog.showMessageBox({
+        type: "info", title: "Local copy on this computer", message: "Your data is also saved on this computer",
+        detail: `LedgerFox keeps your books in the LedgerFox cloud and also copies every company automatically to:\n${localFolder()}\n\nThe copy is updated every 15 minutes while you are online, with one copy per day for the last 30 days. Change the folder any time in File → Change local copy folder.`,
+        buttons: ["OK", "Change folder…"], cancelId: 0,
+      });
+      if (r.response === 1) await chooseLocalFolder();
+    }
+    if (manual) await dialog.showMessageBox({ type: "info", message: n ? `Saved ${n} compan${n === 1 ? "y" : "ies"}` : "Nothing to save yet", detail: n ? localFolder() : "Sign in and connect to the internet, then try again." });
+  } catch (e) {
+    config.localCopyError = (e as Error).message;
+    saveConfig();
+    if (manual) dialog.showErrorBox("Could not save the local copy", `${localFolder()}\n\n${(e as Error).message}`);
+  } finally { copying = false; }
+}
+
+async function chooseLocalFolder() {
+  const r = await dialog.showOpenDialog({ title: "Folder for the automatic local copy", defaultPath: localFolder(), properties: ["openDirectory", "createDirectory"] });
+  if (r.canceled || !r.filePaths[0]) return;
+  config.localFolder = r.filePaths[0];
+  saveConfig();
+  buildMenu();
+  void runLocalCopy(true);
 }
 
 async function setLan(on: boolean) {
@@ -271,7 +303,10 @@ function buildMenu() {
       label: "File",
       submenu: [
         { label: "Work online", enabled: !online(), click: () => void goOnline() },
-        { label: "Save a backup to this computer…", accelerator: "CmdOrCtrl+B", enabled: online(), click: () => void saveBackup() },
+        { label: "Save local copy now", accelerator: "CmdOrCtrl+B", enabled: online(), click: () => void runLocalCopy(true) },
+        { label: "Open local copy folder", click: () => { mkdirSync(localFolder(), { recursive: true }); void shell.openPath(localFolder()); } },
+        { label: "Change local copy folder…", click: () => void chooseLocalFolder() },
+        { label: `Last local copy: ${config.lastLocalCopy ? new Date(config.lastLocalCopy).toLocaleString() : "not yet"}`, enabled: false },
         { type: "separator" },
         { label: "Open an old data file (view only)…", click: async () => { const f = await chooseExistingFile(); if (f) await boot(f); } },
         { type: "separator" },
@@ -371,6 +406,9 @@ if (!app.requestSingleInstanceLock()) {
     const file = pendingOpen;
     try {
       if (file) await boot(file); else { await goOnline(); await tellOnlineOnly(); }
+      // Automatic local copy: shortly after start, then every 15 minutes while signed in and online.
+      setTimeout(() => void runLocalCopy(), 30_000);
+      setInterval(() => void runLocalCopy(), 15 * 60_000);
       setupAutoUpdate();
     } catch (e) {
       dialog.showErrorBox("Could not open the data file", `${file}\n\n${(e as Error).message}`);
