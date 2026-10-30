@@ -111,8 +111,16 @@ company.use("*", requireAuth, requireCompany, idempotency);
 company.use("*", async (c, next) => {
   // Company set-up (details, logo, payment QR, branches) is always allowed: it comes before the trial screen.
   const setup = /^\/api\/c\/[^/]+\/settings(\/|$)/.test(c.req.path) || c.req.path.endsWith("/recurring/run");
-  if (c.req.method !== "GET" && !setup && (await autopayRequired(c.env, c.get("company").org_id, c.get("user").email))) {
+  if (c.req.method !== "GET" && !setup && !c.get("company").is_practice && (await autopayRequired(c.env, c.get("company").org_id, c.get("user").email))) {
     throw new AppError(402, "AUTOPAY_REQUIRED", "Start your free trial first: set up auto-pay in Settings → Plan & billing. Razorpay takes ₹5 to check your UPI or card and refunds it; nothing is charged until the trial ends.");
+  }
+  await next();
+});
+// Education mode: a practice company cannot produce documents that leave LedgerFox as real ones (government
+// e-invoice / e-way bill files, public verification QR codes).
+company.use("*", async (c, next) => {
+  if (c.get("company").is_practice && c.req.method !== "GET" && /\/(documents\/[^/]+\/gst\/(einvoice|eway)|verify)$/.test(c.req.path)) {
+    throw new AppError(403, "PRACTICE_MODE", "Not available in a practice company (education mode): it is for learning, not for real business documents.");
   }
   await next();
 });

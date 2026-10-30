@@ -34,6 +34,8 @@ export function ShareButton({ entity, doc, phone, email, reminder = false, label
       setText(shareMessage({ ...doc, link, company: co.legal_name || co.name, upiId: co.upi_id ?? null }, reminder));
     } catch (e) { toast("error", errorMessage(e)); } finally { setBusy(false); }
   };
+  // Education mode: practice documents are not sent to anyone.
+  if (settings?.company.is_practice) return null;
   const subject = `${reminder ? "Payment reminder: " : ""}${doc.kind === "receipt" ? "Receipt" : doc.kind === "statement" ? "Statement" : doc.kind === "quote" ? "Quotation" : doc.kind === "credit_note" ? "Credit note" : "Invoice"} ${doc.number} from ${settings?.company.name ?? ""}`;
   return (
     <>

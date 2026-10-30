@@ -3,6 +3,11 @@ import { buildXlsx } from "@shared/xlsx";
 import { saveFile } from "./download";
 
 export type DownloadFormat = "xlsx" | "csv";
+
+/** Education mode: downloads from a practice company start with a line saying so. */
+let practiceMark = false;
+export const setPracticeExports = (on: boolean) => { practiceMark = on; };
+const PRACTICE_LINE = "PRACTICE COMPANY (education mode) - not a valid business or tax document";
 let pending: DownloadFormat | null = null;
 
 /** Run a download callback (which may first fetch rows) in a given format; it ends by calling downloadCsv. */
@@ -17,6 +22,7 @@ export async function withFormat(format: DownloadFormat, fn: () => unknown) {
  */
 export function downloadCsv(filename: string, header: string[], rows: unknown[][]) {
   const format = pending ?? "csv";
+  if (practiceMark) rows = [[PRACTICE_LINE, ...header.slice(1).map(() => "")], ...rows];
   const base = filename.replace(/\.(csv|xlsx)$/i, "");
   if (format === "xlsx") {
     const bytes = buildXlsx(header, rows, base.slice(0, 31));

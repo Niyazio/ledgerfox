@@ -51,6 +51,17 @@ A daily job runs at 08:47 India time and sends each reminder only once:
 
 The app also shows a yellow bar near the end of the trial or plan.
 
+## Education mode (practice companies)
+For students, trainees and beginners: tick **Practice company (education mode)** when creating a company, on the website or in the desktop app.
+- **Free forever, every feature:** POS, payroll, GST reports, manufacturing and the rest, on any plan, with no auto-pay. A learning-only organisation (only practice companies) can hold a class of up to 50 users, 10 companies and 5 branches.
+- **Not for business, like Tally's educational mode:**
+  - entries can be dated only the **1st, 2nd and last day of a month**, enforced by the database;
+  - printouts and PDFs carry a "Practice — not a valid tax document" mark and watermark;
+  - Excel/CSV downloads start with a "practice company" line;
+  - government e-invoice and e-way bill files, public verification QR codes and WhatsApp/email sharing are off;
+  - the name always ends with "(Practice)" and an orange bar shows on every screen.
+- **Permanent:** a practice company can't be turned into a real one. Start a real company for real work.
+
 ## One free trial per customer
 - **Once per owner:** the 30-day trial is given once, to the owner's first real organisation. Another organisation by the same owner starts on the Free plan; demo companies don't count.
 - **Stopping and restarting auto-pay never restarts the trial.** During the trial, the first charge stays on the original trial end date. After the trial, it is charged at once.

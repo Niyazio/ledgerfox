@@ -32,6 +32,7 @@ export const companySchema = z.object({
   email: z.string().trim().email().max(254).nullish().or(z.literal("")),
   business_type: z.string().max(40).nullish(),
   is_demo: z.boolean().optional(),
+  is_practice: z.boolean().optional(),
   upi_id: z.string().trim().regex(/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/, "UPI ID looks like name@bank").nullish().or(z.literal("")),
 });
 
@@ -104,8 +105,13 @@ async function branchStatements(c: Context<AppEnv>, orgId: string, userId: strin
 }
 
 /** Create an organisation together with its first company (onboarding). */
+/** A practice company always says so in its name. */
+const practiceName = <T extends { name: string; is_practice?: boolean }>(co: T): T =>
+  co.is_practice && !/\(practice\)\s*$/i.test(co.name) ? { ...co, name: `${co.name} (Practice)` } : co;
+
 orgs.post("/", async (c) => {
-  const input = await body(c, z.object({ name: reqText(160), company: companySchema }));
+  const raw = await body(c, z.object({ name: reqText(160), company: companySchema }));
+  const input = { ...raw, company: practiceName(raw.company) };
   validateCompanyInput(input.company);
   const user = c.get("user");
   // A demo company joins the organisation the person already owns, so trial and subscription stay in one place.
@@ -134,9 +140,9 @@ orgs.post("/", async (c) => {
 orgs.post("/:orgId/companies", async (c) => {
   const orgId = c.req.param("orgId");
   await requireOrgPerm(c, orgId, "company.manage");
-  const input = await body(c, companySchema);
+  const input = practiceName(await body(c, companySchema));
   validateCompanyInput(input);
-  if (!input.is_demo) await requireCapacity(c, orgId, "companies");
+  if (!input.is_demo && !input.is_practice) await requireCapacity(c, orgId, "companies");
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
   if ((n?.n ?? 0) >= 25) throw forbidden("Company limit reached for this organisation");
   const setup = companySetupStatements(c.env.DB, { ...input, email: input.email || null, org_id: orgId }, todayIso());

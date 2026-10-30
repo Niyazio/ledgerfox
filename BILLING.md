@@ -70,6 +70,10 @@ What is sent: address confirmation at sign-up, password reset links (one hour, s
 - Changing the plan of a running auto-renewal: turn it off and start a new one. Proration is not supported.
 - Tested against Razorpay with a mocked API and real HMAC signatures only. A real test-mode payment, mandate or webhook has not been made yet.
 
+## Education mode
+
+Practice companies (`companies.is_practice = 1`) are free with every feature and need no plan or auto-pay. The rules are in `migrations/0023_practice_companies.sql` (date triggers on `journal_entries`), `src/worker/index.ts` (no e-invoice, e-way bill or verify endpoints) and `services/billing.ts` (features and `EDUCATION_LIMITS` for learning-only organisations). See `docs/ACCOUNTS_AND_BILLING_GUIDE.md`.
+
 ## Desktop licences
 
 - **Connect:** the owner or an admin on the computer opens Settings → Plan & billing and signs in with their LedgerFox website account (same password, two-factor and rate limits as the website). If they manage several organisations, they choose one.

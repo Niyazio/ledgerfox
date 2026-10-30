@@ -40,7 +40,7 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
     const hadTrial = await first(env.DB,
       `SELECT 1 FROM org_subscriptions s JOIN organisations o ON o.id = s.org_id
        WHERE o.owner_user_id = (SELECT owner_user_id FROM organisations WHERE id = ?) AND s.org_id <> ? AND s.trial_ends_at IS NOT NULL
-         AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = s.org_id AND c.is_demo = 0) LIMIT 1`, orgId, orgId);
+         AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = s.org_id AND c.is_demo = 0 AND c.is_practice = 0) LIMIT 1`, orgId, orgId);
     const trialEnds = hadTrial ? null : new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
     await run(env.DB, `INSERT INTO org_subscriptions (org_id, plan, trial_ends_at) VALUES (?, 'free', ?) ON CONFLICT (org_id) DO NOTHING`, orgId, trialEnds);
     row = await first(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
@@ -59,11 +59,14 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
 export const isVendor = (env: Env, email: string | null | undefined) =>
   !!email && (env.VENDOR_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
 
+/** Limits for a learning-only organisation, e.g. a class: a teacher plus students. */
+export const EDUCATION_LIMITS = { users: 50, branches: 5, companies: 10 } as const;
+
 const LIVE_AUTOPAY_STATES = ["active", "pending", "halted", "paused"];
 
-/** False for an organisation that holds only demo companies: there is nothing to subscribe for. */
+/** False for an organisation that holds only demo or practice companies: there is nothing to subscribe for. */
 export async function hasRealCompany(env: Env, orgId: string) {
-  return Boolean(await first(env.DB, `SELECT 1 FROM companies WHERE org_id = ? AND is_demo = 0 LIMIT 1`, orgId));
+  return Boolean(await first(env.DB, `SELECT 1 FROM companies WHERE org_id = ? AND is_demo = 0 AND is_practice = 0 LIMIT 1`, orgId));
 }
 
 /**
@@ -85,13 +88,18 @@ export async function autopayRequired(env: Env, orgId: string, email?: string | 
 
 const upgradeHint = (s: Subscription) => (s.status === "free" && s.paid_plan === null ? "Choose a plan in Settings → Plan & billing." : "Upgrade in Settings → Plan & billing.");
 
+/** Education mode: a practice company has every feature, whatever the plan. */
+const practiceCompany = (c: Context<AppEnv>) => Boolean(c.get("company")?.is_practice);
+
 export async function hasFeature(c: Context<AppEnv>, orgId: string, feature: Feature) {
+  if (practiceCompany(c)) return true;
   const s = await subscription(c.env, orgId);
   return !s.enforced || PLANS[s.plan].features.includes(feature);
 }
 
 /** Throws 402 when the organisation's plan does not include the feature. */
 export async function requireFeature(c: Context<AppEnv>, orgId: string, feature: Feature) {
+  if (practiceCompany(c)) return;
   const s = await subscription(c.env, orgId);
   if (!s.enforced || PLANS[s.plan].features.includes(feature)) return;
   throw new AppError(402, "PLAN_FEATURE", `${FEATURE_LABELS[feature]} is not included in the ${PLANS[s.plan].name} plan. ${upgradeHint(s)}`);
@@ -101,11 +109,12 @@ export async function requireFeature(c: Context<AppEnv>, orgId: string, feature:
 export async function requireCapacity(c: Context<AppEnv>, orgId: string, kind: "users" | "branches" | "companies", companyId?: string) {
   const s = await subscription(c.env, orgId);
   if (!s.enforced) return;
-  const limit = PLANS[s.plan].limits[kind];
+  // A learning-only organisation (practice companies, no real one) gets classroom-sized limits.
+  const limit = (await hasRealCompany(c.env, orgId)) ? PLANS[s.plan].limits[kind] : EDUCATION_LIMITS[kind];
   const sql = {
     users: [`SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?`, orgId],
     branches: [`SELECT COUNT(*) AS n FROM branches WHERE company_id = ? AND is_active = 1`, companyId ?? ""],
-    companies: [`SELECT COUNT(*) AS n FROM companies WHERE org_id = ? AND is_demo = 0`, orgId],
+    companies: [`SELECT COUNT(*) AS n FROM companies WHERE org_id = ? AND is_demo = 0 AND is_practice = 0`, orgId],
   }[kind] as [string, string];
   const used = (await first<{ n: number }>(c.env.DB, sql[0], sql[1]))?.n ?? 0;
   if (used + 1 > limit) {
@@ -117,7 +126,7 @@ export async function requireCapacity(c: Context<AppEnv>, orgId: string, kind: "
 export async function usage(env: Env, orgId: string) {
   const r = await first<{ users: number; companies: number; branches: number }>(env.DB,
     `SELECT (SELECT COUNT(*) FROM memberships WHERE org_id = ?) AS users,
-            (SELECT COUNT(*) FROM companies WHERE org_id = ? AND is_demo = 0) AS companies,
+            (SELECT COUNT(*) FROM companies WHERE org_id = ? AND is_demo = 0 AND is_practice = 0) AS companies,
             (SELECT COALESCE(MAX(n),0) FROM (SELECT COUNT(*) AS n FROM branches b JOIN companies co ON co.id = b.company_id WHERE co.org_id = ? AND b.is_active = 1 GROUP BY b.company_id)) AS branches`, orgId, orgId, orgId);
   return r ?? { users: 0, companies: 0, branches: 0 };
 }

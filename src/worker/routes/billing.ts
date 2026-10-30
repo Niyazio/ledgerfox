@@ -392,7 +392,7 @@ vendor.get("/orgs/:orgId/detail", async (c) => {
   const [members, companies, payments, notices, sub, subRow] = await Promise.all([
     all(c.env.DB, `SELECT u.id, u.name, u.email, u.username, m.role, u.created_at, u.last_login_at, u.login_count, u.email_verified_at, u.totp_enabled, u.is_disabled
        FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = ? ORDER BY m.role = 'owner' DESC, u.name`, orgId),
-    all(c.env.DB, `SELECT co.id, co.name, co.legal_name, co.tax_id, co.state_code, co.address, co.city, co.postal_code, co.phone, co.email, co.business_type, co.is_demo, co.created_at,
+    all(c.env.DB, `SELECT co.id, co.name, co.legal_name, co.tax_id, co.state_code, co.address, co.city, co.postal_code, co.phone, co.email, co.business_type, co.is_demo, co.is_practice, co.created_at,
          (SELECT COUNT(*) FROM documents d WHERE d.company_id = co.id) AS documents,
          (SELECT COUNT(*) FROM contacts ct WHERE ct.company_id = co.id) AS contacts,
          (SELECT COUNT(*) FROM items it WHERE it.company_id = co.id) AS items,

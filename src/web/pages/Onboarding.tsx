@@ -22,16 +22,20 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 
 export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, branding: BrandingValue) => void; busy: boolean; withOrg?: boolean }) {
   const [branding, setBranding] = useState<BrandingValue>({});
-  const [v, setV] = useState({ org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
+  const [v, setV] = useState({ practice: false, org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const company = { name: v.name, legal_name: v.legal_name || null, country: v.country, base_currency: v.base_currency, fiscal_year_start_month: Number(v.fiscal_year_start_month),
-      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type, upi_id: v.upi_id.trim() || null };
+      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type, upi_id: v.upi_id.trim() || null, ...(v.practice ? { is_practice: true } : {}) };
     onSubmit(withOrg ? { name: v.org || v.name, company } : company, branding);
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      <label className={`sm:col-span-2 flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${v.practice ? "border-orange-400 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30" : "border-[var(--border)]"}`}>
+        <input type="checkbox" className="mt-1" checked={v.practice} onChange={(e) => set("practice", e.target.checked)} />
+        <span><b>Practice company (education mode)</b> — for students, trainees and beginners. Free forever with every feature. Like Tally's educational mode, entries can be dated only the 1st, 2nd and last day of a month, printouts say "Practice", and it cannot be used for real business documents.</span>
+      </label>
       {withOrg && <Field label="Organisation name" hint="Groups your companies and team. You can add more companies later." className="sm:col-span-2">{(id) => <Input id={id} value={v.org} placeholder="e.g. Sharma Group" onChange={(e) => set("org", e.target.value)} />}</Field>}
       <fieldset className="sm:col-span-2">
         <legend className="mb-2 text-sm font-medium">What kind of business is it?</legend>
