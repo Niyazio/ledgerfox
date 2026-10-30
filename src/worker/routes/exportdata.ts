@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { all, batch } from "../lib/db";
+import { all, batch, first } from "../lib/db";
 import { audit, requirePerm } from "../lib/auth";
 
 const exportdata = new Hono<AppEnv>();
@@ -52,7 +52,12 @@ exportdata.get("/", async (c) => {
     company,
   };
   for (const [name, sql] of TABLES) out[name] = await all(c.env.DB, sql, company.id);
-  await batch(c.env.DB, [audit(c, "company.export", "company", company.id)]);
+  // The desktop app's automatic local copy runs every 15 minutes: record it in the audit trail once a day, not each time.
+  const auto = c.req.header("x-ledgerfox-local-copy") === "1";
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  if (!auto || !(await first(c.env.DB, `SELECT 1 FROM audit_logs WHERE company_id = ? AND user_id = ? AND action = 'company.local_copy' AND created_at >= ? LIMIT 1`, company.id, c.get("user").id, since))) {
+    await batch(c.env.DB, [audit(c, auto ? "company.local_copy" : "company.export", "company", company.id)]);
+  }
   return new Response(JSON.stringify(out), {
     headers: {
       "Content-Type": "application/json",
