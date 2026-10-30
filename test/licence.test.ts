@@ -87,6 +87,13 @@ describe("desktop app licence", () => {
     expect(await desktopLicenceState(desk)).toMatchObject({ plan: "free" });
   });
 
+  it("explains that the trial starts once auto-pay is set up on the website", async () => {
+    const { W, me, deskOwner } = await setup();
+    W.env.BILLING_REQUIRE_AUTOPAY = "true";
+    const r = (await deskOwner.post("/api/desktop/licence/connect", { login: me.email, password: "correct horse battery" })).json;
+    expect(r).toMatchObject({ connected: true, plan: "free", reason: "autopay_required" });
+  });
+
   it("asks which organisation when the account manages several, and only owners or admins on the computer may connect", async () => {
     const { W, me, desk, deskOwner, deskOrg } = await setup();
     await W.owner.post("/api/orgs", { name: "Second", company: { name: "Second Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" } });

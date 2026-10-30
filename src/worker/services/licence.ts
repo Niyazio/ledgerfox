@@ -25,6 +25,7 @@ export interface LicencePayload {
   issued_at: string;
   check_by: string;                // issued_at + OFFLINE_DAYS: re-check online before this
   device_id: string;
+  autopay_required?: boolean;      // trial not started yet: auto-pay must be set up on the website first
 }
 
 const enc = new TextEncoder();
@@ -85,7 +86,7 @@ export interface DesktopLicenceState {
   connected: boolean;
   plan: PlanId;
   status: "trial" | "active" | "grace" | "free";
-  reason: "not_connected" | "ok" | "plan_ended" | "check_overdue" | "invalid";
+  reason: "not_connected" | "ok" | "plan_ended" | "check_overdue" | "invalid" | "autopay_required";
   org_name: string | null;
   email: string | null;
   plan_until: string | null;
@@ -103,6 +104,7 @@ export async function desktopLicenceState(env: Env, now = Date.now()): Promise<D
   if (!p) return { ...base, connected: true, plan: "free", status: "free", reason: "invalid" };
   const info = { ...base, connected: true, org_name: p.org_name, email: p.email, plan_until: p.plan_until, check_by: p.check_by };
   if (Date.parse(p.check_by) < now) return { ...info, plan: "free", status: "free", reason: "check_overdue" };
+  if (p.autopay_required) return { ...info, plan: "free", status: "free", reason: "autopay_required" };
   if (p.plan === "free" || (p.plan_until && Date.parse(p.plan_until) < now)) return { ...info, plan: "free", status: "free", reason: "plan_ended" };
   const status = p.status === "trial" || p.status === "grace" ? p.status : "active";
   return { ...info, plan: status === "trial" ? TRIAL_PLAN : p.plan, status, reason: "ok" };

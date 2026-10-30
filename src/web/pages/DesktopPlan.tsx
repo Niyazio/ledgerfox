@@ -10,7 +10,7 @@ import { FEATURE_LABELS, PLANS, TRIAL_DAYS, type PlanId } from "@shared/plans";
 
 export interface LicenceState {
   connected: boolean; plan: PlanId; status: "trial" | "active" | "grace" | "free";
-  reason: "not_connected" | "ok" | "plan_ended" | "check_overdue" | "invalid";
+  reason: "not_connected" | "ok" | "plan_ended" | "check_overdue" | "invalid" | "autopay_required";
   org_name: string | null; email: string | null; plan_until: string | null; check_by: string | null;
   last_checked_at: string | null; last_error: string | null; server: string; offline_days: number;
 }
@@ -26,6 +26,7 @@ const day = (iso: string | null) => (iso ? fmtDate(iso.slice(0, 10)) : "—");
 export function licenceMessage(l: LicenceState) {
   if (l.reason === "not_connected") return `Free plan. Connect your LedgerFox account to use your plan, or start a ${TRIAL_DAYS}-day free trial.`;
   if (l.reason === "check_overdue") return `Free plan until this computer checks your plan again: connect to the internet (it needs a check at least every ${l.offline_days} days).`;
+  if (l.reason === "autopay_required") return `Start your ${TRIAL_DAYS}-day free trial: set up auto-pay on the LedgerFox website (₹5 check, refunded; nothing is charged until the trial ends), then click “Check now”.`;
   if (l.reason === "plan_ended") return "Free plan: your trial or plan has ended. Renew on the LedgerFox website and click “Check now”.";
   if (l.reason === "invalid") return "The licence on this computer could not be verified. Connect your LedgerFox account again.";
   return null;
@@ -102,7 +103,16 @@ export function DesktopPlanTab() {
         </Card>
       ) : (
         <Card title="Connect your LedgerFox account">
-          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>. One subscription covers the website and your computers. New here? Create a free account and your company on the website first, then connect: you get a {TRIAL_DAYS}-day free trial.</p>
+          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>. One subscription covers the website and your computers.</p>
+          <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm dark:border-brand-900 dark:bg-brand-950/30">
+            <p className="font-medium">New to LedgerFox? Start your {TRIAL_DAYS}-day free trial</p>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+              <li>Create your free account and company on the website.</li>
+              <li>Set up auto-pay there: Razorpay takes ₹5 to check it and refunds it; nothing is charged until the trial ends.</li>
+              <li>Come back here and connect this computer with the same email and password.</li>
+            </ol>
+            <a className="mt-2 inline-flex rounded-lg bg-brand-700 px-3 py-1.5 font-medium text-white hover:bg-brand-800" href={`${data.server}/register`} target="_blank" rel="noreferrer">Create free account</a>
+          </div>
           <form onSubmit={connect} className="grid gap-3 sm:grid-cols-2">
             {problem && <Alert className="sm:col-span-2">{problem}</Alert>}
             <Field label="Email or username">{(id) => <Input id={id} required autoComplete="username" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} />}</Field>
