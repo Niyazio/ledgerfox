@@ -20,7 +20,7 @@ beforeAll(async () => {
   writeFileSync(join(web, "index.html"), "<!doctype html><title>LedgerFox</title>");
   writeFileSync(join(web, "assets", "app.js"), "console.log(1)");
   writeFileSync(join(dir, "secret.txt"), "do not serve");
-  srv = await startServer({ dataFile: join(dir, "data", "Test.ledgerfox"), webDir: web, migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0, env: { PBKDF2_ITERATIONS: "1000" } });
+  srv = await startServer({ dataFile: join(dir, "data", "Test.ledgerfox"), webDir: web, migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0, env: { PBKDF2_ITERATIONS: "1000", DESKTOP_LICENSING: "off" } }); // licensing has its own tests (licence.test.ts)
   base = `http://127.0.0.1:${srv.port}`;
 });
 
@@ -139,7 +139,7 @@ describe("desktop server", () => {
   it("data survives a restart (it is in the file, not in memory)", async () => {
     const file = join(dir, "data", "Test.ledgerfox");
     await srv.close();
-    srv = await startServer({ dataFile: file, webDir: join(dir, "web"), migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0 });
+    srv = await startServer({ dataFile: file, webDir: join(dir, "web"), migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0, env: { DESKTOP_LICENSING: "off" } });
     base = `http://127.0.0.1:${srv.port}`;
     const n = srv.db.raw.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
     expect(n.n).toBe(3);

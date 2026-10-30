@@ -383,7 +383,7 @@ export default function Settings() {
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
-        ...(me?.edition === "cloud" ? [{ value: "billing" as Tab, label: "Plan & billing" }] : []),
+        ...(me?.edition === "cloud" || me?.edition === "desktop" ? [{ value: "billing" as Tab, label: "Plan & billing" }] : []),
       ]} />
       {tab === "company" && <CompanyTab />}
       {tab === "members" && <MembersTab />}

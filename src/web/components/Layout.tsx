@@ -18,6 +18,7 @@ import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { ThemePicker } from "./ThemePicker";
+import { DesktopLicenceBanner } from "../pages/DesktopPlan";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -327,6 +328,7 @@ function Shell() {
         {settings && me?.edition !== "offline" && <RecurringRunner />}
         {settings && me?.edition === "cloud" && <PlanBanner />}
         {settings && me?.edition === "cloud" && <TrialGate />}
+        {settings && me?.edition === "desktop" && <DesktopLicenceBanner />}
         {me?.edition === "cloud" && <VerifyEmailBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>

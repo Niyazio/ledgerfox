@@ -12,6 +12,7 @@ import type { Role } from "@shared/permissions";
 import { autopayRequired, billingOn, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
+import { licensingOn } from "../services/licence";
 
 /** Subscriptions for the hosted edition: plan status, checkout through Razorpay, and the vendor's subscriber admin. */
 const billing = new Hono<AppEnv>();
@@ -61,6 +62,11 @@ async function member(c: Context<AppEnv>, orgId: string) {
 org.get("/:orgId", async (c) => {
   const orgId = c.req.param("orgId");
   const m = await member(c, orgId);
+  // Desktop app: the plan comes from the computer's licence; buying happens on the website.
+  if (licensingOn(c.env)) {
+    const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
+    return c.json({ enabled: true, desktop: true, subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: false, payments: [], online: false, autopay: null, account_id: orgId, autopay_required: false, trial_days: TRIAL_DAYS, demo_only: false, role: m.role });
+  }
   const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
   const payments = m.role === "owner"
     ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, period_start, period_end, created_at, paid_at, provider_payment_id, provider_order_id, provider_subscription_id FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
@@ -399,7 +405,8 @@ vendor.get("/orgs/:orgId/detail", async (c) => {
     subscription(c.env, orgId),
     first(c.env.DB, `SELECT * FROM org_subscriptions WHERE org_id = ?`, orgId),
   ]);
-  return c.json({ organisation: org, members, companies, payments, notices, subscription: sub, subscription_row: subRow });
+  const devices = await all(c.env.DB, `SELECT d.id, d.device_name, d.created_at, d.last_seen_at, d.revoked_at, u.email FROM desktop_devices d JOIN users u ON u.id = d.user_id WHERE d.org_id = ? ORDER BY d.created_at DESC LIMIT 100`, orgId);
+  return c.json({ organisation: org, members, companies, payments, notices, subscription: sub, subscription_row: subRow, devices });
 });
 
 /** Every sign-in account, with the organisations it belongs to. */

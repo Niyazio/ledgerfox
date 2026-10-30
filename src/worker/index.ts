@@ -32,6 +32,7 @@ import { verifyPublic, verifyToken } from "./routes/verify";
 import backups from "./routes/backups";
 import { VERSION } from "./version";
 import billing from "./routes/billing";
+import { licenceCloud, licenceDesktop } from "./routes/licence";
 import { autopayRequired, hasFeature, requireFeature } from "./services/billing";
 
 
@@ -100,6 +101,8 @@ app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
 app.route("/api/backups", backups);
 app.route("/api/billing", billing);
+app.route("/api/licence", licenceCloud);
+app.route("/api/desktop/licence", licenceDesktop);
 app.route("/api/clients", clients);
 
 const company = new Hono<AppEnv>();

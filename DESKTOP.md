@@ -1,6 +1,6 @@
 # LedgerFox Desktop (Windows, macOS, Linux)
 
-The desktop edition runs LedgerFox entirely on one computer. It is free (MIT licence) and needs no account,
+The desktop edition runs LedgerFox entirely on one computer. The code is open source (MIT licence). The official app uses the same plans as the website: connect your LedgerFox account in Settings → Plan & billing to use your plan or the 30-day trial; otherwise it runs on the Free plan. It works offline, and checks the plan online at least every 15 days.
 subscription or internet connection. It uses the same accounting engine, database rules and screens as the cloud
 edition; the full automated test suite runs against both (`npm test` and `npm run test:desktop`).
 

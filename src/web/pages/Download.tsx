@@ -45,7 +45,7 @@ export default function Download() {
       </header>
       <main className="mx-auto max-w-4xl px-4 pb-16 pt-6 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Download LedgerFox for your computer</h1>
-        <p className="mt-3 text-lg muted">Free. Your accounts are saved in a file on your computer, in a folder you choose. Works without internet; phones on the same Wi-Fi can use it too.</p>
+        <p className="mt-3 text-lg muted">Free to download, with a 30-day free trial of every feature: sign in with your LedgerFox account in Settings → Plan & billing; one plan covers the website and your computers. Your accounts are saved in a file on your computer, in a folder you choose. Works without internet (your plan is checked online at least every 15 days); phones on the same Wi-Fi can use it too.</p>
         {!loading && !data?.available && (
           <p className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             The installers are being prepared and will appear here soon. You can use LedgerFox online in the meantime.
@@ -60,7 +60,7 @@ export default function Download() {
         {data?.releases_page && <p className="mt-3 text-sm muted">Linux and previous versions: <a className="underline" href={data.releases_page}>all downloads</a>.</p>}
         <section className="card mt-10 p-5">
           <h2 className="flex items-center gap-2 font-semibold"><ShieldAlert className="h-5 w-5 text-amber-500" />First time you open it</h2>
-          <p className="mt-2 text-sm muted">LedgerFox is free and not code-signed (signing certificates are paid), so your computer warns you once.</p>
+          <p className="mt-2 text-sm muted">The installer is not code-signed yet (signing certificates are paid), so your computer warns you once.</p>
           <ul className="mt-3 space-y-2 text-sm">
             <li><b>Windows:</b> if you see "Windows protected your PC", click <b>More info → Run anyway</b>.</li>
             <li><b>Mac:</b> open the .dmg and drag LedgerFox to Applications. If macOS says it cannot be opened, go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</li>

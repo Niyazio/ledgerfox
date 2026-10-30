@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, run, stmt, nowIso } from "../lib/db";
@@ -85,13 +86,13 @@ auth.post("/register", async (c) => {
   return c.json({ user: { id, email: input.email, username: input.username ?? null, name: input.name }, recovery_codes: codes, verification_sent }, 201);
 });
 
-auth.post("/login", async (c) => {
-  // `login` is a username or an email address (`email` is accepted for older clients).
-  const input = await body(c, z.object({
-    login: z.string().trim().toLowerCase().min(1).max(254).optional(), email: z.string().trim().toLowerCase().max(254).optional(), password: z.string().min(1).max(200),
-    // Second step for accounts with two-factor sign-in: a 6-digit app code, or one of the recovery codes.
-    totp: z.string().trim().max(10).optional(), recovery_code: z.string().trim().max(40).optional(),
-  }));
+type LoginUser = { id: string; email: string; username: string | null; name: string; password_hash: string; password_salt: string; password_iters: number; is_disabled: number; must_change_password: number; totp_enabled: number; totp_secret: string | null; totp_last_step: number | null };
+
+/**
+ * Username/email + password (+ two-factor code) check with the sign-in rate limits. Shared by the web sign-in and the
+ * desktop app's "connect your LedgerFox account". Throws on any failure without revealing whether the account exists.
+ */
+export async function checkCredentials(c: Context<AppEnv>, input: { login?: string; email?: string; password: string; totp?: string; recovery_code?: string }, opts: { skipTotp?: boolean } = {}): Promise<LoginUser> {
   const login = input.login ?? input.email;
   if (!login) throw badRequest("Enter your username or email");
   const ipOk = await rateLimit(c.env.DB, `login-ip:${clientIp(c)}`, 30, 900);
@@ -106,10 +107,11 @@ auth.post("/login", async (c) => {
     throw unauthorized("Invalid username or password");
   }
   if (user.is_disabled || !(await verifyPassword(input.password, user))) throw unauthorized("Invalid username or password");
-  // A default or temporary password may only be used on the computer running LedgerFox, never over the network.
-  if (user.must_change_password && c.env.APP_ENV === "desktop" && !isLocalRequest(c)) {
-    throw forbidden("This account still has its one-time password. Sign in on the main computer first and change it.");
-  }
+  if (!opts.skipTotp) await checkSecondFactor(c, user, input);
+  return user;
+}
+
+async function checkSecondFactor(c: Context<AppEnv>, user: LoginUser, input: { totp?: string; recovery_code?: string }) {
   if (user.totp_enabled && user.totp_secret) {
     if (!input.totp && !input.recovery_code) throw new AppError(401, "TOTP_REQUIRED", "Enter the 6-digit code from your authenticator app");
     if (input.totp) {
@@ -124,6 +126,21 @@ auth.post("/login", async (c) => {
       if (!used.meta.changes) throw new AppError(401, "TOTP_INVALID", "That recovery code is not valid or was already used");
     }
   }
+}
+
+auth.post("/login", async (c) => {
+  // `login` is a username or an email address (`email` is accepted for older clients).
+  const input = await body(c, z.object({
+    login: z.string().trim().toLowerCase().min(1).max(254).optional(), email: z.string().trim().toLowerCase().max(254).optional(), password: z.string().min(1).max(200),
+    // Second step for accounts with two-factor sign-in: a 6-digit app code, or one of the recovery codes.
+    totp: z.string().trim().max(10).optional(), recovery_code: z.string().trim().max(40).optional(),
+  }));
+  const user = await checkCredentials(c, input, { skipTotp: true });
+  // A default or temporary password may only be used on the computer running LedgerFox, never over the network.
+  if (user.must_change_password && c.env.APP_ENV === "desktop" && !isLocalRequest(c)) {
+    throw forbidden("This account still has its one-time password. Sign in on the main computer first and change it.");
+  }
+  await checkSecondFactor(c, user, input);
   // Transparently upgrade hashes when the configured work factor increases.
   if (user.password_iters < iterations(c.env)) {
     const h = await hashPassword(input.password, iterations(c.env));
