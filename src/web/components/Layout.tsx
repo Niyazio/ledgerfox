@@ -135,7 +135,7 @@ function LangPicker() {
   const { lang, t } = useLang();
   return (
     <select aria-label={t("Language")} title={t("Language")} value={lang} onChange={(e) => setLang(e.target.value as Lang)}
-      className="rounded-lg border-0 bg-transparent py-1 pl-1 pr-6 text-sm hover:bg-[var(--surface-2)]">
+      className="w-14 rounded-lg border-0 bg-transparent py-1 pl-1 pr-5 text-sm hover:bg-[var(--surface-2)] sm:w-auto sm:pr-6">
       {LANGS.map((l) => <option key={l.value} value={l.value} title={l.label}>{l.short}</option>)}
     </select>
   );
@@ -206,8 +206,8 @@ function CompanySwitcher() {
   const [open, setOpen] = useState(false);
   const companies = me?.companies ?? [];
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="flex max-w-[16rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium hover:bg-[var(--surface-2)]" aria-haspopup="listbox" aria-expanded={open}>
+    <div className="relative min-w-0">
+      <button onClick={() => setOpen(!open)} className="flex min-w-0 max-w-[16rem] items-center gap-1 rounded-lg px-1.5 py-1.5 text-sm font-medium hover:bg-[var(--surface-2)] sm:gap-2 sm:px-2" aria-haspopup="listbox" aria-expanded={open}>
         <span className="truncate">{settings?.company.name ?? "…"}</span>
         <ChevronDown className="h-4 w-4 shrink-0 muted" />
       </button>
@@ -324,6 +324,7 @@ function Shell() {
             <div className="flex items-center justify-between px-4 py-3"><Wordmark brand={me?.brand} />
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded p-1 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div>
             <Sidebar onNavigate={() => setMobileOpen(false)} />
+            <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-2 text-sm"><span className="muted">Theme &amp; updates</span><span className="flex items-center gap-1"><ThemePicker /><UpdateCenter /></span></div>
           </aside>
         </div>
       )}
@@ -334,12 +335,15 @@ function Shell() {
             <CompanySwitcher />
             <WorkContext />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
             <OfflineStatus companyId={companyId} />
-            <Shortcuts items={GOTO_ITEMS} />
-            <UpdateCenter />
+            {/* On phones: keyboard shortcuts are not needed, and theme / updates move into the menu, so the bar fits. */}
+            <div className="hidden items-center gap-1 sm:flex">
+              <Shortcuts items={GOTO_ITEMS} />
+              <UpdateCenter />
+            </div>
             <LangPicker />
-            <ThemePicker />
+            <div className="hidden sm:block"><ThemePicker /></div>
             {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}
             <span className="hidden max-w-[12rem] truncate px-2 text-sm muted sm:inline">{me?.user?.name}</span>
             <button onClick={signOut} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Sign out" title="Sign out"><LogOut className="h-4 w-4" /></button>

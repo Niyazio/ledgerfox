@@ -73,6 +73,12 @@ For students, trainees and beginners: tick **Practice company (education mode)**
 - **No Free plan:** after the grace period, the customer sees "Renew your plan to continue". They can still view, print and export everything, but cannot add or change entries until they renew. **Data is never deleted.** Practice companies (education mode) stay free.
 - **Changing the plan of a running auto-renew:** turn it off, then choose the new plan. The new auto-renew starts when the current period ends.
 
+## Business types
+
+When creating a company, choose the type of business. LedgerFox adds suitable accounts, units, sample items, HSN codes and GST rates. Types: general, supermarket / retail, jewellery / gold & silver, clothing / textiles, mobile / electronics, medical store / pharmacy, hardware / paints, automobile garage, salon / spa / gym, agri inputs, furniture, restaurant / café, software / IT, school / coaching, clinic / hospital, manufacturing, wholesale, construction, hotel, professional services, NGO / trust, transport, and real estate / rentals.
+
+**Jewellery shops:** items are priced per gram (22K, 18K, 24K, silver). Enter the weight as the quantity, to 3 decimals (12.345). Add making charges as a second line (also per gram, or a fixed amount). Update the day's gold rate in Products & stock. Old gold taken in exchange: record it as a purchase bill from the same customer (set the contact as "both" customer and supplier; account "Old Gold Purchased (Exchange)"). Their balance then shows only the difference to collect. GST rates and HSN codes are defaults: check them with your accountant.
+
 ## Helping a customer (admin panel, https://ledgerfox.niyazio.com/vendor)
 
 - **"I forgot my password / ID":** Accounts tab → search their name → the sign-in ID is shown. Click **Reset password** and send them the one-time password (WhatsApp or phone). They choose a new one when they sign in. Nobody can see an old password.

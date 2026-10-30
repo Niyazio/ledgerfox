@@ -7,7 +7,7 @@
  * Data files from older versions (one SQLite file, e.g. C:\LedgerFox\MyBusiness.ledgerfox) open view-only, to look
  * things up and export them; the same server as the cloud version runs on this computer for that.
  */
-import { app, BrowserWindow, Menu, dialog, shell, net, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, Menu, dialog, shell, net, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -52,6 +52,8 @@ const localUrl = () => `http://127.0.0.1:${server?.port ?? DEFAULT_PORT}`;
 /** Pages the app window may show; everything else opens in the normal browser. */
 const appOrigin = () => (online() ? ONLINE_URL : localUrl());
 const inApp = (url: string) => url === appOrigin() || url.startsWith(`${appOrigin()}/`);
+/** Links that open in the computer's own apps: the browser, email, WhatsApp, phone and UPI apps. */
+const external = (url: string) => /^(https?:|mailto:|tel:|whatsapp:|upi:)/i.test(url);
 
 function lanUrls(): string[] {
   if (!server || !config.lan) return [];
@@ -367,10 +369,23 @@ async function createWindow() {
     if (inApp(url)) return { action: "allow" };
     // Online mode: Razorpay's payment window (UPI, bank and card checks) opens as a pop-up of the website.
     if (online() && /^https:\/\/([a-z0-9-]+\.)*razorpay\.com\//.test(url)) return { action: "allow" };
-    if (/^https?:/.test(url)) void shell.openExternal(url);
+    if (external(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (e, url) => { if (!inApp(url)) { e.preventDefault(); if (/^https?:/.test(url)) void shell.openExternal(url); } });
+  win.webContents.on("will-navigate", (e, url) => { if (!inApp(url)) { e.preventDefault(); if (external(url)) void shell.openExternal(url); } });
+  // Camera (barcode / QR scanning) and copy-to-clipboard for LedgerFox's own pages only; nothing else is granted.
+  // macOS also asks the person once for camera access.
+  const ses = win.webContents.session;
+  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    const own = inApp(details.requestingUrl ?? wc.getURL());
+    if (own && permission === "media" && !(details as { mediaTypes?: string[] }).mediaTypes?.includes("audio")) {
+      if (process.platform === "darwin") void systemPreferences.askForMediaAccess("camera").then(callback, () => callback(false));
+      else callback(true);
+      return;
+    }
+    callback(own && ["clipboard-sanitized-write", "clipboard-read", "fullscreen"].includes(permission));
+  });
+  ses.setPermissionCheckHandler((_wc, permission, origin) => inApp(origin) && ["media", "clipboard-sanitized-write", "clipboard-read", "fullscreen"].includes(permission));
   // Online mode, no internet, and the website not yet cached on this computer.
   win.webContents.on("did-fail-load", (_e, code, _desc, url, isMainFrame) => {
     if (isMainFrame && online() && code !== -3 && url.startsWith(ONLINE_URL)) void showOfflinePage();
@@ -378,6 +393,8 @@ async function createWindow() {
   // Downloads (backups, Excel, PDF) ask where to save, starting in Documents.
   win.webContents.session.on("will-download", (_e, item) => {
     item.setSaveDialogOptions({ title: "Save to this computer", defaultPath: join(app.getPath("documents"), item.getFilename()) });
+    // A bill or report saved as PDF: show it in its folder, ready to drag into WhatsApp or attach to an email.
+    item.once("done", (_ev, state) => { if (state === "completed" && /\.pdf$/i.test(item.getSavePath())) shell.showItemInFolder(item.getSavePath()); });
   });
   win.on("closed", () => { win = null; });
 }

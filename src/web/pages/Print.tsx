@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import QRCode from "qrcode";
 import { bilingual, type Lang } from "@shared/i18n";
@@ -59,17 +59,35 @@ function Sheet({ format, name, text, children }: { format: Format; name?: string
   const thermal = format.startsWith("thermal");
   const { settings } = useCompany();
   const practice = Boolean(settings?.company.is_practice);
+  // On a phone the A4 / A5 page is shrunk to the screen width (like a PDF viewer); printing and the PDF stay full size.
+  const fit = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    const box = fit.current;
+    if (!box) return;
+    const measure = () => {
+      const sheet = box.querySelector<HTMLElement>(".print-sheet");
+      // The screen width (minus a small margin), not the container: the container grows to fit a wide sheet.
+      const avail = Math.min(box.parentElement?.clientWidth ?? Infinity, document.documentElement.clientWidth - 16);
+      if (sheet?.offsetWidth) setZoom(Math.min(1, avail / sheet.offsetWidth));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.documentElement);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [format]);
   return (
-    <>
-      <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } }`}</style>
+    <div ref={fit} className="print-fit" style={{ zoom }}>
+      <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } .print-fit { zoom: 1 !important; } }`}</style>
       <div data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
-        style={{ width: f.width, maxWidth: "100%", minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
+        style={{ width: f.width, minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
         {practice && <p className="mb-2 border-2 border-orange-600 py-1 text-center text-[11px] font-black uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
         {children}
         {practice && <p className="mt-3 border-t-2 border-orange-600 pt-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">For learning only · LedgerFox education mode · not valid for any business or tax purpose</p>}
         {practice && <PracticeWatermark small={thermal} />}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -454,7 +472,9 @@ function PrintInner() {
       const p = await makePdf();
       if (mode === "download") { await saveFile(p.blob, p.name); return; }
       const r = await shareFile(p.blob, p.name, { title: p.name, text: p.text });
-      if (r === "saved") toast("info", "PDF saved. Attach it in WhatsApp, email or any app (this browser cannot share files directly).");
+      if (r === "saved") toast("info", /Electron\//.test(navigator.userAgent)
+        ? "PDF saved and shown in its folder: drag it into WhatsApp, or attach it to an email."
+        : "PDF saved. Attach it in WhatsApp, email or any app (this browser cannot share files directly).");
     } catch (e) {
       if ((e as DOMException)?.name === "NotAllowedError") toast("info", "The PDF is ready — tap “Share PDF” once more to send it.");
       else toast("error", (e as Error).message || "Could not make the PDF");
