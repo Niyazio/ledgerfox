@@ -44,6 +44,7 @@ async function issue(c: Context<AppEnv>, orgId: string, user: { id: string; emai
     plan: needsAutopay || sub.status === "free" ? "free" : sub.plan,
     status: needsAutopay ? "free" : sub.status === "unlimited" ? "active" : sub.status,
     plan_until: until, issued_at: now.toISOString(), check_by: new Date(now.getTime() + OFFLINE_DAYS * DAY).toISOString(), device_id: deviceId,
+    ...(needsAutopay ? { autopay_required: true } : {}),
   };
   return { token: await signLicence(c.env, payload), autopay_required: needsAutopay };
 }
