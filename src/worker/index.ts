@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import type { AppEnv } from "./env";
+import type { AppEnv, Env } from "./env";
+import { TRIAL_DAYS } from "@shared/plans";
 import { AppError, fromDbError } from "./lib/errors";
 import { requireAuth, requireCompany } from "./lib/auth";
 import { idempotency } from "./lib/idempotency";
@@ -33,7 +34,8 @@ import backups from "./routes/backups";
 import { VERSION } from "./version";
 import billing from "./routes/billing";
 import { licenceCloud, licenceDesktop } from "./routes/licence";
-import { autopayRequired, hasFeature, requireFeature } from "./services/billing";
+import { autopayRequired, hasFeature, renewRequired, requireFeature } from "./services/billing";
+import { desktopLicenceState, licensingOn } from "./services/licence";
 
 
 const app = new Hono<AppEnv>();
@@ -105,6 +107,16 @@ app.route("/api/licence", licenceCloud);
 app.route("/api/desktop/licence", licenceDesktop);
 app.route("/api/clients", clients);
 
+async function renewMessage(env: Env) {
+  const keep = "Your data is safe: you can still view, print and export everything.";
+  if (!licensingOn(env)) return `Your free trial or plan has ended. Renew in Settings → Plan & billing to continue adding entries. ${keep}`;
+  const l = await desktopLicenceState(env);
+  if (l.reason === "not_connected") return `Sign in to your LedgerFox account in Settings → Plan & billing to continue (new accounts get a ${TRIAL_DAYS}-day free trial). ${keep}`;
+  if (l.reason === "check_overdue") return `Connect this computer to the internet so it can check your plan, then click “Check now” in Settings → Plan & billing. ${keep}`;
+  if (l.reason === "autopay_required") return `Start your free trial on the LedgerFox website first (set up auto-pay), then click “Check now” in Settings → Plan & billing. ${keep}`;
+  return `Your free trial or plan has ended. Renew on the LedgerFox website, then click “Check now” in Settings → Plan & billing. ${keep}`;
+}
+
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
 // Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
@@ -113,6 +125,9 @@ company.use("*", async (c, next) => {
   const setup = /^\/api\/c\/[^/]+\/settings(\/|$)/.test(c.req.path) || c.req.path.endsWith("/recurring/run");
   if (c.req.method !== "GET" && !setup && !c.get("company").is_practice && (await autopayRequired(c.env, c.get("company").org_id, c.get("user").email))) {
     throw new AppError(402, "AUTOPAY_REQUIRED", "Start your free trial first: set up auto-pay in Settings → Plan & billing. Razorpay takes ₹5 to check your UPI or card and refunds it; nothing is charged until the trial ends.");
+  }
+  if (c.req.method !== "GET" && !setup && !c.get("company").is_practice && (await renewRequired(c.env, c.get("company").org_id, c.get("user").email))) {
+    throw new AppError(402, "RENEW_REQUIRED", await renewMessage(c.env));
   }
   await next();
 });

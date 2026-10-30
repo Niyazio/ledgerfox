@@ -1,6 +1,6 @@
 # Selling LedgerFox subscriptions
 
-Subscriptions apply to the hosted website **and the desktop app** (one plan covers both). The desktop app connects to the customer's LedgerFox account in Settings → Plan & billing and receives a signed licence for that organisation's plan; without one, or after 15 days without an online check, it runs on the Free plan (nothing is locked or deleted). The phone's offline copy is view-only and never limited. Self-built copies can set `DESKTOP_LICENSING=off`.
+Subscriptions apply to the hosted website **and the desktop app** (one plan covers both). The desktop app connects to the customer's LedgerFox account in Settings → Plan & billing and receives a signed licence for that organisation's plan; without one, or after 15 days without an online check, new entries wait until it is connected or renewed (everything stays viewable and exportable; nothing is deleted). In online mode the desktop app simply shows the website. The phone's offline copy is view-only and never limited. Self-built copies can set `DESKTOP_LICENSING=off`.
 **Billing is off until you switch it on.** While it is off, every organisation has every feature.
 
 ## Plans (edit `src/shared/plans.ts`)
@@ -17,10 +17,10 @@ Prices exclude GST (`BILLING_GST_PERCENT`, default 18).
 How plans behave:
 
 - **Trial.** A new organisation gets **30 days** of Business. With `BILLING_REQUIRE_AUTOPAY=true` (on for ledgerfox.niyazio.com), the owner first chooses the plan to continue with and approves auto-pay. Razorpay takes ₹5 to check the UPI or card and refunds it, and the first real charge is when the trial ends. Until then everything can be viewed, but new entries wait. The vendor's own staff are never held back.
-- **Grace period.** When a paid period ends, there are 7 days of grace. After that the organisation drops to the Free plan.
-- **Free plan.** Billing, accounts, reports and data export keep working. Data is never deleted or locked. Creating more users, branches or companies than the plan allows, and the paid features, answer with a clear "upgrade" message.
+- **Grace period.** When a paid period ends, there are 7 days of grace. After that, renewal is required.
+- **No Free plan.** When the trial or the paid period plus grace has ended, the organisation's real companies can still be viewed, printed and exported, but adding or changing entries answers `402 RENEW_REQUIRED` and the app shows a "Renew your plan to continue" screen. Company settings stay editable. Data is never deleted. Practice (education mode) companies, demo-only organisations and the vendor's own organisation are never held back.
 - **Payment.** Two ways, both through Razorpay's own window:
-  - **Auto-renew** (ticked by default): the owner approves a UPI AutoPay, card or bank mandate once, and Razorpay charges each month or year until it is turned off in Plan & billing. If a trial or paid period is still running, the first charge waits until it ends, so nobody pays twice for the same days. Failed charges are retried by Razorpay; after that the plan runs into the 7-day grace period and then the Free plan.
+  - **Auto-renew** (ticked by default): the owner approves a UPI AutoPay, card or bank mandate once, and Razorpay charges each month or year until it is turned off in Plan & billing. If a trial or paid period is still running, the first charge waits until it ends, so nobody pays twice for the same days. Failed charges are retried by Razorpay; after that the plan runs into the 7-day grace period and then renewal is required.
   - **Pay once**: a prepaid month or year (UPI, cards, net banking). Renewing the same plan adds the new period to the end of the current one.
 
 ## What you need to do (once)
@@ -78,7 +78,7 @@ Practice companies (`companies.is_practice = 1`) are free with every feature and
 
 - **Connect:** the owner or an admin on the computer opens Settings → Plan & billing and signs in with their LedgerFox website account (same password, two-factor and rate limits as the website). If they manage several organisations, they choose one.
 - **The licence:** the website issues a licence signed with an Ed25519 key. The key is created on first use and stored in the `licence_keys` table; its public half is sent to the computer when it connects. The licence holds the plan, its end date (trial end, or paid-until plus 7 days of grace) and a check-by date 15 days ahead.
-- **Checks:** the computer verifies the signature offline, and refreshes the licence in the background at most every 6 hours when it is online. An edited licence fails the signature check and the computer falls back to the Free plan.
+- **Checks:** the computer verifies the signature offline, and refreshes the licence in the background at most every 6 hours when it is online. An edited licence fails the signature check and the computer asks to connect again.
 - **On the website:** each connected computer appears in the `desktop_devices` table and in the admin panel's organisation details. Set `revoked_at` to disconnect one; it keeps its last licence only until its check-by date.
 - **Limits:** the source code is open, so someone who builds LedgerFox themselves can switch licensing off. The official installers enforce it.
 

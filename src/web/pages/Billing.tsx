@@ -22,8 +22,10 @@ interface BillingInfo {
   autopay: { id: string; status: string; plan: string; interval: Interval; total: number } | null;
   account_id: string;
   autopay_required?: boolean;
+  renew_required?: boolean;
   trial_days?: number;
   demo_only?: boolean;
+  role?: string;
 }
 
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Last charge failed — Razorpay is retrying", halted: "Stopped after failed charges", paused: "Paused", cancelled: "Off", completed: "Finished" };
@@ -38,7 +40,7 @@ const goCheckout = (url: string) => { window.location.assign(url); };
 /** Largest amount a UPI AutoPay mandate can charge without extra approval (paise). */
 const UPI_AUTOPAY_LIMIT = 15_000_00;
 
-const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", grace: "Payment due", free: "Free plan", unlimited: "Unlimited" };
+const STATUS: Record<string, string> = { trial: "Free trial", active: "Active", grace: "Payment due", free: "Ended — renew to continue", unlimited: "Unlimited" };
 
 /** Settings → Plan & billing. */
 export function PlanBillingTab() {
@@ -64,11 +66,11 @@ function CloudPlanTab() {
     <div className="space-y-4">
       <Card title="Your plan">
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-xl font-semibold">{current.name}</p><Badge color={s.status === "active" ? "green" : s.status === "grace" || s.status === "free" ? "amber" : "blue"}>{STATUS[s.status]}</Badge>
+          <p className="text-xl font-semibold">{s.status === "free" ? "No active plan" : current.name}</p><Badge color={s.status === "active" ? "green" : s.status === "grace" || s.status === "free" ? "amber" : "blue"}>{STATUS[s.status]}</Badge>
           {s.status === "trial" && <span className="text-sm muted">{s.days_left} days left — every feature of the Business plan.</span>}
           {s.status === "active" && <span className="text-sm muted">Paid until {fmtDate(s.paid_until!.slice(0, 10))} ({s.interval})</span>}
           {s.status === "grace" && <span className="text-sm text-amber-700 dark:text-amber-300">Your plan ended on {fmtDate(s.paid_until!.slice(0, 10))}. Renew within {s.days_left} days to keep its features.</span>}
-          {s.status === "free" && <span className="text-sm muted">Billing, accounts and reports keep working. Choose a plan for more users, branches, POS, payroll and GST returns.</span>}
+          {s.status === "free" && <span className="text-sm text-amber-700 dark:text-amber-300">Your free trial or plan has ended. Choose a plan below to continue adding entries. You can still view, print and export everything.</span>}
         </div>
         {data.autopay && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -177,6 +179,56 @@ export function TrialGate() {
   );
 }
 
+/**
+ * There is no Free plan: when the trial or plan has ended (or the desktop app has no valid licence) this asks to
+ * renew. It can be put aside to look things up, view and export; new entries are held by the server until renewal.
+ */
+export function RenewGate() {
+  const { settings, id } = useCompany();
+  const { me } = useSession();
+  const navigate = useNavigate();
+  const { data, reload } = useApi<BillingInfo>(settings ? `/api/billing/org/${settings.company.org_id}` : null);
+  const [later, setLater] = useState(() => { try { return sessionStorage.getItem("lf-renew-later") === "1"; } catch { return false; } });
+  useEffect(() => {
+    const on = () => void reload();
+    window.addEventListener("ledgerfox-licence", on);
+    return () => window.removeEventListener("ledgerfox-licence", on);
+  }, [reload]);
+  if (!data?.renew_required || settings?.company.is_practice) return null;
+  const desktop = me?.edition === "desktop";
+  const owner = desktop ? data.role === "owner" || data.role === "admin" : data.can_buy;
+  const go = () => { setLater(true); navigate(`/app/${id}/settings?tab=billing`); };
+  const bar = (
+    <div className="no-print border-b border-red-300 bg-red-50 px-4 py-1.5 text-center text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+      {desktop ? "Sign in or renew your plan to continue adding entries." : "Your plan has ended. Renew to continue adding entries."} Viewing and exports still work.{" "}
+      <Link className="font-medium underline" to={`/app/${id}/settings?tab=billing`}>{desktop ? "Plan & billing" : "Renew now"}</Link>
+    </div>
+  );
+  // The desktop app has its own, more specific reminder bar (DesktopLicenceBanner).
+  if (later) return desktop ? null : bar;
+  return <>
+    {!desktop && bar}
+    <div className="no-print fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="renew-title">
+      <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
+        <h2 id="renew-title" className="text-xl font-semibold">{desktop && data.subscription.status === "free" ? "Sign in or renew to continue" : "Renew your plan to continue"}</h2>
+        <p className="mt-2 text-sm">{desktop
+          ? "This computer needs a current LedgerFox plan. Sign in with your LedgerFox account (new accounts get a free trial), or renew on the website and click “Check now”."
+          : "Your free trial or paid plan has ended. Choose a plan to continue adding invoices, payments and entries."}</p>
+        <ul className="mt-3 space-y-1 text-sm">
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Your data is safe and never deleted.</li>
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />You can still view, print and export everything meanwhile.</li>
+        </ul>
+        {!owner && <Alert kind="info" className="mt-4">Ask your organisation's owner to renew in Settings → Plan & billing.</Alert>}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {owner && <Button onClick={go}>{desktop ? "Sign in / renew" : "Renew now"}</Button>}
+          <Button variant="secondary" onClick={() => { setLater(true); try { sessionStorage.setItem("lf-renew-later", "1"); } catch { /* private window */ } }}>View only for now</Button>
+        </div>
+        <p className="mt-3 text-xs muted">Account ID {data.account_id} · Questions? info@niyazio.com</p>
+      </div>
+    </div>
+  </>;
+}
+
 /** Thin banner when the trial is about to end or a renewal is due. */
 export function PlanBanner() {
   const { settings, id } = useCompany();
@@ -185,7 +237,7 @@ export function PlanBanner() {
   if (!s?.enforced) return null;
   const show = (s.status === "trial" && (s.days_left ?? 99) <= 3) || s.status === "grace" || (s.status === "active" && (s.days_left ?? 99) <= 5);
   if (!show) return null;
-  const text = s.status === "trial" ? `Free trial ends in ${s.days_left} day(s).` : s.status === "grace" ? `Your plan has ended — renew within ${s.days_left} day(s) to keep all features.` : `Your plan renews in ${s.days_left} day(s).`;
+  const text = s.status === "trial" ? `Free trial ends in ${s.days_left} day(s).` : s.status === "grace" ? `Your plan has ended — renew within ${s.days_left} day(s) to keep working.` : `Your plan renews in ${s.days_left} day(s).`;
   return <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{text} <Link className="font-medium underline" to={`/app/${id}/settings?tab=billing`}>Plan & billing</Link></div>;
 }
 

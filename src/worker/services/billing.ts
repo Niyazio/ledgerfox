@@ -24,7 +24,7 @@ export interface Subscription {
 const DAY = 86_400_000;
 
 export async function subscription(env: Env, orgId: string): Promise<Subscription> {
-  // Desktop app: the plan comes from the licence for this computer (Free plan without one).
+  // Desktop app: the plan comes from the licence for this computer (renewal required without one).
   if (licensingOn(env)) {
     const st = await desktopLicenceState(env);
     if (st.connected) refreshInBackground(env, st.last_checked_at);
@@ -84,6 +84,22 @@ export async function autopayRequired(env: Env, orgId: string, email?: string | 
   if (s.status !== "trial") return false;
   const row = await first<{ autopay_status: string | null }>(env.DB, `SELECT autopay_status FROM org_subscriptions WHERE org_id = ?`, orgId);
   return !LIVE_AUTOPAY_STATES.includes(row?.autopay_status ?? "");
+}
+
+/**
+ * There is no Free plan: once the trial or the paid period (plus grace) has ended, or a desktop computer has no valid
+ * licence, an organisation with a real company can view and export everything but cannot add or change entries until
+ * it renews. Practice and demo-only organisations, and the vendor's own, are never held back.
+ */
+export async function renewRequired(env: Env, orgId: string, email?: string | null) {
+  const s = await subscription(env, orgId);
+  if (!s.enforced || s.status !== "free") return false;
+  if (!licensingOn(env)) {
+    if (isVendor(env, email)) return false;
+    const owner = await first<{ email: string }>(env.DB, `SELECT u.email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId);
+    if (isVendor(env, owner?.email)) return false;
+  }
+  return hasRealCompany(env, orgId);
 }
 
 const upgradeHint = (s: Subscription) => (s.status === "free" && s.paid_plan === null ? "Choose a plan in Settings → Plan & billing." : "Upgrade in Settings → Plan & billing.");

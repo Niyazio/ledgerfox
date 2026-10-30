@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { createHmac } from "node:crypto";
-import { world, contact, rawQuery, Client } from "./helpers";
+import { world, rawQuery, Client } from "./helpers";
 
 const SECRET = "test_key_secret", HOOK = "test_webhook_secret";
 const sign = (s: string, data: string) => createHmac("sha256", s).update(data).digest("hex");
@@ -31,24 +31,29 @@ describe("subscriptions", () => {
     expect(b).toMatchObject({ enabled: false, subscription: { enforced: false, status: "unlimited" } });
   });
 
-  it("starts with a 30-day trial, then falls back to the Free plan limits", async () => {
+  it("starts with a 30-day trial; afterwards there is no Free plan: view and export only until renewal", async () => {
     const W = await billedWorld();
     const b = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
     expect(b.subscription).toMatchObject({ enforced: true, status: "trial", plan: "business", days_left: 30 });
+    expect(b.renew_required).toBe(false);
     const item = (await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" })).json.id;
     expect((await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: item, quantity: "1" }], payments: [{ mode: "cash", amount: "10" }] })).status).toBe(201);
     await rawQuery(W, `UPDATE org_subscriptions SET trial_ends_at = ? WHERE org_id = ?`, "2020-01-01T00:00:00Z", W.orgId);
-    expect((await W.owner.get(`/api/billing/org/${W.orgId}`)).json.subscription).toMatchObject({ status: "free", plan: "free" });
+    const ended = (await W.owner.get(`/api/billing/org/${W.orgId}`)).json;
+    expect(ended.subscription).toMatchObject({ status: "free", plan: "free" });
+    expect(ended.renew_required).toBe(true);
     const pos = await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: item, quantity: "1" }], payments: [{ mode: "cash", amount: "10" }] });
-    expect([pos.status, pos.json.error.code]).toEqual([402, "PLAN_FEATURE"]);
-    expect((await W.owner.get(W.c("/reports/gstr1?period=2026-05"))).status).toBe(402);
+    expect([pos.status, pos.json.error.code]).toEqual([402, "RENEW_REQUIRED"]);
+    const cust = (await W.owner.post(W.c("/contacts"), { type: "customer", name: "Late" })).json;
+    expect(cust.error.code).toBe("RENEW_REQUIRED");
+    expect(cust.error.message).toMatch(/Renew/);
     expect((await W.owner.post(`/api/orgs/${W.orgId}/users`, { name: "A", username: "free.user", role: "billing" })).json.error.code).toBe("PLAN_LIMIT");
-    expect((await W.owner.post(W.c("/settings/branches"), { name: "Second", code: "B2" })).json.error.code).toBe("PLAN_LIMIT");
-    // Everyday billing and the data itself keep working on the Free plan.
-    const cust = await contact(W, "customer");
-    const inv = await W.owner.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: "2026-05-10", lines: [{ description: "x", quantity: "1", unit_price: "10" }] });
-    expect((await W.owner.post(W.c(`/documents/${inv.json.id}/issue`))).status).toBe(200);
+    // The data itself stays readable and exportable.
+    expect((await W.owner.get(W.c("/documents"))).status).toBe(200);
     expect((await W.owner.get(W.c("/export"))).status).not.toBe(402);
+    // Paying lifts the hold at once.
+    await rawQuery(W, `UPDATE org_subscriptions SET plan = 'business', paid_until = ? WHERE org_id = ?`, new Date(Date.now() + 30 * 86_400_000).toISOString(), W.orgId);
+    expect((await W.owner.post(W.c("/pos/sale"), { lines: [{ item_id: item, quantity: "1" }], payments: [{ mode: "cash", amount: "10" }] })).status).toBe(201);
   });
 
   it("checks out through Razorpay, verifies the signature and activates once even if the webhook races the browser", async () => {

@@ -30,14 +30,16 @@ const posSale = async (cl: Client, c: (p: string) => string) => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("desktop app licence", () => {
-  it("runs on the Free plan until connected, then uses the account's plan; never shares secrets", async () => {
+  it("asks to sign in until connected (no Free plan), then uses the account's plan; never shares secrets", async () => {
     const { W, me, desk, deskOwner, deskOrg, c } = await setup();
-    // Not connected: Free plan limits (POS is a paid feature; a second user is over the limit).
+    // Not connected: no Free plan. Everything can be viewed, but new entries wait until the account is connected.
     expect((await deskOwner.get("/api/desktop/licence")).json).toMatchObject({ connected: false, plan: "free", reason: "not_connected" });
-    expect((await posSale(deskOwner, c)).json.error.code).toBe("PLAN_FEATURE");
+    const held = await deskOwner.post(c("/items"), { kind: "goods", name: "Soap", sale_price: "5" });
+    expect([held.status, held.json.error.code]).toEqual([402, "RENEW_REQUIRED"]);
+    expect(held.json.error.message).toMatch(/Sign in to your LedgerFox account/);
+    expect((await deskOwner.get(`/api/billing/org/${deskOrg}`)).json.renew_required).toBe(true);
+    expect((await deskOwner.get(c("/items"))).status).toBe(200);
     expect((await deskOwner.post(`/api/orgs/${deskOrg}/users`, { name: "Staff", username: "desk.staff", role: "billing" })).json.error.code).toBe("PLAN_LIMIT");
-    // Everyday billing still works on the Free plan.
-    expect((await deskOwner.post(c("/items"), { kind: "goods", name: "Soap", sale_price: "5" })).status).toBe(201);
 
     // Wrong password: refused by the website, nothing stored.
     const bad = await deskOwner.post("/api/desktop/licence/connect", { login: me.email, password: "wrong password!!" });
@@ -47,6 +49,7 @@ describe("desktop app licence", () => {
     expect(ok.status, JSON.stringify(ok.json)).toBe(200);
     expect(ok.json).toMatchObject({ connected: true, status: "trial", plan: "business", reason: "ok", email: me.email, org_name: "Test Org" });
     expect((await posSale(deskOwner, c)).status).toBe(201);
+    expect((await deskOwner.get(`/api/billing/org/${deskOrg}`)).json.renew_required).toBe(false);
     expect(JSON.stringify(ok.json)).not.toMatch(/device_token|private/);
     // The website records the computer (only a hash of its token).
     const dev = await rawQuery(W, `SELECT org_id, token_hash, revoked_at FROM desktop_devices`);
@@ -68,9 +71,10 @@ describe("desktop app licence", () => {
     await rawQuery({ env: desk } as any, `UPDATE desktop_licence SET token = ?`, `${forged}.${sig}`);
     expect((await deskOwner.get("/api/desktop/licence")).json).toMatchObject({ plan: "free", reason: "invalid" });
 
-    // Disconnect: Free plan again; data untouched.
+    // Disconnect: entries are held again; data untouched and readable.
     expect((await deskOwner.post("/api/desktop/licence/disconnect")).json).toMatchObject({ connected: false, plan: "free" });
     expect((await deskOwner.get(c("/items"))).json.items.length).toBeGreaterThan(0);
+    expect((await posSale(deskOwner, c)).status).toBe(402);
   });
 
   it("follows the website: a revoked computer keeps its last licence only until the offline window ends; trial ended means Free", async () => {

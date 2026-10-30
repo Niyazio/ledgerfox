@@ -1,8 +1,12 @@
 /**
- * LedgerFox desktop app (Windows, macOS, Linux).
- * Company data lives in one SQLite file the user chooses (e.g. C:\LedgerFox\Data\MyBusiness.ledgerfox). The app runs
- * the same server as the cloud version on this computer and shows it in a window. Optionally, phones and other
- * computers can use it over the same Wi-Fi, or anywhere through a temporary free internet link.
+ * LedgerFox desktop app (Windows, macOS, Linux). Two ways to work:
+ * - Online (recommended): the window shows the LedgerFox website, signed in with the same account. The data is the
+ *   same everyone in the business sees, on the LedgerFox cloud. Without internet, recently opened screens still show
+ *   from this computer's cache, and new invoices, payments and entries wait on this computer and are sent when the
+ *   connection returns (each once only).
+ * - On this computer only: company data lives in one SQLite file the user chooses (e.g. C:\LedgerFox\MyBusiness.ledgerfox).
+ *   The app runs the same server as the cloud version on this computer and shows it in a window. Optionally, phones
+ *   and other computers can use it over the same Wi-Fi, or anywhere through a temporary free internet link.
  */
 import { app, BrowserWindow, Menu, dialog, shell, net, type MenuItemConstructorOptions } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from "node:fs";
@@ -16,7 +20,11 @@ import { checkForUpdatesNow, desktopUpdater, setupAutoUpdate } from "./updates";
 const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
 
-interface Config { dataFile?: string; lan?: boolean; port?: number; lastBackup?: number }
+interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number }
+
+/** The LedgerFox website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
+const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
+const online = () => config.mode === "online";
 
 const resources = app.isPackaged ? process.resourcesPath : join(__dirname, "..");
 const webDir = join(resources, app.isPackaged ? "web" : "dist");
@@ -39,6 +47,9 @@ function saveConfig() {
 }
 
 const localUrl = () => `http://127.0.0.1:${server?.port ?? DEFAULT_PORT}`;
+/** Pages the app window may show; everything else opens in the normal browser. */
+const appOrigin = () => (online() ? ONLINE_URL : localUrl());
+const inApp = (url: string) => url === appOrigin() || url.startsWith(`${appOrigin()}/`);
 
 function lanUrls(): string[] {
   if (!server || !config.lan) return [];
@@ -61,6 +72,7 @@ async function boot(dataFile: string) {
     server = await startServer({ dataFile, webDir, migrationsDir, host, port: 0, updater: desktopUpdater });
   }
   config.dataFile = dataFile;
+  config.mode = "local";
   saveConfig();
   autoBackup();
   app.addRecentDocument(dataFile);
@@ -69,6 +81,37 @@ async function boot(dataFile: string) {
     await win.loadURL(localUrl());
   }
   buildMenu();
+}
+
+let retryTimer: NodeJS.Timeout | null = null;
+
+/** Online mode: show the LedgerFox website. The data file (if any) is closed but left untouched on disk. */
+async function goOnline() {
+  await stopTunnel();
+  if (server) { await server.close(); server = null; }
+  config.mode = "online";
+  saveConfig();
+  buildMenu();
+  if (win) { win.setTitle("LedgerFox — online"); await loadOnline(); }
+}
+
+async function loadOnline() {
+  if (!win) return;
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  // The website's service worker answers from this computer's cache when there is no internet.
+  try { await win.loadURL(`${ONLINE_URL}/app`); } catch { /* did-fail-load shows the offline page */ }
+}
+
+/** Shown only when the website was never opened on this computer and there is no internet; retries by itself. */
+async function showOfflinePage() {
+  if (!win || !online()) return;
+  const html = `<!doctype html><meta charset="utf-8"><title>LedgerFox</title>
+  <style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;height:100vh;background:#f6f7f9;color:#0f172a}div{max-width:460px;padding:24px;text-align:center}p{color:#475569}</style>
+  <div><h1 style="font-size:20px">Waiting for the internet</h1>
+  <p>The first time, LedgerFox needs internet to sign in to your account. After that it also opens without internet and sends your new entries when the connection is back.</p>
+  <p>LedgerFox will try again by itself. To work without internet only, use File → Use a data file on this computer.</p></div>`;
+  await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined);
+  retryTimer = setTimeout(() => void loadOnline(), 15_000);
 }
 
 /** Consistent copy of the open data file (safe while the app is running). */
@@ -117,18 +160,34 @@ async function chooseExistingFile(): Promise<string | null> {
   return r.canceled ? null : r.filePaths[0] ?? null;
 }
 
-async function firstRun(): Promise<string | null> {
+const ONLINE_DETAIL = "Sign in with the same email and password as the LedgerFox website. Everyone in your business sees the same, up-to-date data, kept safely on the LedgerFox cloud. Without internet you can keep working: new entries wait on this computer and are sent when the internet is back.";
+
+async function firstRun(): Promise<"online" | string | null> {
   const r = await dialog.showMessageBox({
     type: "question",
     title: "Welcome to LedgerFox",
-    message: "Where should LedgerFox keep your accounts?",
-    detail: "Your data is saved in one file on this computer, in a folder you choose (for example C:\\LedgerFox). Back it up by copying that file. Nothing is sent to the internet unless you turn on the internet link.",
-    buttons: ["Create a new data file…", "Open an existing file…", "Quit"],
-    cancelId: 2,
+    message: "How do you want to use LedgerFox?",
+    detail: `Online (recommended): ${ONLINE_DETAIL}\n\nOn this computer only: your data is saved in one file on this computer, in a folder you choose. Other people can't see it unless you turn on phone access. You still need a LedgerFox account for the plan.`,
+    buttons: ["Online with my LedgerFox account (recommended)", "Create a data file on this computer…", "Open an existing data file…", "Quit"],
+    cancelId: 3,
   });
-  if (r.response === 0) return chooseNewFile();
-  if (r.response === 1) return chooseExistingFile();
+  if (r.response === 0) return "online";
+  if (r.response === 1) return chooseNewFile();
+  if (r.response === 2) return chooseExistingFile();
   return null;
+}
+
+/** Once, for people who used a data file before online mode existed. Their file stays as it is. */
+async function offerOnline(): Promise<boolean> {
+  const r = await dialog.showMessageBox({
+    type: "question",
+    title: "LedgerFox can now work online",
+    message: "Use LedgerFox online with your website account?",
+    detail: `${ONLINE_DETAIL}\n\nYour data file on this computer is not changed or deleted. You can open it again any time from File → Use a data file on this computer. To move its records to the cloud, export them (Settings → Export) and import them on the website.`,
+    buttons: ["Switch to online", "Keep using the file on this computer"],
+    cancelId: 1,
+  });
+  return r.response === 0;
 }
 
 async function setLan(on: boolean) {
@@ -229,6 +288,15 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
+        { label: "Work online (LedgerFox account)", type: "radio", checked: online(), click: () => { if (!online()) void goOnline(); } },
+        {
+          label: "Use a data file on this computer", type: "radio", checked: !online(), click: async () => {
+            if (!online()) return;
+            const f = config.dataFile && existsSync(config.dataFile) ? config.dataFile : await chooseExistingFile() ?? await chooseNewFile();
+            if (f) await boot(f); else buildMenu();
+          },
+        },
+        { type: "separator" },
         { label: "New data file…", accelerator: "CmdOrCtrl+Shift+N", click: async () => { const f = await chooseNewFile(); if (f) await boot(f); } },
         { label: "Open data file…", accelerator: "CmdOrCtrl+O", click: async () => { const f = await chooseExistingFile(); if (f) await boot(f); } },
         { type: "separator" },
@@ -240,7 +308,7 @@ function buildMenu() {
             try { backupTo(r.filePath); dialog.showMessageBox({ type: "info", message: "Backup saved", detail: r.filePath }); } catch (e) { dialog.showErrorBox("Backup failed", (e as Error).message); }
           },
         },
-        { label: "Show data file in folder", enabled: Boolean(config.dataFile), click: () => config.dataFile && shell.showItemInFolder(config.dataFile) },
+        { label: "Show data file in folder", enabled: Boolean(config.dataFile) && !online(), click: () => config.dataFile && shell.showItemInFolder(config.dataFile) },
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
       ],
@@ -249,10 +317,11 @@ function buildMenu() {
     {
       label: "Access",
       submenu: [
-        { label: "Phones on the same Wi-Fi", type: "checkbox", checked: Boolean(config.lan), click: (item) => void setLan(item.checked) },
+        { label: "Phones on the same Wi-Fi", type: "checkbox", checked: Boolean(config.lan), enabled: !online(), click: (item) => void setLan(item.checked) },
         tunnel
           ? { label: "Stop internet link", click: async () => { await stopTunnel(); buildMenu(); } }
           : { label: "Start internet link (temporary)…", enabled: Boolean(server), click: () => void startInternetLink() },
+        ...(online() ? [{ label: "Online: phones use the LedgerFox website or app directly", enabled: false }] : []),
         { label: "Copy data to phone (view-only)…", enabled: Boolean(server), click: () => void showPhoneCopy() },
         { type: "separator" },
         { label: "Show phone access details", click: () => void showAccess() },
@@ -268,7 +337,7 @@ function buildMenu() {
         { label: "Support: info@niyazio.com", click: () => void shell.openExternal("mailto:info@niyazio.com?subject=LedgerFox%20support") },
         { label: "Niyazio website", click: () => void shell.openExternal("https://niyazio.com") },
         { type: "separator" },
-        { label: `Data file: ${config.dataFile ?? "none"}`, enabled: false },
+        { label: online() ? `Online: ${ONLINE_URL}` : `Data file: ${config.dataFile ?? "none"}`, enabled: false },
         { label: `Version ${app.getVersion()}`, enabled: false },
       ],
     },
@@ -285,11 +354,17 @@ async function createWindow() {
   win.once("ready-to-show", () => win?.show());
   // Links to other sites open in the normal browser; the app window only ever shows LedgerFox.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(localUrl())) return { action: "allow" };
+    if (inApp(url)) return { action: "allow" };
+    // Online mode: Razorpay's payment window (UPI, bank and card checks) opens as a pop-up of the website.
+    if (online() && /^https:\/\/([a-z0-9-]+\.)*razorpay\.com\//.test(url)) return { action: "allow" };
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith(localUrl())) { e.preventDefault(); if (/^https?:/.test(url)) void shell.openExternal(url); } });
+  win.webContents.on("will-navigate", (e, url) => { if (!inApp(url)) { e.preventDefault(); if (/^https?:/.test(url)) void shell.openExternal(url); } });
+  // Online mode, no internet, and the website not yet cached on this computer.
+  win.webContents.on("did-fail-load", (_e, code, _desc, url, isMainFrame) => {
+    if (isMainFrame && online() && code !== -3 && url.startsWith(ONLINE_URL)) void showOfflinePage();
+  });
   win.on("closed", () => { win = null; });
 }
 
@@ -313,11 +388,13 @@ if (!app.requestSingleInstanceLock()) {
     loadConfig();
     buildMenu();
     await createWindow();
-    let file = pendingOpen ?? (config.dataFile && existsSync(config.dataFile) ? config.dataFile : null);
+    let file: string | null = pendingOpen;
+    if (!file && config.mode === "online") file = "online";
+    if (!file && config.dataFile && existsSync(config.dataFile)) file = config.mode === undefined && (await offerOnline()) ? "online" : config.dataFile;
     if (!file) file = await firstRun();
     if (!file) { app.quit(); return; }
     try {
-      await boot(file);
+      if (file === "online") await goOnline(); else await boot(file);
       setupAutoUpdate();
     } catch (e) {
       dialog.showErrorBox("Could not open the data file", `${file}\n\n${(e as Error).message}`);

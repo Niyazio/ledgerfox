@@ -16,7 +16,7 @@ import { Shortcuts } from "./Shortcuts";
 import { HINTS } from "../lib/shortcuts";
 import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
-import { PlanBanner, TrialGate, VerifyEmailBanner } from "../pages/Billing";
+import { PlanBanner, RenewGate, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { ThemePicker } from "./ThemePicker";
 import { DesktopLicenceBanner } from "../pages/DesktopPlan";
 import { setPracticeExports } from "../lib/csv";
@@ -339,6 +339,7 @@ function Shell() {
         {settings && me?.edition !== "offline" && <RecurringRunner />}
         {settings && me?.edition === "cloud" && <PlanBanner />}
         {settings && me?.edition === "cloud" && <TrialGate />}
+        {settings && (me?.edition === "cloud" || me?.edition === "desktop") && <RenewGate />}
         {settings && me?.edition === "desktop" && !settings.company.is_practice && <DesktopLicenceBanner />}
         {settings?.company.is_practice ? <PracticeBar /> : null}
         {me?.edition === "cloud" && <VerifyEmailBanner />}

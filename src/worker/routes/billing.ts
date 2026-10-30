@@ -9,7 +9,7 @@ import { newId } from "../lib/crypto";
 import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
 import { PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
-import { autopayRequired, billingOn, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { autopayRequired, billingOn, renewRequired, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
 import { licensingOn } from "../services/licence";
@@ -65,7 +65,7 @@ org.get("/:orgId", async (c) => {
   // Desktop app: the plan comes from the computer's licence; buying happens on the website.
   if (licensingOn(c.env)) {
     const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
-    return c.json({ enabled: true, desktop: true, subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: false, payments: [], online: false, autopay: null, account_id: orgId, autopay_required: false, trial_days: TRIAL_DAYS, demo_only: false, role: m.role });
+    return c.json({ enabled: true, desktop: true, subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: false, payments: [], online: false, autopay: null, account_id: orgId, autopay_required: false, renew_required: await renewRequired(c.env, orgId), trial_days: TRIAL_DAYS, demo_only: false, role: m.role });
   }
   const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
   const payments = m.role === "owner"
@@ -73,7 +73,7 @@ org.get("/:orgId", async (c) => {
     : [];
   const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
   return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId,
-    autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS, demo_only: !(await hasRealCompany(c.env, orgId)) });
+    autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), renew_required: await renewRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS, demo_only: !(await hasRealCompany(c.env, orgId)), role: m.role });
 });
 
 /** Each checkout asks Razorpay to create an order or subscription; keep that to a sensible number per organisation. */
