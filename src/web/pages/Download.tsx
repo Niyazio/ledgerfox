@@ -45,7 +45,7 @@ export default function Download() {
       </header>
       <main className="mx-auto max-w-4xl px-4 pb-16 pt-6 sm:px-6">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Download LedgerFox for your computer</h1>
-        <p className="mt-3 text-lg muted">Free to download, with a 30-day free trial of every feature: sign in with your LedgerFox account in Settings → Plan & billing; one plan covers the website and your computers. Your accounts are saved in a file on your computer, in a folder you choose. Works without internet (your plan is checked online at least every 15 days); phones on the same Wi-Fi can use it too.</p>
+        <p className="mt-3 text-lg muted">Free to download. Sign in with your LedgerFox account: the same data as the website and your team, a 30-day free trial of every feature, and one plan for the website, computers and phones. No internet? Keep billing; your entries are sent automatically when the internet is back. File → Save a backup keeps a copy on your computer.</p>
         {!loading && !data?.available && (
           <p className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             The installers are being prepared and will appear here soon. You can use LedgerFox online in the meantime.
@@ -66,7 +66,8 @@ export default function Download() {
             <li><b>Mac:</b> open the .dmg and drag LedgerFox to Applications. If macOS says it cannot be opened, go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</li>
             <li><b>Android:</b> open the downloaded .apk and allow "Install unknown apps" for your browser when asked (the app is not on Google Play).</li>
             <li><b>iPhone / iPad:</b> open ledgerfox.niyazio.com in Safari and use Share → Add to Home Screen.</li>
-            <li>On first launch, choose where to save your data (for example <code>C:\LedgerFox</code>). Back it up by copying that file; LedgerFox also keeps daily copies.</li>
+            <li>On first launch, sign in with your LedgerFox email and password (or create an account). Data files from older versions open from <b>File → Open an old data file (view only)</b>.</li>
+            <li>Only download LedgerFox from this page or our GitHub releases. The file name is <code>LedgerFox-Setup-x64.exe</code>, published by Niyazio.</li>
           </ul>
         </section>
         <ProductCredit className="mt-8 text-center" />

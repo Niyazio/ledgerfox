@@ -67,7 +67,8 @@ auth.post("/register", async (c) => {
   if (!(await rateLimit(c.env.DB, `register:${clientIp(c)}`, 10, 3600))) {
     throw new AppError(429, "RATE_LIMITED", "Too many registrations from this address. Try again later.");
   }
-  const input = await body(c, z.object({ name: reqText(120), email, username: usernameSchema.optional().nullable(), password: passwordSchema(c.env) }));
+  const input = await body(c, z.object({ name: reqText(120), email, username: usernameSchema.optional().nullable(), password: passwordSchema(c.env),
+    accept_terms: z.literal(true, { message: "Please accept the Terms of service and Privacy policy" }) }));
   const exists = await first(c.env.DB, `SELECT 1 FROM users WHERE email = ?`, input.email);
   if (exists) throw new AppError(409, "EMAIL_TAKEN", "An account with this email already exists");
   if (input.username && (await first(c.env.DB, `SELECT 1 FROM users WHERE username = ?`, input.username))) {
@@ -77,8 +78,8 @@ auth.post("/register", async (c) => {
   const h = await hashPassword(input.password, iterations(c.env));
   const { codes, stmts } = await makeRecoveryCodes(c.env.DB, id);
   await batch(c.env.DB, [
-    stmt(c.env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters) VALUES (?,?,?,?,?,?,?)`,
-      id, input.email, input.username ?? null, input.name, h.hash, h.salt, h.iterations),
+    stmt(c.env.DB, `INSERT INTO users (id, email, username, name, password_hash, password_salt, password_iters, terms_accepted_at) VALUES (?,?,?,?,?,?,?,?)`,
+      id, input.email, input.username ?? null, input.name, h.hash, h.salt, h.iterations, new Date().toISOString()),
     ...stmts.slice(1),
   ]);
   await createSession(c, id);

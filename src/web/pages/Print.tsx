@@ -64,11 +64,25 @@ function Sheet({ format, name, text, children }: { format: Format; name?: string
       <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } }`}</style>
       <div data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
         style={{ width: f.width, maxWidth: "100%", minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
-        {practice && <p className="mb-2 border border-orange-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
+        {practice && <p className="mb-2 border-2 border-orange-600 py-1 text-center text-[11px] font-black uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
         {children}
-        {practice && <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"><span className="-rotate-30 select-none text-[64px] font-black tracking-widest text-orange-500/15">PRACTICE</span></div>}
+        {practice && <p className="mt-3 border-t-2 border-orange-600 pt-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">For learning only · LedgerFox education mode · not valid for any business or tax purpose</p>}
+        {practice && <PracticeWatermark small={thermal} />}
       </div>
     </>
+  );
+}
+
+/** Education mode: "PRACTICE" repeated across the whole page, so no part of a printout or PDF can pass as real. */
+export function PracticeWatermark({ small = false, label = "PRACTICE · NOT VALID" }: { small?: boolean; label?: string }) {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden" style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+      <div className="absolute -inset-1/2 grid -rotate-30 content-around justify-around" style={{ gridTemplateColumns: `repeat(${small ? 2 : 3}, auto)` }}>
+        {Array.from({ length: small ? 24 : 36 }, (_, i) => (
+          <span key={i} className={`select-none whitespace-nowrap font-black tracking-widest text-orange-500/25 ${small ? "text-[14px]" : "text-[30px]"}`}>{label}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 

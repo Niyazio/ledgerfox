@@ -1,12 +1,11 @@
 /**
- * LedgerFox desktop app (Windows, macOS, Linux). Two ways to work:
- * - Online (recommended): the window shows the LedgerFox website, signed in with the same account. The data is the
- *   same everyone in the business sees, on the LedgerFox cloud. Without internet, recently opened screens still show
- *   from this computer's cache, and new invoices, payments and entries wait on this computer and are sent when the
- *   connection returns (each once only).
- * - On this computer only: company data lives in one SQLite file the user chooses (e.g. C:\LedgerFox\MyBusiness.ledgerfox).
- *   The app runs the same server as the cloud version on this computer and shows it in a window. Optionally, phones
- *   and other computers can use it over the same Wi-Fi, or anywhere through a temporary free internet link.
+ * LedgerFox desktop app (Windows, macOS, Linux). It works online: the window shows the LedgerFox website, signed in
+ * with the same account, and the data is the same everyone in the business sees, on the LedgerFox cloud. Without
+ * internet, recently opened screens still show from this computer's cache, and new invoices, payments and entries
+ * wait on this computer and are sent when the connection returns (each once only). File → Save a backup copies the
+ * open company to a file on this computer.
+ * Data files from older versions (one SQLite file, e.g. C:\LedgerFox\MyBusiness.ledgerfox) open view-only, to look
+ * things up and export them; the same server as the cloud version runs on this computer for that.
  */
 import { app, BrowserWindow, Menu, dialog, shell, net, type MenuItemConstructorOptions } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from "node:fs";
@@ -20,7 +19,7 @@ import { checkForUpdatesNow, desktopUpdater, setupAutoUpdate } from "./updates";
 const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
 
-interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number }
+interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number; toldOnlineOnly?: boolean }
 
 /** The LedgerFox website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
 const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
@@ -66,10 +65,10 @@ async function boot(dataFile: string) {
   mkdirSync(dirname(dataFile), { recursive: true });
   const host = config.lan ? "0.0.0.0" : "127.0.0.1";
   try {
-    server = await startServer({ dataFile, webDir, migrationsDir, host, port: config.port ?? DEFAULT_PORT, updater: desktopUpdater });
+    server = await startServer({ dataFile, webDir, migrationsDir, host, port: config.port ?? DEFAULT_PORT, updater: desktopUpdater, env: OLD_FILE_ENV });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EADDRINUSE") throw e;
-    server = await startServer({ dataFile, webDir, migrationsDir, host, port: 0, updater: desktopUpdater });
+    server = await startServer({ dataFile, webDir, migrationsDir, host, port: 0, updater: desktopUpdater, env: OLD_FILE_ENV });
   }
   config.dataFile = dataFile;
   config.mode = "local";
@@ -77,11 +76,14 @@ async function boot(dataFile: string) {
   autoBackup();
   app.addRecentDocument(dataFile);
   if (win) {
-    win.setTitle(`LedgerFox — ${basename(dataFile)}`);
+    win.setTitle(`LedgerFox — ${basename(dataFile)} (view only)`);
     await win.loadURL(localUrl());
   }
   buildMenu();
 }
+
+/** Old data files are only looked at and exported: no new entries, no plan check. */
+const OLD_FILE_ENV = { DESKTOP_READONLY: "true", DESKTOP_LICENSING: "off" };
 
 let retryTimer: NodeJS.Timeout | null = null;
 
@@ -109,7 +111,7 @@ async function showOfflinePage() {
   <style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;height:100vh;background:#f6f7f9;color:#0f172a}div{max-width:460px;padding:24px;text-align:center}p{color:#475569}</style>
   <div><h1 style="font-size:20px">Waiting for the internet</h1>
   <p>The first time, LedgerFox needs internet to sign in to your account. After that it also opens without internet and sends your new entries when the connection is back.</p>
-  <p>LedgerFox will try again by itself. To work without internet only, use File → Use a data file on this computer.</p></div>`;
+  <p>LedgerFox will try again by itself.</p></div>`;
   await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined);
   retryTimer = setTimeout(() => void loadOnline(), 15_000);
 }
@@ -140,54 +142,34 @@ function autoBackup() {
   }
 }
 
-async function chooseNewFile(): Promise<string | null> {
-  const r = await dialog.showSaveDialog({
-    title: "Create a LedgerFox data file",
-    defaultPath: join(app.getPath("documents"), "LedgerFox", `My Business.${FILE_EXT}`),
-    buttonLabel: "Create",
-    filters: [{ name: "LedgerFox data", extensions: [FILE_EXT] }],
-  });
-  if (r.canceled || !r.filePath) return null;
-  if (existsSync(r.filePath)) {
-    const c = await dialog.showMessageBox({ type: "warning", buttons: ["Open it", "Cancel"], message: "That file already exists.", detail: "LedgerFox will open the existing file. It will not overwrite it." });
-    if (c.response !== 0) return null;
-  }
-  return r.filePath;
-}
-
 async function chooseExistingFile(): Promise<string | null> {
   const r = await dialog.showOpenDialog({ title: "Open a LedgerFox data file", properties: ["openFile"], filters: [{ name: "LedgerFox data", extensions: [FILE_EXT] }] });
   return r.canceled ? null : r.filePaths[0] ?? null;
 }
 
-const ONLINE_DETAIL = "Sign in with the same email and password as the LedgerFox website. Everyone in your business sees the same, up-to-date data, kept safely on the LedgerFox cloud. Without internet you can keep working: new entries wait on this computer and are sent when the internet is back.";
-
-async function firstRun(): Promise<"online" | string | null> {
-  const r = await dialog.showMessageBox({
-    type: "question",
-    title: "Welcome to LedgerFox",
-    message: "How do you want to use LedgerFox?",
-    detail: `Online (recommended): ${ONLINE_DETAIL}\n\nOn this computer only: your data is saved in one file on this computer, in a folder you choose. Other people can't see it unless you turn on phone access. You still need a LedgerFox account for the plan.`,
-    buttons: ["Online with my LedgerFox account (recommended)", "Create a data file on this computer…", "Open an existing data file…", "Quit"],
-    cancelId: 3,
+/** Once, for people who used a data file before LedgerFox moved online. Their file stays as it is. */
+async function tellOnlineOnly() {
+  if (config.toldOnlineOnly || !config.dataFile) return;
+  config.toldOnlineOnly = true;
+  saveConfig();
+  await dialog.showMessageBox({
+    type: "info",
+    title: "LedgerFox now works online",
+    message: "Sign in with your LedgerFox account",
+    detail: `LedgerFox now keeps your books online, so everyone in your business sees the same data and it is backed up for you. Without internet you can keep billing; your entries are sent when the internet is back.\n\nYour old data file is kept as it was:\n${config.dataFile}\nOpen it any time from File → Open an old data file (view only) to look things up or export it.`,
+    buttons: ["OK"],
   });
-  if (r.response === 0) return "online";
-  if (r.response === 1) return chooseNewFile();
-  if (r.response === 2) return chooseExistingFile();
-  return null;
 }
 
-/** Once, for people who used a data file before online mode existed. Their file stays as it is. */
-async function offerOnline(): Promise<boolean> {
-  const r = await dialog.showMessageBox({
-    type: "question",
-    title: "LedgerFox can now work online",
-    message: "Use LedgerFox online with your website account?",
-    detail: `${ONLINE_DETAIL}\n\nYour data file on this computer is not changed or deleted. You can open it again any time from File → Use a data file on this computer. To move its records to the cloud, export them (Settings → Export) and import them on the website.`,
-    buttons: ["Switch to online", "Keep using the file on this computer"],
-    cancelId: 1,
-  });
-  return r.response === 0;
+/** Copy the open company's full data to a file on this computer (online mode). */
+async function saveBackup() {
+  if (!win) return;
+  const m = /\/app\/([0-9a-f-]{36})(\/|$)/.exec(new URL(win.webContents.getURL()).pathname);
+  if (!online() || !m) {
+    await dialog.showMessageBox({ type: "info", message: "Open a company first", detail: "Open the company you want to back up, then choose File → Save a backup to this computer again." });
+    return;
+  }
+  win.webContents.downloadURL(`${ONLINE_URL}/api/c/${m[1]}/export`);
 }
 
 async function setLan(on: boolean) {
@@ -288,20 +270,13 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
-        { label: "Work online (LedgerFox account)", type: "radio", checked: online(), click: () => { if (!online()) void goOnline(); } },
-        {
-          label: "Use a data file on this computer", type: "radio", checked: !online(), click: async () => {
-            if (!online()) return;
-            const f = config.dataFile && existsSync(config.dataFile) ? config.dataFile : await chooseExistingFile() ?? await chooseNewFile();
-            if (f) await boot(f); else buildMenu();
-          },
-        },
+        { label: "Work online", enabled: !online(), click: () => void goOnline() },
+        { label: "Save a backup to this computer…", accelerator: "CmdOrCtrl+B", enabled: online(), click: () => void saveBackup() },
         { type: "separator" },
-        { label: "New data file…", accelerator: "CmdOrCtrl+Shift+N", click: async () => { const f = await chooseNewFile(); if (f) await boot(f); } },
-        { label: "Open data file…", accelerator: "CmdOrCtrl+O", click: async () => { const f = await chooseExistingFile(); if (f) await boot(f); } },
+        { label: "Open an old data file (view only)…", click: async () => { const f = await chooseExistingFile(); if (f) await boot(f); } },
         { type: "separator" },
         {
-          label: "Back up now…", accelerator: "CmdOrCtrl+B", enabled: Boolean(server), click: async () => {
+          label: "Copy the old data file…", enabled: Boolean(server) && !online(), click: async () => {
             const stem = basename(config.dataFile ?? "LedgerFox", `.${FILE_EXT}`);
             const r = await dialog.showSaveDialog({ title: "Save a backup copy", defaultPath: join(app.getPath("documents"), `${stem} backup ${new Date().toISOString().slice(0, 10)}.${FILE_EXT}`), filters: [{ name: "LedgerFox data", extensions: [FILE_EXT] }] });
             if (r.canceled || !r.filePath) return;
@@ -365,6 +340,10 @@ async function createWindow() {
   win.webContents.on("did-fail-load", (_e, code, _desc, url, isMainFrame) => {
     if (isMainFrame && online() && code !== -3 && url.startsWith(ONLINE_URL)) void showOfflinePage();
   });
+  // Downloads (backups, Excel, PDF) ask where to save, starting in Documents.
+  win.webContents.session.on("will-download", (_e, item) => {
+    item.setSaveDialogOptions({ title: "Save to this computer", defaultPath: join(app.getPath("documents"), item.getFilename()) });
+  });
   win.on("closed", () => { win = null; });
 }
 
@@ -388,13 +367,10 @@ if (!app.requestSingleInstanceLock()) {
     loadConfig();
     buildMenu();
     await createWindow();
-    let file: string | null = pendingOpen;
-    if (!file && config.mode === "online") file = "online";
-    if (!file && config.dataFile && existsSync(config.dataFile)) file = config.mode === undefined && (await offerOnline()) ? "online" : config.dataFile;
-    if (!file) file = await firstRun();
-    if (!file) { app.quit(); return; }
+    // Online always, except when an old data file was opened from the file manager (view only).
+    const file = pendingOpen;
     try {
-      if (file === "online") await goOnline(); else await boot(file);
+      if (file) await boot(file); else { await goOnline(); await tellOnlineOnly(); }
       setupAutoUpdate();
     } catch (e) {
       dialog.showErrorBox("Could not open the data file", `${file}\n\n${(e as Error).message}`);

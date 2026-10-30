@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
+import { first } from "./lib/db";
 import { TRIAL_DAYS } from "@shared/plans";
 import { AppError, fromDbError } from "./lib/errors";
 import { requireAuth, requireCompany } from "./lib/auth";
@@ -119,6 +120,21 @@ async function renewMessage(env: Env) {
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
+// An old desktop data file opened view-only: LedgerFox works online now, so this copy is for looking up and exporting.
+company.use("*", async (c, next) => {
+  if (c.env.DESKTOP_READONLY === "true" && c.req.method !== "GET") {
+    throw new AppError(403, "READ_ONLY_FILE", "This old data file is open to view and export only. LedgerFox now works online: use File → Work online, and sign in with your LedgerFox account.");
+  }
+  await next();
+});
+// Paused by LedgerFox (admin panel): nothing can be opened except the full export, so the owner keeps their data.
+company.use("*", async (c, next) => {
+  const o = await first<{ suspended_at: string | null; suspended_reason: string | null }>(c.env.DB, `SELECT suspended_at, suspended_reason FROM organisations WHERE id = ?`, c.get("company").org_id);
+  if (o?.suspended_at && !(c.req.method === "GET" && /\/export(\/|$)/.test(c.req.path))) {
+    throw new AppError(403, "ACCOUNT_SUSPENDED", "Access to this business has been paused by LedgerFox. Your data is safe. Please contact info@niyazio.com.");
+  }
+  await next();
+});
 // Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
 company.use("*", async (c, next) => {
   // Company set-up (details, logo, payment QR, branches) is always allowed: it comes before the trial screen.

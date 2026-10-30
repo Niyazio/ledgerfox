@@ -2,7 +2,7 @@
 appId: com.niyazio.ledgerfox
 productName: LedgerFox
 electronVersion: 44.9.2
-copyright: "Copyright © LedgerFox contributors. MIT licence."
+copyright: "Copyright © Niyazio (niyazio.com). MIT licence."
 directories:
   output: release
   buildResources: build
@@ -19,9 +19,11 @@ asar: true
 fileAssociations:
   - ext: ledgerfox
     name: LedgerFox data
-    description: LedgerFox accounting data
-    role: Editor
+    description: LedgerFox accounting data (older versions, opens view-only)
+    role: Viewer
 win:
+  # Shown in the file's Properties → Details and in Windows' prompts.
+  legalTrademarks: "LedgerFox is a product of Niyazio"
   target:
     - target: nsis
       arch: [x64]

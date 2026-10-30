@@ -93,6 +93,19 @@ For the emails in `VENDOR_ADMIN_EMAILS`:
 
 Customers' books (invoice lines, ledgers, amounts) are only counted, never shown. Passwords and two-factor secrets never leave the server.
 
+### Controls in the admin panel
+
+- **Reset password** (Accounts tab, or People in an organisation): makes a one-time password, shown once, to give to the customer. Their old password stops working, they are signed out, two-factor sign-in is switched off, and they must choose a new password at the next sign-in. Passwords are stored only as salted one-way hashes, so they can never be shown. The sign-in ID (email or username) is listed for every account.
+- **Block / Unblock** a person: their sign-in stops at once; data is kept.
+- **Give free access** (plan and 1–36 months, with a note): for partners, or when a customer pays in cash; no invoice is made. **Record cash / bank payment** makes a proper invoice instead.
+- **End plan now**: the organisation is asked to renew (no grace). Auto-pay is not touched.
+- **Pause access** (with a reason) / **Resume access**: the organisation's companies can't be opened at all until resumed, except the full data export. Its desktop computers lose their plan too. The vendor's own organisation can't be paused.
+- **Billing history** tab (and in each organisation): every trial, auto-pay set up / approved / charged / failed / cancelled (by the owner or Razorpay), payment, free access, plan ended, pause, password reset and block, with who did it. Filter by kind and download as Excel/CSV. The Organisations list shows how many times each one cancelled auto-pay.
+
+## Demo companies
+
+A demo company (sample data) comes with a paid plan, one per organisation, with the plan's features. It is not part of the free trial: education mode (practice companies) is the free way to try everything.
+
 ## Promotions on the Free plan
 
 Organisations on the Free plan of the hosted website see one small, dismissible card at the bottom of the dashboard. Trial, paying, desktop and self-hosted users never see it.

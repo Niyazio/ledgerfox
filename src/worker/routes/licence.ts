@@ -32,8 +32,10 @@ const licensableOrgs = (c: Context<AppEnv>, userId: string) => all<{ id: string;
    ORDER BY o.created_at`, userId);
 
 async function issue(c: Context<AppEnv>, orgId: string, user: { id: string; email: string }, deviceId: string) {
-  const org = await first<{ name: string }>(c.env.DB, `SELECT name FROM organisations WHERE id = ?`, orgId);
-  const sub = await subscription(c.env, orgId);
+  const org = await first<{ name: string; suspended_at: string | null }>(c.env.DB, `SELECT name, suspended_at FROM organisations WHERE id = ?`, orgId);
+  const real = await subscription(c.env, orgId);
+  // A paused organisation gets no plan on its computers either.
+  const sub = org?.suspended_at ? { ...real, status: "free" as const } : real;
   const needsAutopay = await autopayRequired(c.env, orgId, user.email);
   const now = new Date();
   const until = sub.status === "trial" ? sub.trial_ends_at

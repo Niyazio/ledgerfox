@@ -19,7 +19,7 @@ export default function SecurityPage() {
           <p>Every request is checked against your organisation membership on the server. Another customer cannot see or change your records, even if they guess an address or ID: the server answers "not found". Automated tests try exactly this on every change.</p>
         </Item>
         <Item title="Encrypted everywhere">
-          <p>The website only works over HTTPS (TLS), and browsers are told never to use plain HTTP. Data is stored on Cloudflare's infrastructure, which encrypts it at rest. The desktop app's cloud backups are encrypted on your computer (AES-256) with your own passphrase before they leave it.</p>
+          <p>The website only works over HTTPS (TLS), and browsers are told never to use plain HTTP. Data is stored on Cloudflare's infrastructure, which encrypts it at rest. The desktop app shows the same secure website; entries made without internet wait on that computer until they are sent.</p>
         </Item>
         <Item title="Passwords and sign-in">
           <p>Passwords are never stored, only a salted, slow hash of them. Repeated wrong passwords are slowed down and blocked. You can turn on two-factor sign-in with an authenticator app, and owners can require it for their whole team. "Sign out everywhere" ends every session at once.</p>
@@ -37,7 +37,7 @@ export default function SecurityPage() {
           <p>A strict Content-Security-Policy allows only LedgerFox's own code to run inside the app. There are no ad, tracking or analytics scripts on any signed-in page. Requests from other websites are refused (CSRF protection). Every database query is parameterised (no SQL injection). Uploads are checked by file content, and Excel and CSV exports are protected against formula injection.</p>
         </Item>
         <Item title="Always yours: export and keep a copy">
-          <p>You can download all your data at any time (Excel, CSV and a full backup). The free desktop app keeps your books on your own computer, with no internet needed. Your data is never deleted for non-payment.</p>
+          <p>You can download all your data at any time (Excel, CSV and a full backup). The desktop app can also save a backup file to your computer. Your data is never deleted for non-payment: after a plan ends you can still view and export it.</p>
         </Item>
         <Item title="Kept up to date">
           <p>Every change runs hundreds of automated tests, including security tests, before it can go live. Releases are blocked if a known high-severity vulnerability is found in the software LedgerFox depends on. The source code is open, so anyone can inspect it.</p>

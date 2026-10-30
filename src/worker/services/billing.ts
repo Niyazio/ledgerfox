@@ -23,6 +23,14 @@ export interface Subscription {
 
 const DAY = 86_400_000;
 
+/** One line of an organisation's billing history (admin panel). Never throws: history must not break a payment. */
+export async function billingEvent(env: Env, orgId: string | null, kind: string, details?: Record<string, unknown> | null, actor?: string | null, userId?: string | null) {
+  try {
+    await run(env.DB, `INSERT INTO billing_events (id, org_id, user_id, kind, details, actor) VALUES (?,?,?,?,?,?)`,
+      newId(), orgId, userId ?? null, kind, details ? JSON.stringify(details) : null, actor ?? null);
+  } catch (e) { console.error("billing event", kind, e); }
+}
+
 export async function subscription(env: Env, orgId: string): Promise<Subscription> {
   // Desktop app: the plan comes from the licence for this computer (renewal required without one).
   if (licensingOn(env)) {
@@ -42,7 +50,8 @@ export async function subscription(env: Env, orgId: string): Promise<Subscriptio
        WHERE o.owner_user_id = (SELECT owner_user_id FROM organisations WHERE id = ?) AND s.org_id <> ? AND s.trial_ends_at IS NOT NULL
          AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = s.org_id AND c.is_demo = 0 AND c.is_practice = 0) LIMIT 1`, orgId, orgId);
     const trialEnds = hadTrial ? null : new Date(Date.now() + TRIAL_DAYS * DAY).toISOString();
-    await run(env.DB, `INSERT INTO org_subscriptions (org_id, plan, trial_ends_at) VALUES (?, 'free', ?) ON CONFLICT (org_id) DO NOTHING`, orgId, trialEnds);
+    const ins = await run(env.DB, `INSERT INTO org_subscriptions (org_id, plan, trial_ends_at) VALUES (?, 'free', ?) ON CONFLICT (org_id) DO NOTHING`, orgId, trialEnds);
+    if (ins.meta.changes) await billingEvent(env, orgId, trialEnds ? "trial_started" : "no_trial", trialEnds ? { trial_ends_at: trialEnds } : { reason: "The owner already had a free trial" }, "system");
     row = await first(env.DB, `SELECT plan, billing_interval, trial_ends_at, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
   }
   const now = Date.now();
@@ -100,6 +109,24 @@ export async function renewRequired(env: Env, orgId: string, email?: string | nu
     if (isVendor(env, owner?.email)) return false;
   }
   return hasRealCompany(env, orgId);
+}
+
+/**
+ * Demo companies (sample data) come with a paid plan, one per organisation; to learn and test everything for free
+ * there is education mode (practice companies). Self-hosted and vendor copies are not limited.
+ */
+export async function requireDemoAllowed(c: Context<AppEnv>, orgId: string | null) {
+  const learn = "To try every feature for free, create a practice company (education mode) instead.";
+  if (!orgId) {
+    if (!billingOn(c.env) && !licensingOn(c.env)) return;
+    throw new AppError(402, "DEMO_NEEDS_PLAN", `A demo company comes with a paid plan. Create your own company and choose a plan first. ${learn}`);
+  }
+  const s = await subscription(c.env, orgId);
+  if (s.enforced && !isVendor(c.env, c.get("user").email) && s.status !== "active" && s.status !== "grace") {
+    throw new AppError(402, "DEMO_NEEDS_PLAN", `A demo company comes with a paid plan (it is not part of the free trial). ${learn}`);
+  }
+  const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ? AND is_demo = 1`, orgId);
+  if ((n?.n ?? 0) >= 1) throw new AppError(409, "DEMO_EXISTS", "This organisation already has a demo company. Delete it in its Settings to load another one.");
 }
 
 const upgradeHint = (s: Subscription) => (s.status === "free" && s.paid_plan === null ? "Choose a plan in Settings → Plan & billing." : "Upgrade in Settings → Plan & billing.");
@@ -221,7 +248,10 @@ export async function markPaid(env: Env, paymentRowId: string, providerPaymentId
   const inv = await first<{ invoice_number: string }>(env.DB, `SELECT invoice_number FROM billing_payments WHERE id = ?`, p.id);
   const invoice = inv?.invoice_number ?? null;
   const already = !done[1].meta.changes;
-  if (!already) await sendReceipt(env, p.id);
+  if (!already) {
+    await billingEvent(env, p.org_id, "payment", { plan: p.plan, interval: p.billing_interval, payment_id: providerPaymentId, invoice, paid_until: end.toISOString() }, "system");
+    await sendReceipt(env, p.id);
+  }
   return { already, period_end: end.toISOString(), invoice_number: invoice };
 }
 

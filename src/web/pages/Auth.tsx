@@ -75,7 +75,7 @@ export function Register() {
   const { me, refresh } = useSession();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", username: "", password: "", confirm: "" });
+  const [form, setForm] = useState({ name: "", email: "", username: "", password: "", confirm: "", terms: false });
   const [codes, setCodes] = useState<string[] | null>(null);
   const [saved, setSaved] = useState(false);
   const { busy, error, setError, run } = useAction();
@@ -83,7 +83,7 @@ export function Register() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (form.password !== form.confirm) return setError("Passwords do not match");
-    const r = await run(() => api.post<{ recovery_codes: string[] }>("/api/auth/register", { name: form.name, email: form.email, username: form.username || null, password: form.password }));
+    const r = await run(() => api.post<{ recovery_codes: string[] }>("/api/auth/register", { name: form.name, email: form.email, username: form.username || null, password: form.password, accept_terms: form.terms }));
     if (r) setCodes(r.recovery_codes);
   };
   if (codes) {
@@ -110,6 +110,8 @@ export function Register() {
         <Field label="Username (optional)" hint="Sign in with this instead of your email.">{(id) => <Input id={id} autoComplete="username" autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />}</Field>
         <Field label="Password" hint="At least 10 characters. A short sentence works well.">{(id) => <Input id={id} type="password" required minLength={10} autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />}</Field>
         <Field label="Confirm password">{(id) => <Input id={id} type="password" required minLength={10} autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />}</Field>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" required className="mt-1" checked={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.checked })} />
+          <span>I agree to the <a className="text-brand-700 underline dark:text-brand-300" href="/terms" target="_blank" rel="noreferrer">Terms of service</a> and the <a className="text-brand-700 underline dark:text-brand-300" href="/privacy" target="_blank" rel="noreferrer">Privacy policy</a>.</span></label>
         <Button type="submit" loading={busy} className="w-full">Create account</Button>
       </form>
     </AuthCard>
