@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WebContents } from "electron";
 import { world, rawQuery } from "./helpers";
-import { saveLocalCopy } from "../src/desktop/localcopy";
+import { saveLocalCopy, type PageRunner } from "../src/desktop/localcopy";
 
 /** The desktop app runs its downloads inside the signed-in page; here the "page" is a signed-in test client. */
 function fakePage(W: Awaited<ReturnType<typeof world>>, online = true) {
@@ -19,7 +18,7 @@ function fakePage(W: Awaited<ReturnType<typeof world>>, online = true) {
       const r = await W.owner.req("GET", `/api/c/${id}/export`, undefined, { "x-ledgerfox-local-copy": "1" });
       return r.status === 200 ? JSON.stringify(r.json) : null;
     },
-  } as unknown as WebContents;
+  } satisfies PageRunner;
 }
 
 describe("desktop automatic local copy", () => {

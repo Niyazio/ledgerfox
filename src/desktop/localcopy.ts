@@ -7,10 +7,12 @@
  * day, the newest 30 kept). Files are written to a temporary name first and then renamed, so a copy is never half
  * written. The downloads run inside the signed-in page, with its own session; nothing else is sent anywhere.
  */
-import type { WebContents } from "electron";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+
+/** The part of Electron's WebContents used here (kept local so the website's checks need no Electron install). */
+export interface PageRunner { executeJavaScript(code: string, userGesture?: boolean): Promise<unknown> }
 
 const KEEP_DAYS = 30;
 // eslint-disable-next-line no-control-regex -- control characters are not allowed in Windows file names
@@ -37,7 +39,7 @@ function writeAtomic(file: string, text: string) {
 }
 
 /** Save every company once. Returns how many were saved; throws only for problems with the folder. */
-export async function saveLocalCopy(page: WebContents, folder: string): Promise<number> {
+export async function saveLocalCopy(page: PageRunner, folder: string): Promise<number> {
   const list = (await page.executeJavaScript(LIST_JS, true).catch(() => null)) as { id: string; name: string }[] | null;
   if (!list?.length) return 0;
   mkdirSync(folder, { recursive: true });
