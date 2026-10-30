@@ -20,6 +20,7 @@ import { PlanBanner, RenewGate, TrialGate, VerifyEmailBanner } from "../pages/Bi
 import { ThemePicker } from "./ThemePicker";
 import { DesktopLicenceBanner } from "../pages/DesktopPlan";
 import { setPracticeExports } from "../lib/csv";
+import { rememberCompany } from "../lib/lastCompany";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -135,7 +136,7 @@ function LangPicker() {
   const { lang, t } = useLang();
   return (
     <select aria-label={t("Language")} title={t("Language")} value={lang} onChange={(e) => setLang(e.target.value as Lang)}
-      className="w-14 rounded-lg border-0 bg-transparent py-1 pl-1 pr-5 text-sm hover:bg-[var(--surface-2)] sm:w-auto sm:pr-6">
+      className="w-[3.75rem] rounded-lg border-0 bg-transparent py-1 pl-1.5 pr-5 text-sm hover:bg-[var(--surface-2)] sm:w-auto sm:pr-6">
       {LANGS.map((l) => <option key={l.value} value={l.value} title={l.label}>{l.short}</option>)}
     </select>
   );
@@ -162,7 +163,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {g.items.map((it) => (
               <li key={it.to}>
                 <NavLink to={`/app/${companyId}/${it.to}`} end={it.to === "reports"} onClick={onNavigate}
-                  className={({ isActive }) => cx("flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm", (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to))) ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200" : "hover:bg-[var(--surface-2)]")}>
+                  className={({ isActive }) => cx("group relative flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-sm transition-all duration-200 ease-out",
+                    (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to)))
+                      ? "bg-gradient-to-r from-brand-100 to-brand-50 font-medium text-brand-800 shadow-sm before:absolute before:inset-y-1.5 before:-left-1 before:w-1 before:rounded-full before:bg-brand-600 dark:from-brand-900/50 dark:to-brand-900/20 dark:text-brand-200"
+                      : "hover:translate-x-0.5 hover:bg-[var(--surface-2)]")}>
                   {it.icon}<span className="flex-1">{t(it.label)}</span>{HINTS[it.to] && <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[10px] muted lg:inline">{HINTS[it.to]}</kbd>}
                 </NavLink>
               </li>
@@ -313,14 +317,14 @@ function Shell() {
   }, [settings, me?.brand]);
   return (
     <div className="flex h-full">
-      <aside className="hidden w-60 shrink-0 border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:flex-col">
+      <aside className="glass hidden w-60 shrink-0 border-r border-[var(--border)] lg:flex lg:flex-col">
         <Link to="/app" className="px-5 py-4 text-base"><Wordmark brand={me?.brand} /></Link>
         <Sidebar />
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[var(--surface)] shadow-xl">
+          <div className="anim-fade absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" onClick={() => setMobileOpen(false)} />
+          <aside className="anim-slide-left absolute inset-y-0 left-0 flex w-72 flex-col rounded-r-3xl bg-[var(--surface)] shadow-[var(--shadow-lg)]">
             <div className="flex items-center justify-between px-4 py-3"><Wordmark brand={me?.brand} />
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded p-1 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div>
             <Sidebar onNavigate={() => setMobileOpen(false)} />
@@ -329,7 +333,7 @@ function Shell() {
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="app-header flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 sm:px-5">
+        <header className="app-header glass sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-1">
             <button className="rounded p-2 hover:bg-[var(--surface-2)] lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu className="h-5 w-5" /></button>
             <CompanySwitcher />
@@ -358,7 +362,7 @@ function Shell() {
         {settings?.company.is_practice ? <PracticeBar /> : null}
         {me?.edition === "cloud" && <VerifyEmailBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
-          <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
+          <div key={pathname} className="anim-page mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>
         </main>
         {settings && me?.edition !== "offline" && !/\/pos$/.test(pathname) && <Assistant />}
       </div>
@@ -368,5 +372,7 @@ function Shell() {
 
 export function CompanyLayout() {
   const { companyId } = useParams();
+  // A product QR scanned with the phone camera opens billing in the company last used here.
+  useEffect(() => { if (companyId) rememberCompany(companyId); }, [companyId]);
   return <CompanyProvider key={companyId} id={companyId!}><Shell /></CompanyProvider>;
 }

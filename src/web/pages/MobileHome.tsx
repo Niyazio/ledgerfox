@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Cloud, Monitor, QrCode, Smartphone, Trash2, Download as DownloadIcon } from "lucide-react";
 import { setTransport } from "../lib/api";
+import { applyUpdate, type UpdateInfo } from "../lib/updates";
 import { useSession } from "../lib/session";
 import { Wordmark, ProductCredit } from "../components/Layout";
 import { Alert, Button, Card, Input } from "../components/ui";
@@ -27,12 +28,6 @@ function recent(): string[] {
 }
 function remember(origin: string) {
   try { localStorage.setItem(RECENT, JSON.stringify([origin, ...recent().filter((r) => r !== origin)].slice(0, 5))); } catch { /* unavailable */ }
-}
-
-function openExternal(url: string) {
-  const browser = (globalThis as { Capacitor?: { Plugins?: { Browser?: { open: (o: { url: string }) => Promise<void> } } } }).Capacitor?.Plugins?.Browser;
-  if (browser) void browser.open({ url });
-  else window.open(url, "_blank");
 }
 
 const newer = (a: string, b: string) => {
@@ -137,7 +132,11 @@ export default function MobileHome() {
   return (
     <div className="mx-auto max-w-md px-4 py-8">
       <div className="mb-6 flex justify-center text-xl"><Wordmark iconClass="h-10 w-10" /></div>
-      {update && <Alert kind="info" className="mb-4">LedgerFox {update} is available. <button className="font-semibold underline" onClick={() => openExternal(`https://github.com/${REPO}/releases/latest/download/LedgerFox-android.apk`)}>Download update</button></Alert>}
+      {update && <Alert kind="info" className="mb-4">LedgerFox {update} is available. <button className="font-semibold underline" disabled={busy === "update"} onClick={async () => {
+        setBusy("update"); setError(null);
+        try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/LedgerFox-android.apk` } as UpdateInfo); }
+        catch (e) { setError((e as Error).message || "The update could not be downloaded."); } finally { setBusy(null); }
+      }}>{busy === "update" ? "Downloading…" : "Update now"}</button></Alert>}
       {error && <Alert className="mb-4">{error}</Alert>}
       {busy && <Alert kind="info" className="mb-4">{busy}…</Alert>}
       <div className="space-y-4">

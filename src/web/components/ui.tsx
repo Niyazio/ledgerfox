@@ -8,10 +8,10 @@ export { cx };
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand-700 text-white hover:bg-brand-800 shadow-sm disabled:bg-brand-700/60",
-  secondary: "border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-2)] text-[var(--text)]",
+  primary: "bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-sm shadow-brand-700/25 hover:from-brand-600 hover:to-brand-800 hover:shadow-md hover:shadow-brand-700/30 disabled:from-brand-700/60 disabled:to-brand-700/60 disabled:shadow-none",
+  secondary: "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-sm hover:border-brand-300 hover:bg-[var(--surface-2)] hover:shadow dark:hover:border-brand-700",
   ghost: "hover:bg-[var(--surface-2)] text-[var(--text)]",
-  danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-600/60",
+  danger: "bg-gradient-to-b from-red-500 to-red-600 text-white shadow-sm shadow-red-600/25 hover:to-red-700 hover:shadow-md disabled:from-red-600/60 disabled:to-red-600/60",
 };
 
 export function Button({ variant = "primary", size = "md", loading, className, children, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md"; loading?: boolean }) {
@@ -20,7 +20,7 @@ export function Button({ variant = "primary", size = "md", loading, className, c
       {...p}
       disabled={p.disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 ease-out enabled:hover:-translate-y-px enabled:active:translate-y-0 enabled:active:scale-[0.98] disabled:cursor-not-allowed",
         size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-3.5 py-2 text-sm",
         VARIANTS[variant], className,
       )}
@@ -33,7 +33,7 @@ export function Button({ variant = "primary", size = "md", loading, className, c
 
 export function LinkButton({ to, variant = "primary", size = "md", className, children }: { to: string; variant?: Variant; size?: "sm" | "md"; className?: string; children: ReactNode }) {
   return (
-    <Link to={to} className={cx("inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors", size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-3.5 py-2 text-sm", VARIANTS[variant], className)}>
+    <Link to={to} className={cx("inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 ease-out hover:-translate-y-px active:scale-[0.98]", size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-3.5 py-2 text-sm", VARIANTS[variant], className)}>
       {children}
     </Link>
   );
@@ -106,7 +106,7 @@ const BADGE: Record<string, string> = {
 };
 
 export function Badge({ color = "gray", children }: { color?: keyof typeof BADGE; children: ReactNode }) {
-  return <span className={cx("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset", BADGE[color])}>{children}</span>;
+  return <span className={cx("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", BADGE[color])}>{children}</span>;
 }
 
 export function StatusBadge({ status, due, outstanding }: { status: string; due?: string | null; outstanding?: number }) {
@@ -136,7 +136,7 @@ export function Alert({ kind = "error", children, className }: { kind?: "error" 
   }[kind];
   const Icon = kind === "error" ? AlertCircle : kind === "success" ? CheckCircle2 : Info;
   return (
-    <div role={kind === "error" ? "alert" : "status"} className={cx("flex gap-2 rounded-lg border px-3 py-2.5 text-sm", styles, className)}>
+    <div role={kind === "error" ? "alert" : "status"} className={cx("anim-fade flex gap-2 rounded-xl border px-3 py-2.5 text-sm", styles, className)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       <div className="min-w-0">{children}</div>
     </div>
@@ -183,11 +183,11 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
   }, [open]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className={cx("card flex max-h-[92vh] w-full flex-col shadow-xl", wide ? "sm:max-w-3xl" : "sm:max-w-lg")}>
+    <div className="anim-fade fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-[3px] sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className={cx("card anim-pop flex max-h-[92vh] w-full flex-col rounded-b-none !shadow-[var(--shadow-lg)] sm:rounded-b-[1.125rem]", wide ? "sm:max-w-3xl" : "sm:max-w-lg")}>
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
           <h2 className="font-semibold">{title}</h2>
-          <button onClick={onClose} className="rounded p-1 hover:bg-[var(--surface-2)]" aria-label="Close"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded-full p-1.5 transition-colors hover:bg-[var(--surface-2)]" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
         <div ref={body} className="overflow-y-auto p-4">{children}</div>
         {footer && <div data-modal-footer className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">{footer}</div>}
@@ -232,7 +232,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 no-print" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={cx("pointer-events-auto rounded-lg px-4 py-3 text-sm shadow-lg ring-1", t.kind === "error" ? "bg-red-600 text-white ring-red-700" : t.kind === "success" ? "bg-slate-900 text-white ring-slate-800 dark:bg-white dark:text-slate-900" : "bg-sky-600 text-white ring-sky-700")}>{t.text}</div>
+          <div key={t.id} className={cx("anim-toast pointer-events-auto rounded-2xl px-4 py-3 text-sm shadow-[var(--shadow-lg)] ring-1", t.kind === "error" ? "bg-red-600 text-white ring-red-700" : t.kind === "success" ? "bg-slate-900 text-white ring-slate-800 dark:bg-white dark:text-slate-900" : "bg-sky-600 text-white ring-sky-700")}>{t.text}</div>
         ))}
       </div>
     </ToastCtx.Provider>

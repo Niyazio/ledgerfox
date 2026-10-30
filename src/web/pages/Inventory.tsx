@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Plus, QrCode } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import QRCode from "qrcode";
+import { code128Svg, productQrPayload } from "@shared/barcode";
+import { saveFile } from "../lib/download";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
@@ -9,6 +12,32 @@ import { ScanInput } from "../components/Scanner";
 import { downloadCsv } from "../lib/csv";
 import { AccountSelect, TaxSelect } from "../components/pickers";
 import { fmtDate, qty, today, toInput } from "../lib/format";
+
+/** The product's QR (a link that opens billing on any phone) and barcode, as printed on its labels. */
+function ProductCodes({ item }: { item: { id: string; name: string; code: string | null; barcode: string | null } }) {
+  const { id: companyId } = useCompany();
+  const nav = useNavigate();
+  const [qr, setQr] = useState("");
+  const code = item.code ?? "";
+  useEffect(() => { if (code) QRCode.toDataURL(productQrPayload(code, location.origin), { margin: 1, width: 360, errorCorrectionLevel: "M" }).then(setQr); }, [code]);
+  if (!code) return null;
+  const bar = item.barcode || code;
+  const download = async () => saveFile(await (await fetch(qr)).blob(), `QR-${code}.png`);
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:col-span-2">
+      {qr && <img src={qr} alt={`QR code for ${code}`} className="h-28 w-28 rounded-lg bg-white p-1" />}
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="max-w-[16rem] rounded bg-white p-1" dangerouslySetInnerHTML={{ __html: code128Svg(bar) }} />
+        <p className="font-mono text-sm">{bar}</p>
+        <p className="text-xs muted">Scan in POS, or with any phone camera while signed in: billing opens with this product added.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" onClick={() => nav(`/app/${companyId}/labels?item=${item.id}`)}><QrCode className="h-4 w-4" />Print labels</Button>
+          <Button type="button" size="sm" variant="secondary" disabled={!qr} onClick={() => void download()}>Download QR</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: boolean) => void }) {
   const { path, settings, can } = useCompany();
@@ -50,6 +79,7 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
         {v.track_inventory && <Field label="Reorder level">{(id) => <Input id={id} inputMode="decimal" value={v.reorder_level} onChange={(e) => set("reorder_level", e.target.value)} />}</Field>}
         <Field label="Description" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.description} onChange={(e) => set("description", e.target.value)} />}</Field>
         {initial && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_active} onChange={(e) => set("is_active", e.target.checked)} /> Active</label>}
+        {initial?.code && <ProductCodes item={initial} />}
       </div>
     </Modal>
   );

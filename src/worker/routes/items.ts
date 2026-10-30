@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { scannedCode } from "@shared/barcode";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
@@ -85,10 +86,8 @@ items.get("/", async (c) => {
  */
 items.get("/lookup", async (c) => {
   const company = c.get("company");
-  let v = (c.req.query("code") ?? "").trim();
+  const v = scannedCode(c.req.query("code") ?? "");
   if (!v) throw badRequest("Scan or type a code");
-  const qr = /^LF1\|P\|([A-Z0-9._-]{1,32})$/i.exec(v);
-  if (qr) v = qr[1];
   const item = await first<Record<string, unknown>>(c.env.DB,
     `SELECT i.*, t.name AS tax_code_name, t.rate_bp FROM items i LEFT JOIN tax_codes t ON t.id = i.tax_code_id
      WHERE i.company_id = ? AND (i.code = ? OR i.barcode = ? OR i.sku = ?) ORDER BY i.code = ? DESC, i.barcode = ? DESC LIMIT 1`,

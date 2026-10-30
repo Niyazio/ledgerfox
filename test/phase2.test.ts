@@ -122,7 +122,7 @@ describe("roles, branches and approvals through the API", () => {
   it("scanner lookup finds a product by QR payload, barcode, code or SKU, without prices in the QR", async () => {
     const item = await W.owner.post(W.c("/items"), { kind: "goods", name: "Rice 5kg", sku: "RICE5", sale_price: "450", barcode: "8900000000017" });
     const code = item.json.code;
-    for (const v of [`LF1|P|${code}`, "8900000000017", code.toLowerCase(), "RICE5"]) {
+    for (const v of [`LF1|P|${code}`, `https://ledgerfox.niyazio.com/scan?p=${code}`, "8900000000017", code.toLowerCase(), "RICE5"]) {
       const r = await billing.get(W.c(`/items/lookup?code=${encodeURIComponent(v)}`));
       expect(r.status).toBe(200);
       expect(r.json.item.id).toBe(item.json.id);
