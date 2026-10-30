@@ -51,15 +51,26 @@ A daily job runs at 08:47 India time and sends each reminder only once:
 
 The app also shows a yellow bar near the end of the trial or plan.
 
+## Education mode (practice companies)
+For students, trainees and beginners: tick **Practice company (education mode)** when creating a company, on the website or in the desktop app.
+- **Free forever, every feature:** POS, payroll, GST reports, manufacturing and the rest, on any plan, with no auto-pay. A learning-only organisation (only practice companies) can hold a class of up to 50 users, 10 companies and 5 branches.
+- **Not for business, like Tally's educational mode:**
+  - entries can be dated only the **1st, 2nd and last day of a month**, enforced by the database;
+  - printouts and PDFs carry a "Practice — not a valid tax document" mark and watermark;
+  - Excel/CSV downloads start with a "practice company" line;
+  - government e-invoice and e-way bill files, public verification QR codes and WhatsApp/email sharing are off;
+  - the name always ends with "(Practice)" and an orange bar shows on every screen.
+- **Permanent:** a practice company can't be turned into a real one. Start a real company for real work.
+
 ## One free trial per customer
-- **Once per owner:** the 30-day trial is given once, to the owner's first real organisation. Another organisation by the same owner starts on the Free plan; demo companies don't count.
+- **Once per owner:** the 30-day trial is given once, to the owner's first real organisation. Another organisation by the same owner has no trial and needs a plan from the start; demo and practice companies don't count.
 - **Stopping and restarting auto-pay never restarts the trial.** During the trial, the first charge stays on the original trial end date. After the trial, it is charged at once.
 - **Not covered:** someone who signs up again with a different email gets a new trial. Watch for repeat sign-ups (same company name, phone or GSTIN) in the admin panel.
 
 ## Turning auto-renew off, and the end of a plan
 - **Turning off auto-renew:** Plan & billing → **Turn off auto-renew**. No more charges are taken, and the days already paid are kept.
 - **Grace period:** when a paid period ends without renewal, everything works for 7 more days.
-- **Free plan:** after the grace period, the Free plan limits apply (1 user, 1 company, no POS, payroll or GST return files). **Data is never deleted or locked.** Billing, accounts and reports keep working.
+- **No Free plan:** after the grace period, the customer sees "Renew your plan to continue". They can still view, print and export everything, but cannot add or change entries until they renew. **Data is never deleted.** Practice companies (education mode) stay free.
 - **Changing the plan of a running auto-renew:** turn it off, then choose the new plan. The new auto-renew starts when the current period ends.
 
 ## What you (the seller) do

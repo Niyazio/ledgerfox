@@ -59,6 +59,8 @@ export interface CompanyRow {
   id: string;
   org_id: string;
   name: string;
+  /** Education mode (1): free, every feature, entries only on the 1st, 2nd and last day of a month. */
+  is_practice?: number;
   legal_name: string | null;
   country: string;
   base_currency: string;

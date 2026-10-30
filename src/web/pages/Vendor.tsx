@@ -221,7 +221,7 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </section>
           <section><h3 className="mb-1 font-semibold">Companies ({data.companies.length})</h3>
             <TableWrap><table className="table text-xs"><thead><tr><th>Company</th><th>GSTIN / place</th><th>Contact</th><th className="num">Docs</th><th className="num">Customers / suppliers</th><th className="num">Products</th><th>Last activity</th></tr></thead>
-              <tbody>{data.companies.map((co: any) => <tr key={co.id}><td>{co.name}{co.is_demo ? " (demo)" : ""}<span className="block muted">{co.business_type}</span></td><td>{co.tax_id ?? "—"}<span className="block muted">{[co.city, co.state_code].filter(Boolean).join(" · ")}</span></td>
+              <tbody>{data.companies.map((co: any) => <tr key={co.id}><td>{co.name}{co.is_demo ? " (demo)" : ""}{co.is_practice ? " · education" : ""}<span className="block muted">{co.business_type}</span></td><td>{co.tax_id ?? "—"}<span className="block muted">{[co.city, co.state_code].filter(Boolean).join(" · ")}</span></td>
                 <td>{co.phone ?? ""}<span className="block muted">{co.email ?? ""}</span></td><td className="num">{co.documents}</td><td className="num">{co.contacts}</td><td className="num">{co.items}</td><td>{ago(co.last_activity)}</td></tr>)}</tbody></table></TableWrap>
           </section>
           <section><h3 className="mb-1 font-semibold">Payments ({data.payments.length})</h3>

@@ -57,12 +57,16 @@ function useVerifyLink(kind: Kind, id: string, enabled: boolean, summary: string
 function Sheet({ format, name, text, children }: { format: Format; name?: string; text?: string; children: ReactNode }) {
   const f = FORMATS[format];
   const thermal = format.startsWith("thermal");
+  const { settings } = useCompany();
+  const practice = Boolean(settings?.company.is_practice);
   return (
     <>
       <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } }`}</style>
       <div data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
-        style={{ width: f.width, maxWidth: "100%", minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm" }}>
+        style={{ width: f.width, maxWidth: "100%", minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
+        {practice && <p className="mb-2 border border-orange-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
         {children}
+        {practice && <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden"><span className="-rotate-30 select-none text-[64px] font-black tracking-widest text-orange-500/15">PRACTICE</span></div>}
       </div>
     </>
   );

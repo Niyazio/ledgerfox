@@ -7,7 +7,8 @@ import { TRIAL_PLAN, type PlanId } from "@shared/plans";
  * Desktop licences. The desktop app signs in to the customer's LedgerFox online account; the website then issues a
  * licence for that organisation's plan, signed with an Ed25519 key. The desktop app checks the signature offline,
  * and refreshes the licence whenever it has internet. Without a valid licence (never connected, plan ended, or more
- * than OFFLINE_DAYS without a check) the desktop app runs on the Free plan: nothing is ever locked or deleted.
+ * than OFFLINE_DAYS without a check) there is no Free plan: everything stays viewable and exportable, but new entries
+ * wait until the plan is renewed or checked again (see renewRequired). Nothing is ever deleted.
  */
 export const OFFLINE_DAYS = 15;
 export const DEFAULT_LICENCE_SERVER = "https://ledgerfox.niyazio.com";
@@ -95,7 +96,7 @@ export interface DesktopLicenceState {
   last_error: string | null;
 }
 
-/** What this computer may use now. Plans are applied only with a valid, current licence; otherwise the Free plan. */
+/** What this computer may use now. Plans are applied only with a valid, current licence; otherwise renewal is required. */
 export async function desktopLicenceState(env: Env, now = Date.now()): Promise<DesktopLicenceState> {
   const row = await storedLicence(env);
   const base = { org_name: null, email: null, plan_until: null, check_by: null, last_checked_at: row?.last_checked_at ?? null, last_error: row?.last_error ?? null };

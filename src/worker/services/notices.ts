@@ -56,7 +56,7 @@ export async function sendAutopayProblem(env: Env, subscriptionId: string, statu
         ? `We could not charge the renewal of the ${PLANS[s.autopay_plan].name} plan for ${o.org_name} after several tries, so auto-renew has stopped.`
         : `The renewal charge for the ${PLANS[s.autopay_plan].name} plan of ${o.org_name} failed. Razorpay will try again over the next few days.`,
       "", "Please check your UPI app, card or bank, or pay once from:", plansLink(url), "",
-      ...(s.paid_until ? [`Your paid period ends on ${day(s.paid_until)}; after that there are 7 days of grace before the Free plan limits apply. Your data is never deleted.`] : []),
+      ...(s.paid_until ? [`Your paid period ends on ${day(s.paid_until)}; after that there are 7 days of grace, then new entries pause until you renew. Your data is never deleted and stays viewable.`] : []),
       "", `Subscription ID: ${subscriptionId}`, "", "LedgerFox"].join("\n"),
   }));
 }
@@ -77,8 +77,8 @@ export async function dailyBillingReminders(env: Env, now = Date.now()) {
       if (await once(env, r.org_id, `trial-end:${r.trial_ends_at!.slice(0, 10)}`, (o, url) => ({
         subject: "Your LedgerFox free trial ends soon",
         text: [`Hello ${o.name},`, "", `The free trial of ${o.org_name} ends on ${day(r.trial_ends_at!)}.`, "",
-          "To keep POS billing, payroll, GST return files and more users, choose a plan (auto-renew starts after the trial, so you are not charged early):", plansLink(url), "",
-          "If you do nothing, LedgerFox moves to the Free plan. Your data stays, and billing, accounts and reports keep working.", "", "LedgerFox"].join("\n"),
+          "To keep working after that, choose a plan (auto-renew starts after the trial, so you are not charged early):", plansLink(url), "",
+          "If you do nothing, new entries pause after the trial until you choose a plan. Your data stays safe and you can still view and export it.", "", "LedgerFox"].join("\n"),
       }))) sent++;
     } else if (r.plan !== "free" && paid > now && paid - now <= 5 * DAY && !autopay) {
       if (await once(env, r.org_id, `renew:${r.paid_until!.slice(0, 10)}`, (o, url) => ({
@@ -90,7 +90,7 @@ export async function dailyBillingReminders(env: Env, now = Date.now()) {
       if (await once(env, r.org_id, `grace:${r.paid_until!.slice(0, 10)}`, (o, url) => ({
         subject: "Your LedgerFox plan has ended — 7 days to renew",
         text: [`Hello ${o.name},`, "", `The ${PLANS[r.plan].name} plan of ${o.org_name} ended on ${day(r.paid_until!)}. Everything keeps working for 7 more days.`, "",
-          "Renew here to keep your plan's features:", plansLink(url), "", "After that, the Free plan limits apply. Your data is never deleted.", "", "LedgerFox"].join("\n"),
+          "Renew here to keep working:", plansLink(url), "", "After that, new entries pause until you renew. Your data is never deleted.", "", "LedgerFox"].join("\n"),
       }))) sent++;
     }
   }

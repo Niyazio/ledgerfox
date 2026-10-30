@@ -16,9 +16,10 @@ import { Shortcuts } from "./Shortcuts";
 import { HINTS } from "../lib/shortcuts";
 import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
-import { PlanBanner, TrialGate, VerifyEmailBanner } from "../pages/Billing";
+import { PlanBanner, RenewGate, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { ThemePicker } from "./ThemePicker";
 import { DesktopLicenceBanner } from "../pages/DesktopPlan";
+import { setPracticeExports } from "../lib/csv";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
 /** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
@@ -271,6 +272,16 @@ function OfflineStatus({ companyId }: { companyId: string }) {
   );
 }
 
+/** Education mode: always visible, so nobody mistakes a practice company for a real one. */
+function PracticeBar() {
+  useEffect(() => { setPracticeExports(true); return () => setPracticeExports(false); }, []);
+  return (
+    <div className="no-print border-b border-orange-300 bg-orange-100 px-4 py-1.5 text-center text-xs font-medium text-orange-900 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-200">
+      Practice company (education mode): free with every feature, for learning only. Entries can be dated only the 1st, 2nd and last day of a month.
+    </div>
+  );
+}
+
 function RecurringRunner() { useRecurringAutoRun(); return null; }
 
 function Shell() {
@@ -328,7 +339,9 @@ function Shell() {
         {settings && me?.edition !== "offline" && <RecurringRunner />}
         {settings && me?.edition === "cloud" && <PlanBanner />}
         {settings && me?.edition === "cloud" && <TrialGate />}
-        {settings && me?.edition === "desktop" && <DesktopLicenceBanner />}
+        {settings && (me?.edition === "cloud" || me?.edition === "desktop") && <RenewGate />}
+        {settings && me?.edition === "desktop" && !settings.company.is_practice && <DesktopLicenceBanner />}
+        {settings?.company.is_practice ? <PracticeBar /> : null}
         {me?.edition === "cloud" && <VerifyEmailBanner />}
         <main className="min-w-0 flex-1 overflow-y-auto px-3 py-5 sm:px-6">
           <div className="mx-auto max-w-7xl"><Suspense fallback={<Spinner />}><Outlet /></Suspense></div>

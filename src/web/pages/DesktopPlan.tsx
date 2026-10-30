@@ -16,7 +16,7 @@ export interface LicenceState {
 }
 
 const STATUS: Record<string, [string, "green" | "blue" | "amber" | "gray"]> = {
-  trial: ["Free trial", "blue"], active: ["Active", "green"], grace: ["Payment due", "amber"], free: ["Free plan", "gray"],
+  trial: ["Free trial", "blue"], active: ["Active", "green"], grace: ["Payment due", "amber"], free: ["Renew to continue", "amber"],
 };
 /** Tell the reminder bar that the licence changed (connect, check now, disconnect). */
 const changed = () => window.dispatchEvent(new Event("ledgerfox-licence"));
@@ -24,10 +24,10 @@ const day = (iso: string | null) => (iso ? fmtDate(iso.slice(0, 10)) : "—");
 
 /** What a licence state means for the person at the desk, in one sentence. */
 export function licenceMessage(l: LicenceState) {
-  if (l.reason === "not_connected") return `Free plan. Connect your LedgerFox account to use your plan, or start a ${TRIAL_DAYS}-day free trial.`;
-  if (l.reason === "check_overdue") return `Free plan until this computer checks your plan again: connect to the internet (it needs a check at least every ${l.offline_days} days).`;
+  if (l.reason === "not_connected") return `Sign in to your LedgerFox account to continue. New accounts get a ${TRIAL_DAYS}-day free trial. Until then you can view and export, but not add entries.`;
+  if (l.reason === "check_overdue") return `Connect to the internet so this computer can check your plan (needed at least every ${l.offline_days} days), then click “Check now”. Until then you can view and export, but not add entries.`;
   if (l.reason === "autopay_required") return `Start your ${TRIAL_DAYS}-day free trial: set up auto-pay on the LedgerFox website (₹5 check, refunded; nothing is charged until the trial ends), then click “Check now”.`;
-  if (l.reason === "plan_ended") return "Free plan: your trial or plan has ended. Renew on the LedgerFox website and click “Check now”.";
+  if (l.reason === "plan_ended") return "Your trial or plan has ended. Renew on the LedgerFox website, then click “Check now” to continue adding entries. Your data is safe.";
   if (l.reason === "invalid") return "The licence on this computer could not be verified. Connect your LedgerFox account again.";
   return null;
 }
@@ -96,7 +96,7 @@ export function DesktopPlanTab() {
             <Button loading={busy === "refresh"} onClick={async () => { setBusy("refresh"); try { setData(await api.post<LicenceState>("/api/desktop/licence/refresh")); changed(); usage.reload(); } catch (e) { toast("error", errorMessage(e)); } finally { setBusy(null); } }}>Check now</Button>
             <a className="inline-flex items-center rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]" href={buy} target="_blank" rel="noreferrer">Buy or manage plan online</a>
             <Button variant="ghost" loading={busy === "disconnect"} onClick={async () => {
-              if (!confirm("Disconnect this computer? It will use the Free plan until you connect again. Your data stays on this computer.")) return;
+              if (!confirm("Disconnect this computer? You will not be able to add entries until you connect again. Your data stays on this computer.")) return;
               setBusy("disconnect"); try { setData(await api.post<LicenceState>("/api/desktop/licence/disconnect")); changed(); usage.reload(); } catch (e) { toast("error", errorMessage(e)); } finally { setBusy(null); }
             }}>Disconnect</Button>
           </div>
@@ -131,7 +131,7 @@ export function DesktopPlanTab() {
   );
 }
 
-/** Thin bar in the desktop app while it runs on the Free plan or the trial is about to end. */
+/** Thin bar in the desktop app while the plan needs renewing (or connecting) or the trial is about to end. */
 export function DesktopLicenceBanner() {
   const { id } = useCompany();
   const { data, reload } = useApi<LicenceState>("/api/desktop/licence");
