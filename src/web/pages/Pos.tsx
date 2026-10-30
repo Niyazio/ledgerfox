@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Pause, Play, Plus, Printer, Trash2, X } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
-import { api, errorMessage } from "../lib/api";
+import { errorMessage } from "../lib/api";
 import { Alert, Button, Card, Input, Select } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
+import { isQueued, postOrQueue } from "../lib/offline";
 import { computeDocument, resolveTaxMode, schemeForCountry, type TaxCodeLike } from "@shared/tax";
 import { parseDecimal, roundToWhole } from "@shared/money";
 import { currencyExponent } from "@shared/currencies";
@@ -74,12 +75,17 @@ export default function Pos() {
     if (mode === "split" && paid !== totals.total && !customer) return setError("Split amounts must add up to the bill for a walk-in customer");
     setBusy(true); setError(null);
     try {
-      const r = await api.post<{ invoice_id: string; number: string }>(path("/pos/sale"), {
+      // Without internet the bill waits on this device and is sent (and numbered) as soon as the connection is back.
+      const r = await postOrQueue<{ invoice_id: string; number: string }>(path("/pos/sale"), {
         contact_id: customer || null, branch_id: branch || null,
         lines: cart.map((l) => ({ item_id: l.item.id, quantity: String(l.qty) })), payments,
-      }, { "idempotency-key": crypto.randomUUID() });
-      setLast({ id: r.invoice_id, number: r.number, change });
-      window.open(`/print/${id}/document/${r.invoice_id}?format=thermal80&auto=1`, "_blank", "noopener,width=420,height=700");
+      }, { label: `POS bill: ${cart.length} item(s), ${toInput(totals.total, cur)}` });
+      if (isQueued(r)) {
+        setLast({ id: "", number: "saved offline — sent when the internet is back", change });
+      } else {
+        setLast({ id: r.invoice_id, number: r.number, change });
+        window.open(`/print/${id}/document/${r.invoice_id}?format=thermal80&auto=1`, "_blank", "noopener,width=420,height=700");
+      }
       reset();
       items.reload();
       setTimeout(() => searchRef.current?.focus(), 50);

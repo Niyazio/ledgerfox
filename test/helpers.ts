@@ -91,7 +91,7 @@ let seq = 0;
 export async function register(env: Env, name = "Owner") {
   const client = new Client(env);
   const email = `user${++seq}-${Math.random().toString(36).slice(2, 7)}@example.com`;
-  const r = await client.post("/api/auth/register", { name, email, password: "correct horse battery" });
+  const r = await client.post("/api/auth/register", { name, email, password: "correct horse battery", accept_terms: true });
   if (r.status !== 201) throw new Error(`register failed ${r.status} ${JSON.stringify(r.json)}`);
   return { client, email, recovery: r.json.recovery_codes as string[] };
 }

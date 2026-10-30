@@ -154,12 +154,12 @@ describe("business types, demo companies and usernames", () => {
 
   it("people can sign in with a username instead of an email", async () => {
     const c = new Client(W.env);
-    const reg = await c.post("/api/auth/register", { name: "Uma", email: "uma@example.com", username: "uma.k", password: "correct horse battery" });
+    const reg = await c.post("/api/auth/register", { name: "Uma", email: "uma@example.com", username: "uma.k", password: "correct horse battery", accept_terms: true });
     expect(reg.status).toBe(201);
     const fresh = new Client(W.env);
     expect((await fresh.post("/api/auth/login", { login: "UMA.K", password: "correct horse battery" })).status).toBe(200);
     expect((await fresh.get("/api/auth/me")).json.user.username).toBe("uma.k");
-    expect((await new Client(W.env).post("/api/auth/register", { name: "Dup", email: "dup@example.com", username: "uma.k", password: "correct horse battery" })).status).toBe(409);
+    expect((await new Client(W.env).post("/api/auth/register", { name: "Dup", email: "dup@example.com", username: "uma.k", password: "correct horse battery", accept_terms: true })).status).toBe(409);
   });
 });
 

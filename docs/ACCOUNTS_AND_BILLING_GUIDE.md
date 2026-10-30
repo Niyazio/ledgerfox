@@ -73,6 +73,13 @@ For students, trainees and beginners: tick **Practice company (education mode)**
 - **No Free plan:** after the grace period, the customer sees "Renew your plan to continue". They can still view, print and export everything, but cannot add or change entries until they renew. **Data is never deleted.** Practice companies (education mode) stay free.
 - **Changing the plan of a running auto-renew:** turn it off, then choose the new plan. The new auto-renew starts when the current period ends.
 
+## Helping a customer (admin panel, https://ledgerfox.niyazio.com/vendor)
+
+- **"I forgot my password / ID":** Accounts tab → search their name → the sign-in ID is shown. Click **Reset password** and send them the one-time password (WhatsApp or phone). They choose a new one when they sign in. Nobody can see an old password.
+- **"I paid you in cash / by bank":** open the organisation → **Record cash / bank payment** (makes an invoice) or **Give free access** (no invoice).
+- **Stop someone's access:** **Pause access** for the whole business, or **Block** one person. Undo with **Resume access** / **Unblock**.
+- **Who set up or cancelled auto-pay:** the **Billing history** tab.
+
 ## What you (the seller) do
 - `/vendor` lists every organisation, its plan, its status and your revenue.
 - The **Set-up check** on `/vendor` shows whether the live server sees your Razorpay keys, which mode (test or live) they are in, and whether Razorpay accepts them.

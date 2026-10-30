@@ -33,6 +33,8 @@ export interface Env {
   BILLING_REQUIRE_AUTOPAY?: string;
   /** Desktop app: plans come from a licence issued by the LedgerFox website ("off" for self-built, unlimited copies). */
   DESKTOP_LICENSING?: string;
+  /** "true": an old desktop data file opened only to look at and export (LedgerFox now works online). */
+  DESKTOP_READONLY?: string;
   /** Desktop app: the website that issues licences (default https://ledgerfox.niyazio.com). */
   LICENCE_SERVER?: string;
   /** Desktop app: this computer's name, shown in the admin panel. */

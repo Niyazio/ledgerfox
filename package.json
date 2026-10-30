@@ -1,9 +1,9 @@
 {
   "name": "ledgerfox",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "type": "module",
-  "description": "LedgerFox — free, open-source double-entry accounting ERP for Cloudflare Workers + D1",
+  "description": "LedgerFox accounting by Niyazio — GST billing, inventory and double-entry accounts",
   "license": "MIT",
   "scripts": {
     "dev": "npm run build && wrangler dev",
@@ -69,6 +69,6 @@
     "wrangler": "^4.151.3"
   },
   "main": "desktop-build/main.cjs",
-  "author": "LedgerFox contributors",
+  "author": { "name": "Niyazio", "email": "info@niyazio.com", "url": "https://niyazio.com" },
   "homepage": "https://ledgerfox.niyazio.com"
 }

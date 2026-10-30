@@ -5,11 +5,12 @@ import type { AppEnv } from "../env";
 import { all, batch, first, run, stmt } from "../lib/db";
 import { AppError, badRequest, forbidden, notFound } from "../lib/errors";
 import { body } from "../lib/validate";
-import { newId } from "../lib/crypto";
+import { hashPassword, newId, temporaryPassword } from "../lib/crypto";
+import { iterations } from "./auth";
 import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
-import { PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
+import { GRACE_DAYS, PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
-import { autopayRequired, billingOn, renewRequired, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { autopayRequired, billingEvent, billingOn, renewRequired, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
 import { licensingOn } from "../services/licence";
@@ -41,6 +42,8 @@ billing.post("/webhook", async (c) => {
     const status = { "subscription.authenticated": "active", "subscription.activated": "active", "subscription.charged": "active", "subscription.resumed": "active", "subscription.pending": "pending",
       "subscription.halted": "halted", "subscription.cancelled": "cancelled", "subscription.completed": "completed", "subscription.paused": "paused" }[evt.event];
     if (status) await run(c.env.DB, `UPDATE org_subscriptions SET autopay_status = ?, updated_at = ? WHERE autopay_id = ?`, status, new Date().toISOString(), sub.id);
+    const owner = await first<{ org_id: string }>(c.env.DB, `SELECT org_id FROM org_subscriptions WHERE autopay_id = ?`, sub.id);
+    if (owner) await billingEvent(c.env, owner.org_id, `autopay_${evt.event.slice("subscription.".length)}`, { autopay_id: sub.id, razorpay_status: sub.status, payment_id: pay?.id ?? null, amount: pay?.amount ?? null }, "razorpay");
     if (status === "pending" || status === "halted") await sendAutopayProblem(c.env, sub.id, status);
   } else if ((evt.event === "payment.captured" || evt.event === "order.paid") && pay?.order_id) {
     const row = await first<{ id: string; total: number }>(c.env.DB, `SELECT id, total FROM billing_payments WHERE provider_order_id = ?`, pay.order_id);
@@ -148,6 +151,7 @@ org.post("/:orgId/autopay", async (c) => {
       orgId, created.id, input.plan, input.interval, price.total),
     audit(c, "billing.autopay_start", "organisation", orgId, { plan: input.plan, interval: input.interval, total: price.total, starts: startAt ? new Date(startAt * 1000).toISOString() : "now" }, { orgId, companyId: null }),
   ]);
+  await billingEvent(c.env, orgId, "autopay_started", { autopay_id: created.id, plan: input.plan, interval: input.interval, total: price.total }, c.get("user").email, c.get("user").id);
   const user = c.get("user");
   return c.json({ subscription_id: created.id, key_id: c.env.RAZORPAY_KEY_ID, amount: price.total, name: PLANS[input.plan].name, starts_at: startAt ? new Date(startAt * 1000).toISOString() : null,
     prefill: { name: user.name, email: user.email.endsWith(".ledgerfox.local") ? "" : user.email } });
@@ -163,7 +167,8 @@ org.post("/:orgId/autopay/verify", async (c) => {
   if (!c.env.RAZORPAY_KEY_SECRET || !(await verifySubscriptionSignature(c.env.RAZORPAY_KEY_SECRET, input.razorpay_payment_id, input.razorpay_subscription_id, input.razorpay_signature))) {
     throw new AppError(400, "BAD_SIGNATURE", "The payment could not be verified. If money was taken, it will be activated automatically or refunded by Razorpay.");
   }
-  await run(c.env.DB, `UPDATE org_subscriptions SET autopay_status = 'active', updated_at = ? WHERE org_id = ? AND autopay_id = ? AND autopay_status = 'created'`, new Date().toISOString(), orgId, input.razorpay_subscription_id);
+  const approved = await run(c.env.DB, `UPDATE org_subscriptions SET autopay_status = 'active', updated_at = ? WHERE org_id = ? AND autopay_id = ? AND autopay_status = 'created'`, new Date().toISOString(), orgId, input.razorpay_subscription_id);
+  if (approved.meta.changes) await billingEvent(c.env, orgId, "autopay_approved", { autopay_id: input.razorpay_subscription_id, payment_id: input.razorpay_payment_id }, c.get("user").email, c.get("user").id);
   // When the first charge was taken now (not a small mandate check), ask Razorpay for it and record it straight away;
   // otherwise the subscription.charged webhook records each charge.
   const p = await fetchRazorpayPayment(c.env, input.razorpay_payment_id).catch(() => null);
@@ -182,6 +187,7 @@ org.post("/:orgId/autopay/cancel", async (c) => {
     stmt(c.env.DB, `UPDATE org_subscriptions SET autopay_status = 'cancelled', updated_at = ? WHERE org_id = ?`, new Date().toISOString(), orgId),
     audit(c, "billing.autopay_cancel", "organisation", orgId, { autopay_id: row.autopay_id }, { orgId, companyId: null }),
   ]);
+  await billingEvent(c.env, orgId, "autopay_cancelled_by_owner", { autopay_id: row.autopay_id }, c.get("user").email, c.get("user").id);
   return c.json({ ok: true });
 });
 
@@ -295,6 +301,7 @@ vendor.post("/orgs/:orgId/activate", async (c) => {
     stmt(c.env.DB, `INSERT INTO org_subscriptions (org_id, note) VALUES (?, ?) ON CONFLICT (org_id) DO UPDATE SET note = excluded.note`, orgId, input.note ?? "Manual payment"),
     audit(c, "billing.manual_activate", "billing_payment", id, input, { orgId, companyId: null }),
   ]);
+  await billingEvent(c.env, orgId, "manual_payment", { plan: input.plan, interval: input.interval, amount_received: input.amount_received ?? null, note: input.note ?? null }, c.get("user").email);
   return c.json(await markPaid(c.env, id, null));
 });
 
@@ -307,7 +314,110 @@ vendor.post("/orgs/:orgId/trial", async (c) => {
     stmt(c.env.DB, `UPDATE org_subscriptions SET trial_ends_at = ?, updated_at = ? WHERE org_id = ?`, until, new Date().toISOString(), orgId),
     audit(c, "billing.trial_extend", "organisation", orgId, input, { orgId, companyId: null }),
   ]);
+  await billingEvent(c.env, orgId, "trial_extended", { days: input.days, trial_ends_at: until }, c.get("user").email);
   return c.json({ ok: true, trial_ends_at: until });
+});
+
+/** The vendor's own organisation (owned by vendor staff) cannot be paused or have its plan ended by mistake. */
+async function notVendorOrg(c: Context<AppEnv>, orgId: string) {
+  const o = await first<{ email: string }>(c.env.DB, `SELECT u.email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId);
+  if (!o) throw notFound("Organisation");
+  if (isVendor(c.env, o.email)) throw badRequest("This is the vendor's own organisation");
+}
+
+/** Free access given by the vendor (e.g. a partner, or payment received in cash): the plan runs for N months, no invoice. */
+vendor.post("/orgs/:orgId/free-access", async (c) => {
+  const orgId = c.req.param("orgId");
+  const input = await body(c, z.object({ plan: z.enum(PAID_PLANS as [PlanId, ...PlanId[]]), months: z.number().int().min(1).max(36), note: z.string().trim().max(300).nullish() }));
+  if (!(await first(c.env.DB, `SELECT 1 FROM organisations WHERE id = ?`, orgId))) throw notFound("Organisation");
+  await subscription(c.env, orgId);
+  const row = await first<{ plan: PlanId; paid_until: string | null }>(c.env.DB, `SELECT plan, paid_until FROM org_subscriptions WHERE org_id = ?`, orgId);
+  const from = row?.plan === input.plan && row.paid_until && Date.parse(row.paid_until) > Date.now() ? new Date(row.paid_until) : new Date();
+  const until = new Date(from);
+  until.setUTCMonth(until.getUTCMonth() + input.months);
+  await run(c.env.DB, `UPDATE org_subscriptions SET plan = ?, billing_interval = 'monthly', paid_until = ?, note = ?, updated_at = ? WHERE org_id = ?`,
+    input.plan, until.toISOString(), `Free access${input.note ? `: ${input.note}` : ""}`, new Date().toISOString(), orgId);
+  await billingEvent(c.env, orgId, "free_access", { plan: input.plan, months: input.months, paid_until: until.toISOString(), note: input.note ?? null }, c.get("user").email);
+  return c.json({ ok: true, paid_until: until.toISOString(), subscription: await subscription(c.env, orgId) });
+});
+
+/** End the current plan or trial now (no grace): the organisation is asked to renew. Auto-pay, if any, is not touched. */
+vendor.post("/orgs/:orgId/end-plan", async (c) => {
+  const orgId = c.req.param("orgId");
+  const input = await body(c, z.object({ note: z.string().trim().max(300).nullish() }));
+  await notVendorOrg(c, orgId);
+  await subscription(c.env, orgId);
+  const past = new Date(Date.now() - (GRACE_DAYS + 1) * 86_400_000).toISOString();
+  await run(c.env.DB, `UPDATE org_subscriptions SET paid_until = CASE WHEN paid_until IS NULL THEN NULL ELSE ? END, trial_ends_at = CASE WHEN trial_ends_at IS NULL THEN NULL ELSE ? END, updated_at = ? WHERE org_id = ?`,
+    past, new Date(Date.now() - 1000).toISOString(), new Date().toISOString(), orgId);
+  await billingEvent(c.env, orgId, "plan_ended_by_vendor", { note: input.note ?? null }, c.get("user").email);
+  return c.json({ ok: true, subscription: await subscription(c.env, orgId) });
+});
+
+/** Pause all access to an organisation's companies (e.g. fraud, a bounced cheque). Data is kept; the owner can still export. */
+vendor.post("/orgs/:orgId/suspend", async (c) => {
+  const orgId = c.req.param("orgId");
+  const input = await body(c, z.object({ reason: z.string().trim().min(1).max(300) }));
+  await notVendorOrg(c, orgId);
+  await run(c.env.DB, `UPDATE organisations SET suspended_at = ?, suspended_reason = ? WHERE id = ?`, new Date().toISOString(), input.reason, orgId);
+  await billingEvent(c.env, orgId, "suspended", { reason: input.reason }, c.get("user").email);
+  return c.json({ ok: true });
+});
+
+vendor.post("/orgs/:orgId/unsuspend", async (c) => {
+  const orgId = c.req.param("orgId");
+  const r = await run(c.env.DB, `UPDATE organisations SET suspended_at = NULL, suspended_reason = NULL WHERE id = ?`, orgId);
+  if (!r.meta.changes) throw notFound("Organisation");
+  await billingEvent(c.env, orgId, "unsuspended", null, c.get("user").email);
+  return c.json({ ok: true });
+});
+
+/**
+ * Forgotten password or sign-in ID: a new one-time password, shown once to the vendor to pass on. The person must
+ * choose their own password at the next sign-in. Passwords are stored only as salted hashes, so no one can read them.
+ */
+async function customerAccount(c: Context<AppEnv>, userId: string) {
+  const u = await first<{ id: string; email: string; username: string | null; name: string }>(c.env.DB, `SELECT id, email, username, name FROM users WHERE id = ?`, userId);
+  if (!u) throw notFound("User");
+  if (isVendor(c.env, u.email)) throw badRequest("Vendor staff accounts are managed separately");
+  return u;
+}
+
+vendor.post("/users/:userId/temporary-password", async (c) => {
+  const u = await customerAccount(c, c.req.param("userId"));
+  const password = temporaryPassword();
+  const h = await hashPassword(password, iterations(c.env));
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE users SET password_hash = ?, password_salt = ?, password_iters = ?, must_change_password = 1, totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = ?`,
+      h.hash, h.salt, h.iterations, new Date().toISOString(), u.id),
+    stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ?`, u.id),
+  ]);
+  await billingEvent(c.env, null, "password_reset_by_vendor", { email: u.email, username: u.username }, c.get("user").email, u.id);
+  return c.json({ sign_in_id: u.username ?? u.email, email: u.email, temporary_password: password });
+});
+
+/** Block or unblock one person's sign-in (all their sessions end at once). */
+vendor.post("/users/:userId/access", async (c) => {
+  const u = await customerAccount(c, c.req.param("userId"));
+  const input = await body(c, z.object({ disabled: z.boolean() }));
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE users SET is_disabled = ?, updated_at = ? WHERE id = ?`, input.disabled ? 1 : 0, new Date().toISOString(), u.id),
+    ...(input.disabled ? [stmt(c.env.DB, `DELETE FROM sessions WHERE user_id = ?`, u.id)] : []),
+  ]);
+  await billingEvent(c.env, null, input.disabled ? "user_blocked" : "user_unblocked", { email: u.email }, c.get("user").email, u.id);
+  return c.json({ ok: true });
+});
+
+/** The billing history: trials, auto-pay set up / approved / charged / cancelled, payments, free access, pauses. */
+vendor.get("/events", async (c) => {
+  const orgId = c.req.query("org_id");
+  const kind = c.req.query("kind");
+  const events = await all(c.env.DB,
+    `SELECT e.id, e.org_id, o.name AS org_name, e.user_id, u.email AS user_email, e.kind, e.details, e.actor, e.created_at
+     FROM billing_events e LEFT JOIN organisations o ON o.id = e.org_id LEFT JOIN users u ON u.id = e.user_id
+     WHERE (? IS NULL OR e.org_id = ?) AND (? IS NULL OR e.kind LIKE ?)
+     ORDER BY e.created_at DESC LIMIT 2000`, orgId ?? null, orgId ?? null, kind ?? null, kind ? `${kind}%` : null);
+  return c.json({ events });
 });
 
 const httpsUrl = z.string().trim().max(500).refine((v) => { try { const u = new URL(v); return u.protocol === "https:" && !u.username && !u.password; } catch { return false; } }, "Use a full https:// link");
@@ -377,7 +487,8 @@ vendor.get("/orgs", async (c) => {
        (SELECT co.phone FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 AND co.phone IS NOT NULL ORDER BY co.created_at LIMIT 1) AS phone,
        (SELECT co.city FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 ORDER BY co.created_at LIMIT 1) AS city,
        (SELECT COALESCE(SUM(p.amount),0) FROM billing_payments p WHERE p.org_id = o.id AND p.status = 'paid') AS revenue,
-       s.autopay_status, s.autopay_id
+       s.autopay_status, s.autopay_id, o.suspended_at, o.suspended_reason,
+       (SELECT COUNT(*) FROM billing_events e WHERE e.org_id = o.id AND e.kind LIKE 'autopay_cancel%') AS autopay_cancellations
      FROM organisations o JOIN users u ON u.id = o.owner_user_id LEFT JOIN org_subscriptions s ON s.org_id = o.id
      ORDER BY o.created_at DESC LIMIT 5000`);
   const out = await Promise.all(rows.map(async (r) => ({ ...r, subscription: await subscription(c.env, r.id) })));
@@ -406,13 +517,14 @@ vendor.get("/orgs/:orgId/detail", async (c) => {
     first(c.env.DB, `SELECT * FROM org_subscriptions WHERE org_id = ?`, orgId),
   ]);
   const devices = await all(c.env.DB, `SELECT d.id, d.device_name, d.created_at, d.last_seen_at, d.revoked_at, u.email FROM desktop_devices d JOIN users u ON u.id = d.user_id WHERE d.org_id = ? ORDER BY d.created_at DESC LIMIT 100`, orgId);
-  return c.json({ organisation: org, members, companies, payments, notices, subscription: sub, subscription_row: subRow, devices });
+  const events = await all(c.env.DB, `SELECT id, kind, details, actor, created_at FROM billing_events WHERE org_id = ? OR user_id IN (SELECT user_id FROM memberships WHERE org_id = ?) ORDER BY created_at DESC LIMIT 300`, orgId, orgId);
+  return c.json({ organisation: org, members, companies, payments, notices, subscription: sub, subscription_row: subRow, devices, events });
 });
 
 /** Every sign-in account, with the organisations it belongs to. */
 vendor.get("/users", async (c) => {
   const users = await all(c.env.DB,
-    `SELECT u.id, u.name, u.email, u.username, u.created_at, u.last_login_at, u.login_count, u.email_verified_at, u.totp_enabled, u.is_disabled,
+    `SELECT u.id, u.name, u.email, u.username, u.created_at, u.last_login_at, u.login_count, u.email_verified_at, u.totp_enabled, u.is_disabled, u.must_change_password AS one_time_login, u.terms_accepted_at,
        (SELECT group_concat(o.name || ' (' || m.role || ')', '; ') FROM memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = u.id) AS organisations
      FROM users u ORDER BY u.created_at DESC LIMIT 10000`);
   return c.json({ users });

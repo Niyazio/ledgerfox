@@ -79,23 +79,19 @@ describe("30-day free trial that starts with auto-pay", () => {
 });
 
 describe("demo companies and subscriptions", () => {
-  it("puts a demo company in the person's own organisation and never asks a demo-only organisation to subscribe", async () => {
+  it("puts a demo company (paid plans only) in the person's own organisation", async () => {
     const W = await requiredWorld();
     mockRazorpay();
     const demo = { name: "FreshMart (demo)", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_demo: true };
+    // Not on the free trial: education mode (practice companies) is the free way to try everything.
+    expect((await W.owner.post("/api/orgs", { name: "Demo organisation", company: demo })).json.error.code).toBe("DEMO_NEEDS_PLAN");
+    await rawQuery(W, `UPDATE org_subscriptions SET plan = 'business', paid_until = ? WHERE org_id = ?`, new Date(Date.now() + 30 * 86_400_000).toISOString(), W.orgId);
     const r = await W.owner.post("/api/orgs", { name: "Demo organisation", company: demo });
     expect(r.json.org_id).toBe(W.orgId); // not a second organisation
     expect((await rawQuery(W, `SELECT COUNT(*) AS n FROM organisations`))[0].n).toBe(1);
-
-    // Someone whose only organisation holds demo companies: no trial screen, no checkout.
+    // Someone without a business of their own cannot start with a demo.
     const { client: fresh } = await register(W.env, "Fresh");
-    const d = (await fresh.post("/api/orgs", { name: "Demo organisation", company: demo })).json;
-    const b = (await fresh.get(`/api/billing/org/${d.org_id}`)).json;
-    expect(b).toMatchObject({ demo_only: true, autopay_required: false });
-    expect((await fresh.post(`/api/c/${d.company_id}/items`, { kind: "goods", name: "Soap", sale_price: "10" })).status).toBe(201);
-    const buy = await fresh.post(`/api/billing/org/${d.org_id}/autopay`, { plan: "starter", interval: "monthly" });
-    expect([buy.status, buy.json.error.code]).toEqual([409, "DEMO_ONLY"]);
-    expect((await fresh.post(`/api/billing/org/${d.org_id}/checkout`, { plan: "starter", interval: "monthly" })).json.error.code).toBe("DEMO_ONLY");
+    expect((await fresh.post("/api/orgs", { name: "Demo organisation", company: demo })).json.error.code).toBe("DEMO_NEEDS_PLAN");
   });
 });
 
@@ -125,11 +121,11 @@ describe("one free trial", () => {
     expect((await client.get(`/api/billing/org/${o.org_id}`)).json.subscription.status).toBe("trial");
   });
 
-  it("is not used up by a demo company loaded first", async () => {
+  it("is not used up by a practice company made first", async () => {
     const W = await requiredWorld();
-    const { client } = await register(W.env, "Demo first");
-    const demo = { name: "FreshMart (demo)", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_demo: true };
-    const d = (await client.post("/api/orgs", { name: "Demo organisation", company: demo })).json;
+    const { client } = await register(W.env, "Learner first");
+    const practice = { name: "Class", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_practice: true };
+    const d = (await client.post("/api/orgs", { name: "Learning", company: practice })).json;
     await client.get(`/api/billing/org/${d.org_id}`);
     const real = (await client.post(`/api/orgs/${d.org_id}/companies`, { name: "Real Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29" })).json;
     expect(real.company_id).toBeTruthy();

@@ -8,7 +8,7 @@ import { body, reqText, shortText, currencyCode } from "../lib/validate";
 import { hashPassword, newId, randomToken, sha256Hex, temporaryPassword } from "../lib/crypto";
 import { iterations, usernameSchema } from "./auth";
 import { audit, orgPermissions, requireAuth } from "../lib/auth";
-import { requireCapacity } from "../services/billing";
+import { requireCapacity, requireDemoAllowed } from "../services/billing";
 import { ALL_PERMISSIONS, ROLES, canAssignRole, defaultPermissions, effectivePermissions, type Permission, type Role } from "@shared/permissions";
 import { companySetupStatements } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
@@ -117,6 +117,7 @@ orgs.post("/", async (c) => {
   // A demo company joins the organisation the person already owns, so trial and subscription stay in one place.
   if (input.company.is_demo) {
     const own = await first<{ id: string }>(c.env.DB, `SELECT id FROM organisations WHERE owner_user_id = ? ORDER BY created_at LIMIT 1`, user.id);
+    await requireDemoAllowed(c, own?.id ?? null);
     if (own) {
       const setup = companySetupStatements(c.env.DB, { ...input.company, email: input.company.email || null, org_id: own.id }, todayIso());
       await batch(c.env.DB, [...setup.stmts, audit(c, "company.create", "company", setup.companyId, { name: input.company.name }, { orgId: own.id, companyId: setup.companyId })]);
@@ -142,7 +143,8 @@ orgs.post("/:orgId/companies", async (c) => {
   await requireOrgPerm(c, orgId, "company.manage");
   const input = practiceName(await body(c, companySchema));
   validateCompanyInput(input);
-  if (!input.is_demo && !input.is_practice) await requireCapacity(c, orgId, "companies");
+  if (input.is_demo) await requireDemoAllowed(c, orgId);
+  else if (!input.is_practice) await requireCapacity(c, orgId, "companies");
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
   if ((n?.n ?? 0) >= 25) throw forbidden("Company limit reached for this organisation");
   const setup = companySetupStatements(c.env.DB, { ...input, email: input.email || null, org_id: orgId }, todayIso());

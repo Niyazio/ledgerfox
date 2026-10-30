@@ -44,7 +44,7 @@ export default function Landing() {
         <section className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pt-16">
           <div className="max-w-3xl">
             <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-800 dark:bg-brand-900/30 dark:text-brand-200">
-              <Lock className="h-3.5 w-3.5" /> Open source · no subscription · your data, exportable any time
+              <Lock className="h-3.5 w-3.5" /> 30-day free trial · works offline · your data, exportable any time
             </p>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Accounting software that keeps the books honest.</h1>
             <p className="mt-5 text-lg muted">
@@ -93,7 +93,7 @@ export default function Landing() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/privacy" className="underline">Privacy</Link> · <Link to="/security" className="underline">Security</Link><ProductCredit className="mt-2" /></footer>
+      <footer className="border-t border-[var(--border)] py-8 text-center text-xs muted">{brand} · Open-source accounting · Amounts are stored as exact integers, never floating point. · <Link to="/download" className="underline">Download</Link> · <Link to="/terms" className="underline">Terms</Link> · <Link to="/privacy" className="underline">Privacy</Link> · <Link to="/security" className="underline">Security</Link><ProductCredit className="mt-2" /></footer>
     </div>
   );
 }

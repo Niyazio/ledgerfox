@@ -22,11 +22,101 @@ const ago = (iso?: string | null) => {
   return d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`;
 };
 const STATUS: Record<string, [string, "green" | "amber" | "blue" | "gray" | "red"]> = {
-  active: ["Paying", "green"], trial: ["Free trial", "blue"], grace: ["Payment due", "amber"], free: ["Free plan", "gray"], unlimited: ["Unlimited", "gray"],
+  active: ["Paying", "green"], trial: ["Free trial", "blue"], grace: ["Payment due", "amber"], free: ["Ended — renew", "red"], unlimited: ["Unlimited", "gray"],
 };
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Retrying", halted: "Stopped", paused: "Paused", cancelled: "Off", completed: "Finished", created: "Not approved" };
 
-type TabId = "overview" | "orgs" | "users" | "payments" | "setup";
+type TabId = "overview" | "orgs" | "users" | "payments" | "history" | "setup";
+
+/** Names for the billing history (billing_events.kind). */
+const EVENT: Record<string, string> = {
+  trial_started: "Free trial started", no_trial: "No trial (already had one)", trial_extended: "Trial extended", trial_extend: "Trial extended",
+  autopay_started: "Auto-pay set up (waiting for approval)", autopay_start: "Auto-pay set up", autopay_approved: "Auto-pay approved", autopay_authenticated: "Auto-pay approved (Razorpay)",
+  autopay_activated: "Auto-pay active", autopay_charged: "Auto-pay charged", autopay_pending: "Auto-pay charge failed (retrying)", autopay_halted: "Auto-pay stopped after failures",
+  autopay_cancelled: "Auto-pay cancelled (Razorpay)", autopay_cancel: "Auto-pay cancelled by owner", autopay_cancelled_by_owner: "Auto-pay cancelled by owner", autopay_completed: "Auto-pay finished",
+  autopay_paused: "Auto-pay paused", autopay_resumed: "Auto-pay resumed", payment: "Payment received", manual_payment: "Cash / bank payment recorded", manual_activate: "Cash / bank payment recorded",
+  checkout: "Checkout opened", free_access: "Free access given", plan_ended_by_vendor: "Plan ended by admin", suspended: "Access paused", unsuspended: "Access resumed",
+  password_reset_by_vendor: "Password reset by admin", user_blocked: "Sign-in blocked", user_unblocked: "Sign-in unblocked",
+};
+const eventColor = (k: string): "green" | "amber" | "blue" | "gray" | "red" =>
+  /payment|charged|approved|authenticated|activated|free_access|unsuspended|unblocked/.test(k) ? "green" : /cancel|halted|suspended$|blocked$|ended/.test(k) ? "red" : /pending|paused/.test(k) ? "amber" : "blue";
+const detailText = (raw: string | null) => {
+  if (!raw) return "";
+  try {
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    return Object.entries(d).filter(([, v]) => v !== null && v !== "" && v !== undefined)
+      .map(([k, v]) => `${k.replace(/_/g, " ")}: ${k === "total" || k === "amount" ? inr(Number(v)) : typeof v === "string" && /^\d{4}-\d\d-\d\dT/.test(v) ? day(v) : String(v)}`).join(" · ");
+  } catch { return raw; }
+};
+
+/** A one-time password created by the admin, shown once to pass on to the customer. */
+function TempPassword({ result, onClose }: { result: { sign_in_id: string; email: string; temporary_password: string } | null; onClose: () => void }) {
+  if (!result) return null;
+  const text = `LedgerFox sign-in\nID: ${result.sign_in_id}\nOne-time password: ${result.temporary_password}\nYou will choose your own password after signing in.`;
+  return (
+    <Modal open title="New one-time password" onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <p>Give these to the customer (for example on WhatsApp or by phone). They must choose their own password when they sign in. This is shown only once.</p>
+        <pre className="select-all whitespace-pre-wrap rounded-lg bg-[var(--surface-2)] p-3 font-mono text-sm">{text}</pre>
+        <div className="flex gap-2"><Button size="sm" onClick={() => void navigator.clipboard?.writeText(text)}>Copy</Button><Button size="sm" variant="secondary" onClick={onClose}>Done</Button></div>
+        <p className="text-xs muted">Their old password no longer works, they are signed out everywhere, and two-factor sign-in is switched off until they set it up again.</p>
+      </div>
+    </Modal>
+  );
+}
+
+/** Reset password / block / unblock buttons for one customer account. */
+function AccountActions({ user, onDone }: { user: { id: string; name: string; is_disabled: number | boolean }; onDone: () => void }) {
+  const toast = useToast();
+  const [result, setResult] = useState<{ sign_in_id: string; email: string; temporary_password: string } | null>(null);
+  const reset = async () => {
+    if (!confirm(`Create a new one-time password for ${user.name}? Their current password stops working.`)) return;
+    try { setResult(await api.post(`/api/billing/vendor/users/${user.id}/temporary-password`)); onDone(); } catch (e) { toast("error", errorMessage(e)); }
+  };
+  const block = async (disabled: boolean) => {
+    if (disabled && !confirm(`Block ${user.name} from signing in? They are signed out at once. Their data is kept.`)) return;
+    try { await api.post(`/api/billing/vendor/users/${user.id}/access`, { disabled }); toast("success", disabled ? "Sign-in blocked" : "Sign-in unblocked"); onDone(); } catch (e) { toast("error", errorMessage(e)); }
+  };
+  return (
+    <span className="inline-flex gap-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+      <Button size="sm" variant="secondary" onClick={() => void reset()}>Reset password</Button>
+      {user.is_disabled ? <Button size="sm" variant="secondary" onClick={() => void block(false)}>Unblock</Button> : <Button size="sm" variant="secondary" onClick={() => void block(true)}>Block</Button>}
+      <TempPassword result={result} onClose={() => setResult(null)} />
+    </span>
+  );
+}
+
+/** The billing history of every organisation, or of one. */
+function History({ orgId, onOpen }: { orgId?: string; onOpen?: (id: string) => void }) {
+  const [kind, setKind] = useState("");
+  const { data, error } = useApi<{ events: any[] }>(`/api/billing/vendor/events?${new URLSearchParams({ ...(orgId ? { org_id: orgId } : {}), ...(kind ? { kind } : {}) })}`);
+  if (error) return <Alert>{error}</Alert>;
+  if (!data) return <Spinner />;
+  const exportRows = () => downloadCsv("ledgerfox-billing-history", ["Date", "Organisation", "Account ID", "Event", "Details", "By"],
+    data.events.map((e) => [e.created_at.replace("T", " ").slice(0, 16), e.org_name ?? e.user_email ?? "", e.org_id ?? "", EVENT[e.kind] ?? e.kind, detailText(e.details), e.actor ?? ""]));
+  const count = (re: RegExp) => data.events.filter((e) => re.test(e.kind)).length;
+  return (
+    <Card padded={false}>
+      <div className="flex flex-wrap items-end gap-3 p-4">
+        {!orgId && <Field label="Show">{(id) => <Select id={id} value={kind} onChange={(e) => setKind(e.target.value)}>
+          <option value="">Everything</option><option value="autopay">Auto-pay</option><option value="autopay_cancel">Auto-pay cancelled</option><option value="payment">Payments</option>
+          <option value="trial">Trials</option><option value="free_access">Free access</option><option value="suspended">Paused</option><option value="password">Password resets</option>
+        </Select>}</Field>}
+        <span className="flex-1 text-sm muted">{data.events.length} events · auto-pay set up {count(/^autopay_start/)} · approved {count(/^autopay_(approved|authenticated)/)} · cancelled {count(/^autopay_cancel/)} · payments {count(/^payment$/)}</span>
+        <DownloadButtons size="sm" onDownload={exportRows} />
+      </div>
+      <TableWrap><table className="table text-sm">
+        <thead><tr><th>When</th>{!orgId && <th>Organisation</th>}<th>What happened</th><th>Details</th><th>By</th></tr></thead>
+        <tbody>{data.events.map((e) => (
+          <tr key={e.id} className={onOpen && e.org_id ? "cursor-pointer hover:bg-[var(--surface-2)]" : ""} onClick={() => onOpen && e.org_id && onOpen(e.org_id)}>
+            <td className="whitespace-nowrap">{e.created_at.replace("T", " ").slice(0, 16)}</td>{!orgId && <td>{e.org_name ?? e.user_email ?? "—"}</td>}
+            <td><Badge color={eventColor(e.kind)}>{EVENT[e.kind] ?? e.kind}</Badge></td><td className="text-xs">{detailText(e.details)}</td><td className="text-xs muted">{e.actor ?? ""}</td></tr>
+        ))}</tbody>
+      </table></TableWrap>
+      {!data.events.length && <p className="p-4 text-sm muted">Nothing yet.</p>}
+    </Card>
+  );
+}
 
 export function VendorPanel() {
   const [tab, setTab] = useState<TabId>("overview");
@@ -40,13 +130,14 @@ export function VendorPanel() {
       <PageHeader title="Admin panel" subtitle={probe.data.enabled ? "Subscriptions are on." : "Subscriptions are off (BILLING_ENABLED) — nobody is limited."} />
       <Tabs<TabId> value={tab} onChange={setTab} tabs={[
         { value: "overview", label: "Overview" }, { value: "orgs", label: "Organisations" }, { value: "users", label: "Accounts" },
-        { value: "payments", label: "Payments" }, { value: "setup", label: "Set-up & promotions" },
+        { value: "payments", label: "Payments" }, { value: "history", label: "Billing history" }, { value: "setup", label: "Set-up & promotions" },
       ]} />
       <div className="mt-4">
         {tab === "overview" && <Overview data={probe.data} onOpen={setOpenOrg} />}
         {tab === "orgs" && <Organisations onOpen={setOpenOrg} />}
         {tab === "users" && <Accounts />}
         {tab === "payments" && <Payments onOpen={setOpenOrg} />}
+        {tab === "history" && <History onOpen={setOpenOrg} />}
         {tab === "setup" && <><SetupCheck /><PromotionsAdmin /></>}
       </div>
       {openOrg && <OrgDetail id={openOrg} onClose={() => setOpenOrg(null)} />}
@@ -90,7 +181,7 @@ function Organisations({ onOpen }: { onOpen: (id: string) => void }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const rows = useMemo(() => (data?.organisations ?? []).filter((o) =>
-    (!status || o.subscription.status === status || (status === "autopay" && o.autopay_status === "active")) &&
+    (!status || (status === "paused" ? Boolean(o.suspended_at) : o.subscription.status === status || (status === "autopay" && o.autopay_status === "active"))) &&
     (!q || `${o.name} ${o.owner_name} ${o.owner_email} ${o.phone ?? ""} ${o.city ?? ""} ${o.id}`.toLowerCase().includes(q.toLowerCase()))), [data, q, status]);
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
@@ -102,7 +193,7 @@ function Organisations({ onOpen }: { onOpen: (id: string) => void }) {
       <div className="flex flex-wrap items-end gap-3 p-4">
         <Field label="Search">{(id) => <Input id={id} placeholder="Name, email, phone, city or account ID" value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
         <Field label="Status">{(id) => <Select id={id} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All</option><option value="trial">Free trial</option><option value="active">Paying</option><option value="grace">Payment due</option><option value="free">Free plan</option><option value="autopay">Auto-pay on</option>
+          <option value="">All</option><option value="trial">Free trial</option><option value="active">Paying</option><option value="grace">Payment due</option><option value="free">Ended — renew</option><option value="autopay">Auto-pay on</option><option value="paused">Paused</option>
         </Select>}</Field>
         <span className="flex-1 text-sm muted">{rows.length} of {data.organisations.length}</span>
         <DownloadButtons size="sm" onDownload={exportRows} />
@@ -116,9 +207,9 @@ function Organisations({ onOpen }: { onOpen: (id: string) => void }) {
               <td className="font-medium">{o.name}<span className="block text-xs muted">{o.companies} compan{o.companies === 1 ? "y" : "ies"}{o.city ? ` · ${o.city}` : ""}</span></td>
               <td>{o.owner_name}<span className="block text-xs muted">{o.owner_email}{o.phone ? ` · ${o.phone}` : ""}</span></td>
               <td>{day(o.created_at)}</td><td>{ago(o.last_login_at)}</td><td className="num">{o.users}</td><td className="num">{o.documents}</td>
-              <td><Badge color={color}>{label}</Badge><span className="block text-xs muted">{o.subscription.plan}</span></td>
+              <td>{o.suspended_at ? <Badge color="red">Paused</Badge> : <Badge color={color}>{label}</Badge>}<span className="block text-xs muted">{o.subscription.plan}</span></td>
               <td>{day(o.subscription.paid_until ?? o.subscription.trial_ends_at)}</td>
-              <td>{AUTOPAY[o.autopay_status] ?? "—"}</td><td className="num">{inr(o.revenue)}</td>
+              <td>{AUTOPAY[o.autopay_status] ?? "—"}{o.autopay_cancellations > 0 && <span className="block text-xs text-red-700 dark:text-red-300">cancelled {o.autopay_cancellations}×</span>}</td><td className="num">{inr(o.revenue)}</td>
             </tr>
           );
         })}</tbody>
@@ -128,7 +219,7 @@ function Organisations({ onOpen }: { onOpen: (id: string) => void }) {
 }
 
 function Accounts() {
-  const { data, error } = useApi<{ users: any[] }>("/api/billing/vendor/users");
+  const { data, error, reload } = useApi<{ users: any[] }>("/api/billing/vendor/users");
   const [q, setQ] = useState("");
   const rows = useMemo(() => (data?.users ?? []).filter((u) => !q || `${u.name} ${u.email} ${u.username ?? ""} ${u.organisations ?? ""}`.toLowerCase().includes(q.toLowerCase())), [data, q]);
   if (error) return <Alert>{error}</Alert>;
@@ -139,16 +230,17 @@ function Accounts() {
     <Card padded={false}>
       <div className="flex flex-wrap items-end gap-3 p-4">
         <Field label="Search">{(id) => <Input id={id} placeholder="Name, email, username or organisation" value={q} onChange={(e) => setQ(e.target.value)} />}</Field>
-        <span className="flex-1 text-sm muted">{rows.length} of {data.users.length} accounts</span>
+        <span className="flex-1 text-sm muted">{rows.length} of {data.users.length} accounts · passwords are stored only as one-way hashes, so they can't be shown — use Reset password</span>
         <DownloadButtons size="sm" onDownload={exportRows} />
       </div>
       <TableWrap><table className="table text-sm">
-        <thead><tr><th>Name</th><th>Email / username</th><th>Organisations</th><th>Created</th><th>Last sign-in</th><th className="num">Sign-ins</th><th>Checks</th></tr></thead>
+        <thead><tr><th>Name</th><th>Sign-in ID (email / username)</th><th>Organisations</th><th>Created</th><th>Last sign-in</th><th className="num">Sign-ins</th><th>Checks</th><th /></tr></thead>
         <tbody>{rows.map((u) => (
           <tr key={u.id}><td className="font-medium">{u.name}</td>
             <td>{u.email.endsWith(".ledgerfox.local") ? <span className="muted">staff login</span> : u.email}{u.username && <span className="block text-xs muted">@{u.username}</span>}</td>
             <td className="text-xs">{u.organisations ?? "—"}</td><td>{day(u.created_at)}</td><td>{ago(u.last_login_at)}</td><td className="num">{u.login_count}</td>
-            <td className="space-x-1 whitespace-nowrap">{u.email_verified_at && <Badge color="green">email ✓</Badge>}{u.totp_enabled ? <Badge color="blue">2FA</Badge> : null}{u.is_disabled ? <Badge color="red">disabled</Badge> : null}</td></tr>
+            <td className="space-x-1 whitespace-nowrap">{u.email_verified_at && <Badge color="green">email ✓</Badge>}{u.totp_enabled ? <Badge color="blue">2FA</Badge> : null}{u.is_disabled ? <Badge color="red">blocked</Badge> : null}{u.one_time_login ? <Badge color="amber">one-time password</Badge> : null}</td>
+            <td><AccountActions user={u} onDone={reload} /></td></tr>
         ))}</tbody>
       </table></TableWrap>
     </Card>
@@ -183,6 +275,22 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const toast = useToast();
   const { data, error, reload } = useApi<any>(`/api/billing/vendor/orgs/${id}/detail`);
   const [act, setAct] = useState<{ plan: string; interval: Interval; note: string } | null>(null);
+  const [free, setFree] = useState<{ plan: string; months: string; note: string } | null>(null);
+  const post = async (path: string, payload: unknown, done: string) => {
+    try { await api.post(`/api/billing/vendor/orgs/${id}/${path}`, payload); toast("success", done); reload(); } catch (e) { toast("error", errorMessage(e)); }
+  };
+  const giveFree = async () => {
+    if (!free) return;
+    await post("free-access", { plan: free.plan, months: Number(free.months), note: free.note || null }, "Free access given");
+    setFree(null);
+  };
+  const pause = async () => {
+    const reason = prompt("Why is access paused? (kept in the history; the customer is told to contact info@niyazio.com)");
+    if (reason) await post("suspend", { reason }, "Access paused");
+  };
+  const endPlan = async () => {
+    if (confirm("End this organisation's plan or trial now? They will be asked to renew (they can still view and export). Auto-pay is not cancelled.")) await post("end-plan", {}, "Plan ended");
+  };
   const extend = async () => {
     const d = Number(prompt("Extend the free trial by how many days?", "14"));
     if (!d) return;
@@ -206,7 +314,24 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <dt className="muted">Auto-pay</dt><dd>{AUTOPAY[data.subscription_row?.autopay_status] ?? "—"}{data.subscription_row?.autopay_id && <span className="ml-2 select-all font-mono text-xs">{data.subscription_row.autopay_id}</span>}
               {data.subscription_row?.autopay_total ? ` · ${inr(data.subscription_row.autopay_total)} ${data.subscription_row.autopay_interval} (${data.subscription_row.autopay_plan})` : ""}</dd>
           </dl>
-          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => void extend()}>Extend trial</Button><Button size="sm" variant="secondary" onClick={() => setAct({ plan: "business", interval: "yearly", note: "" })}>Record bank transfer</Button></div>
+          {data.organisation.suspended_at && <Alert>Access paused on {day(data.organisation.suspended_at)}: {data.organisation.suspended_reason}</Alert>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void extend()}>Extend trial</Button>
+            <Button size="sm" variant="secondary" onClick={() => setAct({ plan: "business", interval: "yearly", note: "" })}>Record cash / bank payment</Button>
+            <Button size="sm" variant="secondary" onClick={() => setFree({ plan: "business", months: "1", note: "" })}>Give free access</Button>
+            <Button size="sm" variant="secondary" onClick={() => void endPlan()}>End plan now</Button>
+            {data.organisation.suspended_at
+              ? <Button size="sm" onClick={() => void post("unsuspend", {}, "Access resumed")}>Resume access</Button>
+              : <Button size="sm" variant="danger" onClick={() => void pause()}>Pause access</Button>}
+          </div>
+          {free && (
+            <div className="flex flex-wrap items-end gap-2 rounded-lg border border-[var(--border)] p-3">
+              <Field label="Plan">{(fid) => <Select id={fid} value={free.plan} onChange={(e) => setFree({ ...free, plan: e.target.value })}>{PAID_PLANS.map((p) => <option key={p}>{p}</option>)}</Select>}</Field>
+              <Field label="Months">{(fid) => <Input id={fid} type="number" min={1} max={36} value={free.months} onChange={(e) => setFree({ ...free, months: e.target.value })} />}</Field>
+              <Field label="Note">{(fid) => <Input id={fid} value={free.note} placeholder="e.g. partner, cash received" onChange={(e) => setFree({ ...free, note: e.target.value })} />}</Field>
+              <Button size="sm" onClick={() => void giveFree()}>Give free access</Button><Button size="sm" variant="secondary" onClick={() => setFree(null)}>Cancel</Button>
+            </div>
+          )}
           {act && (
             <div className="flex flex-wrap items-end gap-2 rounded-lg border border-[var(--border)] p-3">
               <Field label="Plan">{(fid) => <Select id={fid} value={act.plan} onChange={(e) => setAct({ ...act, plan: e.target.value })}>{PAID_PLANS.map((p) => <option key={p}>{p}</option>)}</Select>}</Field>
@@ -216,8 +341,9 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
             </div>
           )}
           <section><h3 className="mb-1 font-semibold">People ({data.members.length})</h3>
-            <TableWrap><table className="table text-xs"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Last sign-in</th><th className="num">Sign-ins</th></tr></thead>
-              <tbody>{data.members.map((m: any) => <tr key={m.id}><td>{m.name}{m.is_disabled ? " (disabled)" : ""}</td><td>{m.email.endsWith(".ledgerfox.local") ? `@${m.username}` : m.email}{m.email_verified_at ? " ✓" : ""}</td><td>{m.role}</td><td>{ago(m.last_login_at)}</td><td className="num">{m.login_count}</td></tr>)}</tbody></table></TableWrap>
+            <TableWrap><table className="table text-xs"><thead><tr><th>Name</th><th>Sign-in ID</th><th>Role</th><th>Last sign-in</th><th className="num">Sign-ins</th><th /></tr></thead>
+              <tbody>{data.members.map((m: any) => <tr key={m.id}><td>{m.name}{m.is_disabled ? " (blocked)" : ""}</td><td>{m.email.endsWith(".ledgerfox.local") ? m.username : m.email}{m.username && !m.email.endsWith(".ledgerfox.local") ? <span className="block muted">{m.username}</span> : null}{m.email_verified_at ? " ✓" : ""}</td><td>{m.role}</td><td>{ago(m.last_login_at)}</td><td className="num">{m.login_count}</td>
+                <td><AccountActions user={m} onDone={reload} /></td></tr>)}</tbody></table></TableWrap>
           </section>
           <section><h3 className="mb-1 font-semibold">Companies ({data.companies.length})</h3>
             <TableWrap><table className="table text-xs"><thead><tr><th>Company</th><th>GSTIN / place</th><th>Contact</th><th className="num">Docs</th><th className="num">Customers / suppliers</th><th className="num">Products</th><th>Last activity</th></tr></thead>
@@ -233,6 +359,7 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <TableWrap><table className="table text-xs"><thead><tr><th>Computer</th><th>Connected by</th><th>Since</th><th>Last check</th><th>Status</th></tr></thead>
               <tbody>{data.devices.map((d: any) => <tr key={d.id}><td>{d.device_name ?? "—"}</td><td>{d.email}</td><td>{day(d.created_at)}</td><td>{ago(d.last_seen_at)}</td><td>{d.revoked_at ? "Disconnected" : "Connected"}</td></tr>)}</tbody></table></TableWrap>
           </section>}
+          <section><h3 className="mb-1 font-semibold">Billing history</h3><History orgId={id} /></section>
           {data.notices.length > 0 && <section><h3 className="mb-1 font-semibold">Emails sent</h3><ul className="text-xs muted">{data.notices.map((n: any) => <li key={n.notice_key}>{day(n.sent_at)} — {n.notice_key}</li>)}</ul></section>}
         </div>
       )}

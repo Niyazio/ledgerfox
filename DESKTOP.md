@@ -1,15 +1,14 @@
 # LedgerFox Desktop (Windows, macOS, Linux)
 
-The desktop edition runs LedgerFox entirely on one computer. The code is open source (MIT licence). The official app uses the same plans as the website. There is no Free plan: without a current plan or trial you can view, print and export, but new entries wait until you renew.
+The desktop app is LedgerFox online in its own window: sign in with the same email and password as the website, and work on the same data as your team. There is no Free plan: without a current plan or trial you can view, print and export, but new entries wait until you renew.
 
-## Two ways to work
+## How it works
 
-- **Online (recommended).** The app window shows the LedgerFox website, signed in with the same email and password. Everyone in the business sees the same data, which is stored in the LedgerFox cloud database (Cloudflare D1), not on this computer. Without internet, screens you opened recently still show from this computer's cache, and new invoices, payments, expenses, contacts and journals wait on this computer and are sent when the connection returns (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
-- **On this computer only.** The data lives in one `.ledgerfox` file on this computer, with its own logins (the website account is not used to sign in). Others see it only through Access → Phones on the same Wi-Fi or the internet link. Connect your LedgerFox account in Settings → Plan & billing to use your plan or the 30-day trial; the computer checks the plan online at least every 15 days.
+- **Online, with offline billing.** The window shows https://ledgerfox.niyazio.com. The data is stored in the LedgerFox cloud database (Cloudflare D1), not on the computer. Without internet, screens opened recently still show from the computer's cache, and new POS bills, invoices, payments, expenses, contacts and journals wait on the computer. They are sent, and numbered, automatically when the internet is back (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
+- **Backups on the computer.** File → Save a backup to this computer (Ctrl+B) saves the open company's full data as a file, for your own records.
+- **Old data files.** Versions up to 0.4.6 could keep the books in a `.ledgerfox` file. Such files are never changed or deleted. They open **view-only** (File → Open an old data file, or double-click the file), to look things up and export them; new entries go online. The internet link, Wi-Fi access and phone copy in the Access menu still work for an old file, view-only.
 
-Choose in File → Work online / Use a data file on this computer. People upgrading from a version with a data file are asked once; their file is never changed or deleted. To move a local file's records to the cloud, export them (Settings → Export) and import them on the website.
-subscription or internet connection. It uses the same accounting engine, database rules and screens as the cloud
-edition; the full automated test suite runs against both (`npm test` and `npm run test:desktop`).
+Self-hosted builds and the information below about data files, Wi-Fi access and the server apply to the open-source code and to old files; the official app works online.
 
 ## Install
 

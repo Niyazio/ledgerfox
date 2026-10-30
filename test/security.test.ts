@@ -64,7 +64,7 @@ describe("authentication", () => {
 
   it("enforces password length", async () => {
     const c = new Client(A.env);
-    expect((await c.post("/api/auth/register", { name: "x", email: "short@example.com", password: "short" })).status).toBe(400);
+    expect((await c.post("/api/auth/register", { name: "x", email: "short@example.com", password: "short", accept_terms: true })).status).toBe(400);
   });
 });
 

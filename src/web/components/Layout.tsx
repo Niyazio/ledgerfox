@@ -275,10 +275,20 @@ function OfflineStatus({ companyId }: { companyId: string }) {
 /** Education mode: always visible, so nobody mistakes a practice company for a real one. */
 function PracticeBar() {
   useEffect(() => { setPracticeExports(true); return () => setPracticeExports(false); }, []);
+  const { me } = useSession();
+  // A faint "PRACTICE" mark with the signed-in name over every screen, so screenshots can't pass as real records either.
+  const label = `PRACTICE · ${me?.user?.name ?? "education mode"}`;
   return (
-    <div className="no-print border-b border-orange-300 bg-orange-100 px-4 py-1.5 text-center text-xs font-medium text-orange-900 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-200">
-      Practice company (education mode): free with every feature, for learning only. Entries can be dated only the 1st, 2nd and last day of a month.
+    <>
+    <div aria-hidden className="no-print pointer-events-none fixed inset-0 z-40 overflow-hidden">
+      <div className="absolute -inset-1/2 grid -rotate-30 grid-cols-4 content-around justify-around">
+        {Array.from({ length: 48 }, (_, i) => <span key={i} className="select-none whitespace-nowrap text-2xl font-black tracking-widest text-orange-500/[0.08]">{label}</span>)}
+      </div>
     </div>
+    <div className="no-print border-b border-orange-400 bg-orange-200 px-4 py-1.5 text-center text-xs font-bold text-orange-950 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-100">
+      PRACTICE COMPANY (education mode) — for learning only, not for real business. Entries can be dated only the 1st, 2nd and last day of a month. Printouts, PDFs and downloads are marked "practice".
+    </div>
+    </>
   );
 }
 

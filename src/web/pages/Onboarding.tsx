@@ -105,6 +105,7 @@ export function DemoLoader({ orgId }: { orgId: string | null }) {
   return (
     <Card title="Explore with a demo company">
       <p className="text-sm muted">Creates a sample company with customers, invoices, bills, receipts, expenses and payroll so you can try every screen. Delete it any time from Settings.</p>
+      <p className="mt-1 text-xs muted">Comes with a paid plan (one demo company at a time, with your plan's features). On the free trial, or just learning? Create a <b>practice company</b> (education mode) instead: every feature, free.</p>
       {error && <Alert className="mt-3">{error}</Alert>}
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <Field label="Type of business">{(id) => <Select id={id} value={type} onChange={(e) => setType(e.target.value)}>{BUSINESS_TYPES.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}</Select>}</Field>
