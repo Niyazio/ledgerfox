@@ -64,3 +64,19 @@ describe("education mode (practice companies)", () => {
     expect((await W.owner.post(W.c("/verify"), { entity_type: "document", entity_id: rd })).status).toBe(200);
   });
 });
+
+describe("education mode next to a business company", () => {
+  it("lets a class use a practice company while the business company still waits for its trial set-up", async () => {
+    const { world } = await import("./helpers");
+    const W = await world();
+    Object.assign(W.env, { BILLING_ENABLED: "true", BILLING_REQUIRE_AUTOPAY: "true", RAZORPAY_KEY_ID: "rzp_test_x", VENDOR_ADMIN_EMAILS: "" });
+    expect((await W.owner.get(`/api/billing/org/${W.orgId}`)).json.autopay_required).toBe(true);
+    expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" })).json.error.code).toBe("AUTOPAY_REQUIRED");
+    const pc = (await W.owner.post(`/api/orgs/${W.orgId}/companies`, { name: "Class 12 Commerce", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_practice: true })).json.company_id;
+    expect(pc).toBeTruthy();
+    // A student account in the same organisation can work in the practice company.
+    const s = await W.owner.post(`/api/orgs/${W.orgId}/users`, { name: "Student One", username: "student.one", role: "accountant" });
+    expect(s.status, JSON.stringify(s.json)).toBe(201);
+    expect((await W.owner.post(`/api/c/${pc}/items`, { kind: "goods", name: "Practice item", sale_price: "10" })).status).toBe(201);
+  });
+});
