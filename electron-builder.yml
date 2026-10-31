@@ -39,6 +39,9 @@ mac:
     - target: dmg
       arch: [arm64, x64]
   category: public.app-category.finance
+  # Needed for barcode / QR scanning with the Mac's camera.
+  extendInfo:
+    NSCameraUsageDescription: "LedgerFox uses the camera to scan product barcodes and QR codes."
   # Ad-hoc signature only (Apple Developer ID costs money); required for Apple Silicon to launch at all.
   identity: "-"
   artifactName: LedgerFox-mac-${arch}.${ext}

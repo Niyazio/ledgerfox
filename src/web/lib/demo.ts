@@ -13,7 +13,10 @@ export async function createDemoCompany(orgId: string | null, type: string, onPr
   step("Creating company");
   const NAMES: Record<string, string> = { retail: "FreshMart Supermarket", restaurant: "Spice Garden Restaurant", software: "CodeCraft Technologies", education: "Green Valley Public School",
     healthcare: "CareWell Clinic", manufacturing: "Precision Components", wholesale: "Metro Distributors", construction: "Skyline Builders", hotel: "Lakeview Residency",
-    services: "Kumar & Associates", ngo: "Hope Foundation", transport: "Swift Logistics", general: "Sample Traders" };
+    services: "Kumar & Associates", ngo: "Hope Foundation", transport: "Swift Logistics", general: "Sample Traders",
+    jewellery: "Lakshmi Jewellers", clothing: "Trendz Fashion House", electronics: "Galaxy Mobiles & Electronics", pharmacy: "LifeCare Medicals",
+    hardware: "Sri Balaji Hardware & Paints", automobile: "Speed Auto Garage", salon: "Glow Salon & Fitness", agri: "Kisan Agro Centre",
+    furniture: "WoodCraft Furniture", realestate: "Prime Properties" };
   const demoName = NAMES[biz.key] ?? "Sample Traders";
   const company = { name: `${demoName} (demo)`, legal_name: `${demoName} Pvt Ltd`, country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29",
     tax_id: null, address: "12, MG Road", city: "Bengaluru", postal_code: "560001", phone: "+91 80 4000 0000", email: null, business_type: biz.key, is_demo: true };
