@@ -90,12 +90,13 @@
   .table th:first-child { border-top-left-radius: 0.75rem; }
   .table th:last-child { border-top-right-radius: 0.75rem; }
 
-  /* Gentle entrance animations: pages, dialogs, menus and messages. */
-  .anim-page { animation: lf-rise 0.35s var(--ease) both; }
-  .anim-pop { animation: lf-pop 0.22s var(--ease) both; }
+  /* Gentle entrance animations: pages, dialogs, menus and messages. "backwards" (not "both") so no transform is left
+     behind afterwards: a leftover transform would make fixed pop-ups position against the page instead of the screen. */
+  .anim-page { animation: lf-rise 0.35s var(--ease) backwards; }
+  .anim-pop { animation: lf-pop 0.22s var(--ease) backwards; }
   .anim-fade { animation: lf-fade 0.2s ease-out both; }
-  .anim-slide-left { animation: lf-slide-left 0.28s var(--ease) both; }
-  .anim-toast { animation: lf-toast 0.3s var(--ease) both; }
+  .anim-slide-left { animation: lf-slide-left 0.28s var(--ease) backwards; }
+  .anim-toast { animation: lf-toast 0.3s var(--ease) backwards; }
   .glass { background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px); }
   .table tfoot td { font-weight: 600; border-top: 2px solid var(--border); border-bottom: none; }
 }
