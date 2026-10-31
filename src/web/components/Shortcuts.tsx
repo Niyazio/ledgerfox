@@ -82,7 +82,7 @@ function HelpSheet({ list, onClose }: { list: Shortcut[]; onClose: () => void })
           </section>
         ))}
       </div>
-      <p className="mt-4 text-xs muted">Voucher keys work like Tally. At the POS counter, F2 searches and F9 takes payment.</p>
+      <p className="mt-4 text-xs muted">Voucher keys follow the layout most accountants already know from other accounting software. At the POS counter, F2 searches and F9 takes payment.</p>
     </Modal>
   );
 }
@@ -96,7 +96,7 @@ export function Shortcuts({ items }: { items: GotoItem[] }) {
   const allowed = useMemo(() => SHORTCUTS.filter((s) => !s.perm || can(s.perm)), [can]);
   const allowedItems = useMemo(() => items.filter((i) => !i.perm || (Array.isArray(i.perm) ? i.perm.some(can) : can(i.perm))), [items, can]);
   const gotoList = useMemo(() => [
-    ...allowed.filter((s) => s.to).map((s) => ({ to: s.to!, label: s.label, group: s.group === "Vouchers (Tally keys)" ? "New" : s.group, keys: s.keys })),
+    ...allowed.filter((s) => s.to).map((s) => ({ to: s.to!, label: s.label, group: s.group === "Vouchers (familiar keys)" ? "New" : s.group, keys: s.keys })),
     ...allowedItems,
   ], [allowed, allowedItems]);
 

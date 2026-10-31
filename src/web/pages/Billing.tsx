@@ -12,14 +12,15 @@ import { printPage } from "../lib/download";
 import { useSession } from "../lib/session";
 import { DesktopPlanTab } from "./DesktopPlan";
 
-const inr = (paise: number) => fmt(paise, "INR");
+/** An amount in the organisation's billing currency (rupees in India; AED, SAR or USD elsewhere). */
+const amt = (minor: number, currency?: string) => fmt(minor, currency || "INR");
 
 interface BillingInfo {
-  enabled: boolean; can_buy: boolean; online: boolean; gst_percent: number; plans: Plan[];
+  enabled: boolean; can_buy: boolean; online: boolean; gst_percent: number; plans: Plan[]; currency?: string;
   subscription: { enforced: boolean; plan: string; paid_plan: string | null; status: string; interval: Interval | null; trial_ends_at: string | null; paid_until: string | null; days_left: number | null };
   usage: { users: number; companies: number; branches: number };
-  payments: { id: string; plan: string; billing_interval: string; total: number; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }[];
-  autopay: { id: string; status: string; plan: string; interval: Interval; total: number } | null;
+  payments: { id: string; plan: string; billing_interval: string; total: number; currency?: string; invoice_number: string; period_start: string; period_end: string; paid_at: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }[];
+  autopay: { id: string; status: string; plan: string; interval: Interval; total: number; currency?: string } | null;
   account_id: string;
   autopay_required?: boolean;
   renew_required?: boolean;
@@ -74,7 +75,7 @@ function CloudPlanTab() {
         </div>
         {data.autopay && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span>Auto-renew: <strong>{AUTOPAY[data.autopay.status] ?? data.autopay.status}</strong>{autopayLive(data.autopay) && <> · {data.plans.find((p) => p.id === data.autopay!.plan)?.name}, {inr(data.autopay.total)} every {data.autopay.interval === "monthly" ? "month" : "year"}</>}</span>
+            <span>Auto-renew: <strong>{AUTOPAY[data.autopay.status] ?? data.autopay.status}</strong>{autopayLive(data.autopay) && <> · {data.plans.find((p) => p.id === data.autopay!.plan)?.name}, {amt(data.autopay.total, data.autopay.currency)} every {data.autopay.interval === "monthly" ? "month" : "year"}</>}</span>
             {autopayLive(data.autopay) && data.can_buy && (
               <Button size="sm" variant="secondary" loading={stopping} onClick={async () => {
                 if (!confirm("Turn off auto-renew? No more charges will be taken. The days already paid for are kept.")) return;
@@ -90,7 +91,7 @@ function CloudPlanTab() {
       </Card>
       <div className="flex items-center gap-3"><span className="text-sm font-medium">Pay</span>
         <div className="flex gap-1">{(["monthly", "yearly"] as const).map((i) => <Button key={i} size="sm" variant={interval === i ? "primary" : "secondary"} onClick={() => setInterval(i)}>{i === "monthly" ? "Monthly" : "Yearly (2 months free)"}</Button>)}</div>
-        <span className="text-xs muted">Prices plus {data.gst_percent}% GST</span>
+        <span className="text-xs muted">{data.currency && data.currency !== "INR" ? `Prices in ${data.currency}, paid by card; no Indian GST (export of services)` : `Prices plus ${data.gst_percent}% GST`}</span>
         {data.can_buy && data.online && !autopayLive(data.autopay) && (
           <label className="ml-auto flex items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
             Renew automatically <span className="text-xs muted">(UPI AutoPay, card or bank mandate — cancel any time)</span></label>
@@ -102,8 +103,8 @@ function CloudPlanTab() {
           return (
             <Card key={p.id} className={same ? "border-brand-500" : ""}>
               <p className="text-lg font-semibold">{p.name}</p><p className="text-sm muted">{p.tagline}</p>
-              <p className="mt-3 text-2xl font-bold">{inr(price)}<span className="text-sm font-normal muted"> / {interval === "monthly" ? "month" : "year"}</span></p>
-              <p className="text-xs muted">{inr(withGst(price, data.gst_percent).total)} including GST</p>
+              <p className="mt-3 text-2xl font-bold">{amt(price, data.currency)}<span className="text-sm font-normal muted"> / {interval === "monthly" ? "month" : "year"}</span></p>
+              {data.gst_percent > 0 && <p className="text-xs muted">{amt(withGst(price, data.gst_percent).total, data.currency)} including GST</p>}
               <ul className="mt-3 space-y-1 text-sm">
                 <li>{p.limits.users} users · {p.limits.branches} branch{p.limits.branches > 1 ? "es" : ""} · {p.limits.companies} compan{p.limits.companies > 1 ? "ies" : "y"}</li>
                 {p.features.map((f) => <li key={f} className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />{FEATURE_LABELS[f]}</li>)}
@@ -123,7 +124,7 @@ function CloudPlanTab() {
             <tbody>{data.payments.map((p) => (
               <tr key={p.id}><td>{p.invoice_number}</td><td>{data.plans.find((x) => x.id === p.plan)?.name} ({p.billing_interval})</td>
                 <td>{fmtDate(p.period_start.slice(0, 10))} – {fmtDate(p.period_end.slice(0, 10))}</td>
-                <td className="font-mono text-xs">{p.provider_payment_id ?? (p.provider === "manual" ? "Bank transfer" : "—")}{p.provider_subscription_id && <span className="block muted">auto-renew</span>}</td><td className="num">{inr(p.total)}</td>
+                <td className="font-mono text-xs">{p.provider_payment_id ?? (p.provider === "manual" ? "Bank transfer" : "—")}{p.provider_subscription_id && <span className="block muted">auto-renew</span>}</td><td className="num">{amt(p.total, p.currency)}</td>
                 <td className="text-right"><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/billing/${orgId}/invoice/${p.id}`} target="_blank">View</Link></td></tr>
             ))}</tbody></table></TableWrap>
         </Card>
@@ -150,9 +151,9 @@ export function TrialGate() {
     <div className="no-print fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="trial-title">
       <div className="w-full max-w-3xl rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
         <h2 id="trial-title" className="text-xl font-semibold">Start your {data.trial_days ?? 30}-day free trial</h2>
-        <p className="mt-1 text-sm muted">Every feature is free until <b>{ends}</b>. Choose the plan to continue with after that and set up auto-pay with UPI AutoPay, a card or a bank mandate.</p>
+        <p className="mt-1 text-sm muted">Every feature is free until <b>{ends}</b>. Choose the plan to continue with after that and set up auto-pay with {(data.currency ?? "INR") === "INR" ? "UPI AutoPay, a card or a bank mandate" : `a debit or credit card (prices in ${data.currency})`}.</p>
         <ul className="mt-3 space-y-1 text-sm">
-          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Razorpay takes <b>₹5 to check</b> your UPI or card and <b>refunds it</b>.</li>
+          <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{(data.currency ?? "INR") === "INR" ? <>Razorpay takes <b>₹5 to check</b> your UPI or card</> : <>Razorpay makes a <b>small check</b> on your card</>} and <b>refunds it</b>.</li>
           <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />No charge until {ends}. Turn off auto-renew any time before that in Settings → Plan & billing.</li>
           <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Your data is never deleted, whatever you decide.</li>
         </ul>
@@ -162,12 +163,12 @@ export function TrialGate() {
             {data.plans.filter((p) => PAID_PLANS.includes(p.id)).map((p) => (
               <button key={p.id} onClick={() => setPlan(p.id)} className={`rounded-xl border p-3 text-left ${plan === p.id ? "border-brand-600 ring-2 ring-brand-600/30" : "border-[var(--border)] hover:bg-[var(--surface-2)]"}`}>
                 <p className="font-semibold">{p.name}</p>
-                <p className="text-sm">{inr(withGst(p.price[interval], data.gst_percent).total)} / {interval === "monthly" ? "month" : "year"}</p>
+                <p className="text-sm">{amt(withGst(p.price[interval], data.gst_percent).total, data.currency)} / {interval === "monthly" ? "month" : "year"}</p>
                 <p className="mt-1 text-xs muted">{p.limits.users} users · {p.limits.branches} branch{p.limits.branches > 1 ? "es" : ""}{p.features.length ? ` · ${p.features.map((f) => FEATURE_LABELS[f]).join(", ")}` : ""}</p>
               </button>
             ))}
           </div>
-          {(() => { const chosen = data.plans.find((p) => p.id === plan); return chosen && withGst(chosen.price[interval], data.gst_percent).total > UPI_AUTOPAY_LIMIT
+          {(() => { const chosen = data.plans.find((p) => p.id === plan); return chosen && (data.currency ?? "INR") === "INR" && withGst(chosen.price[interval], data.gst_percent).total > UPI_AUTOPAY_LIMIT
             ? <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">UPI AutoPay allows up to ₹15,000 a charge, so for this plan use a debit/credit card or a bank mandate (or choose monthly).</p> : null; })()}
           {data.online
             ? <Button className="mt-5 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}&mode=autopay`)}>Start free trial — set up auto-pay</Button>
@@ -321,7 +322,7 @@ export function CheckoutPage() {
             <Button className="mt-4" onClick={() => nav(-1)}>Back to LedgerFox</Button>
           </> : <>
             <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your LedgerFox plan" : "Pay for your LedgerFox plan"}</p>
-            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay. If your free trial or paid period is still running, Razorpay only takes ₹5 now to check it (refunded) and the first charge waits until the period ends. You are then charged each period until you turn it off in Plan & billing." : "Secure payment by Razorpay (UPI, cards, net banking)."} LedgerFox never sees your card details or UPI PIN.</p>
+            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay (outside India: a debit or credit card, in your currency). If your free trial or paid period is still running, Razorpay only takes ₹5 now to check it (refunded) and the first charge waits until the period ends. You are then charged each period until you turn it off in Plan & billing." : "Secure payment by Razorpay (UPI, cards and net banking in India; cards in your currency elsewhere)."} LedgerFox never sees your card details or UPI PIN.</p>
             {message && <Alert className="mt-4 text-left">{message}</Alert>}
             {autopay && state === "error" && <Button variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}`)}>Pay once instead (no auto-renew)</Button>}
             <Button className="mt-4 w-full" loading={state === "loading" || state === "paying"} onClick={() => void pay()}>Continue to payment</Button>
@@ -341,18 +342,22 @@ export function BillingInvoice() {
   if (!data) return <Spinner />;
   const p = data.payment, b = data.buyer ?? {}, s = data.seller;
   const intra = s.state_code && b.state_code && s.state_code === b.state_code;
+  // Sold abroad: an export of services (no Indian GST), billed in the customer's currency.
+  const cur = p.currency ?? "INR";
+  const exported = cur !== "INR" || (b.country && b.country !== "IN");
+  const m = (v: number) => amt(v, cur);
   return (
     <div className="mx-auto max-w-3xl bg-white p-8 text-sm text-slate-900">
       <div className="no-print mb-4 flex justify-end"><Button onClick={printPage}><Printer className="h-4 w-4" />Print / Save PDF</Button></div>
       <div className="flex justify-between"><div><p className="text-lg font-semibold">{s.name}</p>{s.address && <p>{s.address}</p>}{s.gstin && <p>GSTIN {s.gstin}</p>}{s.udyam && <p>Udyam {s.udyam}</p>}<p>{s.email}</p></div>
         <div className="text-right"><p className="text-xl font-semibold">{s.gstin ? "Tax Invoice" : "Invoice"}</p><p>No. {p.invoice_number}</p><p>Date {fmtDate(p.paid_at.slice(0, 10))}</p></div></div>
-      <div className="mt-6"><p className="text-slate-500">Bill to</p><p className="font-medium">{b.legal_name || b.name || b.org_name}</p>{b.address && <p>{[b.address, b.city].filter(Boolean).join(", ")}</p>}{b.tax_id && <p>GSTIN {b.tax_id}</p>}</div>
+      <div className="mt-6"><p className="text-slate-500">Bill to</p><p className="font-medium">{b.legal_name || b.name || b.org_name}</p>{b.address && <p>{[b.address, b.city].filter(Boolean).join(", ")}</p>}{b.tax_id && <p>{b.country && b.country !== "IN" ? "Tax / VAT no." : "GSTIN"} {b.tax_id}</p>}{b.country && b.country !== "IN" && <p>{b.country}</p>}</div>
       <table className="mt-6 w-full border-collapse"><thead><tr className="border-b border-slate-300 text-left"><th className="py-2">Description</th><th>SAC</th><th className="text-right">Amount</th></tr></thead>
-        <tbody><tr className="border-b border-slate-200"><td className="py-2">LedgerFox {p.plan.replace("_", "-")} plan, {p.billing_interval} subscription<br /><span className="text-slate-500">{fmtDate(p.period_start.slice(0, 10))} to {fmtDate(p.period_end.slice(0, 10))}</span></td><td>{data.sac}</td><td className="text-right">{inr(p.amount)}</td></tr></tbody></table>
+        <tbody><tr className="border-b border-slate-200"><td className="py-2">LedgerFox {p.plan.replace("_", "-")} plan, {p.billing_interval} subscription<br /><span className="text-slate-500">{fmtDate(p.period_start.slice(0, 10))} to {fmtDate(p.period_end.slice(0, 10))}</span></td><td>{data.sac}</td><td className="text-right">{m(p.amount)}</td></tr></tbody></table>
       <dl className="ml-auto mt-3 w-64 space-y-1">
-        {intra ? <><div className="flex justify-between"><dt>CGST</dt><dd>{inr(p.gst / 2)}</dd></div><div className="flex justify-between"><dt>SGST</dt><dd>{inr(p.gst / 2)}</dd></div></>
-          : <div className="flex justify-between"><dt>{s.gstin ? "IGST" : "GST"}</dt><dd>{inr(p.gst)}</dd></div>}
-        <div className="flex justify-between border-t border-slate-300 pt-1 font-semibold"><dt>Total paid</dt><dd>{inr(p.total)}</dd></div>
+        {exported ? <div className="flex justify-between"><dt>GST</dt><dd>{m(0)}</dd></div> : intra ? <><div className="flex justify-between"><dt>CGST</dt><dd>{m(p.gst / 2)}</dd></div><div className="flex justify-between"><dt>SGST</dt><dd>{m(p.gst / 2)}</dd></div></>
+          : <div className="flex justify-between"><dt>{s.gstin ? "IGST" : "GST"}</dt><dd>{m(p.gst)}</dd></div>}
+        <div className="flex justify-between border-t border-slate-300 pt-1 font-semibold"><dt>Total paid</dt><dd>{m(p.total)}</dd></div>
       </dl>
       <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs text-slate-600">
         <dt>Account ID</dt><dd className="font-mono">{p.org_id}</dd>
@@ -360,7 +365,7 @@ export function BillingInvoice() {
         {p.provider_order_id && <><dt>Order ID</dt><dd className="font-mono">{p.provider_order_id}</dd></>}
         {p.provider_subscription_id && <><dt>Subscription ID</dt><dd className="font-mono">{p.provider_subscription_id}</dd></>}
       </dl>
-      <p className="mt-4 text-xs text-slate-500">Paid {p.provider === "razorpay" ? (p.provider_subscription_id ? "online via Razorpay (auto-renew)" : "online via Razorpay") : "by bank transfer"}. This is a computer-generated invoice.</p>
+      <p className="mt-4 text-xs text-slate-500">Paid {p.provider === "razorpay" ? (p.provider_subscription_id ? "online via Razorpay (auto-renew)" : "online via Razorpay") : "by bank transfer"}. This is a computer-generated invoice.{exported ? " Export of services: supply meant for export, not subject to Indian GST. Amounts in " + cur + "." : ""}</p>
     </div>
   );
 }

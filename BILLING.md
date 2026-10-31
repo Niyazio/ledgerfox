@@ -23,6 +23,13 @@ How plans behave:
   - **Auto-renew** (ticked by default): the owner approves a UPI AutoPay, card or bank mandate once, and Razorpay charges each month or year until it is turned off in Plan & billing. If a trial or paid period is still running, the first charge waits until it ends, so nobody pays twice for the same days. Failed charges are retried by Razorpay; after that the plan runs into the 7-day grace period and then renewal is required.
   - **Pay once**: a prepaid month or year (UPI, cards, net banking). Renewing the same plan adds the new period to the end of the current one.
 
+## International customers
+
+- **Currency:** an organisation pays in the currency of its first company's country. India pays in INR (UPI, cards, net banking, mandates, plus GST). The UAE pays in AED, Saudi Arabia in SAR, and everywhere else in USD, by card only.
+- **Prices:** set in `src/shared/plans.ts` (`INTL`); yearly is 10 × monthly. No Indian GST is charged to customers abroad (export of services, zero-rated); their invoice says so and shows the amount in their currency.
+- **Razorpay:** foreign-currency cards and recurring card payments need **International payments** activated on the Razorpay account (Dashboard → Settings → Payment methods → International cards / International payments). Razorpay may ask for business documents. Settlement is usually in INR at that day's rate; ask Razorpay about settlement in USD/AED to an EEFC account. UPI and bank mandates are India-only.
+- **Admin panel:** rupee revenue and international revenue are shown separately; every payment shows its currency.
+
 ## What you need to do (once)
 
 1. **Open a Razorpay account** at razorpay.com and complete KYC. Opening the account is free; Razorpay charges about 2% per payment.

@@ -85,6 +85,7 @@ export interface CompanyRow {
   print_language?: "en" | "hi" | "ta";
   /** Bill language (any supported); falls back to print_language. */
   print_lang?: "en" | "hi" | "ta" | "ml" | "kn" | null;
+  bill_lang?: "en" | "hi" | "ta" | "ml" | "kn" | "ar" | null;
   purchase_approval_limit: number | null;
   billing_discount_limit_bp: number | null;
   created_at: string;

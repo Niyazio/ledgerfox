@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { COUNTRY_PACKS, countryPack, taxIdProblem } from "@shared/countries";
 import { Navigate, useNavigate, Link } from "react-router";
 import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
@@ -12,12 +13,8 @@ import { createDemoCompany } from "../lib/demo";
 import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { errorMessage } from "../lib/api";
 
-const COUNTRIES: [string, string, string, number][] = [
-  ["IN", "India", "INR", 4], ["AE", "United Arab Emirates", "AED", 1], ["SA", "Saudi Arabia", "SAR", 1], ["US", "United States", "USD", 1],
-  ["GB", "United Kingdom", "GBP", 4], ["SG", "Singapore", "SGD", 1], ["AU", "Australia", "AUD", 7], ["CA", "Canada", "CAD", 1],
-  ["NP", "Nepal", "NPR", 7], ["LK", "Sri Lanka", "LKR", 4], ["BD", "Bangladesh", "BDT", 7], ["MY", "Malaysia", "MYR", 1],
-  ["KE", "Kenya", "KES", 7], ["ZA", "South Africa", "ZAR", 3], ["DE", "Germany", "EUR", 1], ["QA", "Qatar", "QAR", 1],
-];
+/** Country, currency and financial-year start for the form; tax rates come from the same country pack on the server. */
+const COUNTRIES: [string, string, string, number][] = COUNTRY_PACKS.map((p) => [p.code, p.name, p.currency, p.fyStart]);
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, branding: BrandingValue) => void; busy: boolean; withOrg?: boolean }) {
@@ -34,7 +31,7 @@ export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, br
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
       <label className={`sm:col-span-2 flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${v.practice ? "border-orange-400 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30" : "border-[var(--border)]"}`}>
         <input type="checkbox" className="mt-1" checked={v.practice} onChange={(e) => set("practice", e.target.checked)} />
-        <span><b>Practice company (education mode)</b> — for students, trainees and beginners. Free forever with every feature. Like Tally's educational mode, entries can be dated only the 1st, 2nd and last day of a month, printouts say "Practice", and it cannot be used for real business documents.</span>
+        <span><b>Practice company (education mode)</b> — for students, trainees and beginners. Free forever with every feature. Like the educational modes of well-known accounting software, entries can be dated only the 1st, 2nd and last day of a month, printouts say "Practice", and it cannot be used for real business documents.</span>
       </label>
       {withOrg && <Field label="Organisation name" hint="Groups your companies and team. You can add more companies later." className="sm:col-span-2">{(id) => <Input id={id} value={v.org} placeholder="e.g. Sharma Group" onChange={(e) => set("org", e.target.value)} />}</Field>}
       <fieldset className="sm:col-span-2">
@@ -74,7 +71,8 @@ export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, br
           <Field label="GSTIN" hint="Optional. Validated including the check digit.">{(id) => <Input id={id} value={v.tax_id} maxLength={15} className="font-mono uppercase" onChange={(e) => { set("tax_id", e.target.value); if (e.target.value.length >= 2 && !v.state_code) set("state_code", e.target.value.slice(0, 2)); }} />}</Field>
         </>
       ) : (
-        <Field label="Tax registration number">{(id) => <Input id={id} value={v.tax_id} onChange={(e) => set("tax_id", e.target.value)} />}</Field>
+        <Field label={countryPack(v.country).regLabel} hint={taxIdProblem(v.country, v.tax_id) ?? [countryPack(v.country).regHint, `Optional. ${countryPack(v.country).taxName} rates for ${countryPack(v.country).name} are set up for you.`].filter(Boolean).join(" · ")}
+          error={taxIdProblem(v.country, v.tax_id)}>{(id) => <Input id={id} value={v.tax_id} className="font-mono uppercase" onChange={(e) => set("tax_id", e.target.value)} />}</Field>
       )}
       <Field label="Address" className="sm:col-span-2">{(id) => <Input id={id} value={v.address} onChange={(e) => set("address", e.target.value)} />}</Field>
       <Field label="City">{(id) => <Input id={id} value={v.city} onChange={(e) => set("city", e.target.value)} />}</Field>

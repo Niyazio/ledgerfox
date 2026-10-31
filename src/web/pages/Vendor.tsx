@@ -14,7 +14,7 @@ import { PromotionsAdmin, SetupCheck } from "./Billing";
  * subscriptions, trials, auto-pay, payments, set-up and promotions. Customers' business records are only counted.
  */
 
-const inr = (paise: number) => fmt(paise ?? 0, "INR");
+const inr = (paise: number, currency = "INR") => fmt(paise ?? 0, currency || "INR");
 const day = (iso?: string | null) => (iso ? fmtDate(iso.slice(0, 10)) : "—");
 const ago = (iso?: string | null) => {
   if (!iso) return "never";
@@ -45,7 +45,7 @@ const detailText = (raw: string | null) => {
   try {
     const d = JSON.parse(raw) as Record<string, unknown>;
     return Object.entries(d).filter(([, v]) => v !== null && v !== "" && v !== undefined)
-      .map(([k, v]) => `${k.replace(/_/g, " ")}: ${k === "total" || k === "amount" ? inr(Number(v)) : typeof v === "string" && /^\d{4}-\d\d-\d\dT/.test(v) ? day(v) : String(v)}`).join(" · ");
+      .map(([k, v]) => `${k.replace(/_/g, " ")}: ${k === "total" || k === "amount" ? inr(Number(v), String(d.currency ?? "INR")) : typeof v === "string" && /^\d{4}-\d\d-\d\dT/.test(v) ? day(v) : String(v)}`).join(" · ");
   } catch { return raw; }
 };
 
@@ -154,7 +154,7 @@ function Overview({ data, onOpen }: { data: any; onOpen: (id: string) => void })
         <Stat label="Organisations" value={t.organisations} sub={`${t.companies} companies · ${t.users} accounts`} />
         <Stat label="Paying" value={(st.active ?? 0) + (st.grace ?? 0)} sub={`${st.grace ?? 0} with payment due · ${t.autopay_active} on auto-pay`} tone="good" />
         <Stat label="Free trial / Free plan" value={`${st.trial ?? 0} / ${st.free ?? 0}`} />
-        <Stat label="Revenue (before GST)" value={inr(t.revenue_30d)} sub={`last 30 days · ${inr(t.revenue_total)} all time · ${t.payments} payments`} />
+        <Stat label="Revenue (before GST)" value={inr(t.revenue_30d)} sub={`last 30 days · ${inr(t.revenue_total)} all time · ${t.payments} payments${(data.revenue_foreign ?? []).map((f: any) => ` · ${inr(f.total, f.currency)} international`).join("")}`} />
         <Stat label="New sign-ups" value={t.signups_7d} sub={`last 7 days · ${t.signups_30d} in 30 days`} />
         <Stat label="Active accounts" value={t.active_7d} sub={`signed in within 7 days · ${t.active_30d} within 30`} />
         <Stat label="Documents created" value={t.documents} sub="invoices, bills, quotes… across all customers" />
@@ -209,7 +209,7 @@ function Organisations({ onOpen }: { onOpen: (id: string) => void }) {
               <td>{day(o.created_at)}</td><td>{ago(o.last_login_at)}</td><td className="num">{o.users}</td><td className="num">{o.documents}</td>
               <td>{o.suspended_at ? <Badge color="red">Paused</Badge> : <Badge color={color}>{label}</Badge>}<span className="block text-xs muted">{o.subscription.plan}</span></td>
               <td>{day(o.subscription.paid_until ?? o.subscription.trial_ends_at)}</td>
-              <td>{AUTOPAY[o.autopay_status] ?? "—"}{o.autopay_cancellations > 0 && <span className="block text-xs text-red-700 dark:text-red-300">cancelled {o.autopay_cancellations}×</span>}</td><td className="num">{inr(o.revenue)}</td>
+              <td>{AUTOPAY[o.autopay_status] ?? "—"}{o.autopay_cancellations > 0 && <span className="block text-xs text-red-700 dark:text-red-300">cancelled {o.autopay_cancellations}×</span>}</td><td className="num">{inr(o.revenue, o.revenue_currency)}</td>
             </tr>
           );
         })}</tbody>
@@ -261,7 +261,7 @@ function Payments({ onOpen }: { onOpen: (id: string) => void }) {
         <thead><tr><th>Date</th><th>Invoice</th><th>Organisation</th><th>Plan</th><th className="num">Total</th><th>Method</th><th>Status</th><th>Payment ID</th></tr></thead>
         <tbody>{data.payments.map((p) => (
           <tr key={p.id} className="cursor-pointer hover:bg-[var(--surface-2)]" onClick={() => onOpen(p.org_id)}>
-            <td>{day(p.paid_at ?? p.created_at)}</td><td>{p.invoice_number ?? "—"}</td><td>{p.org_name}</td><td>{p.plan} ({p.billing_interval})</td><td className="num">{inr(p.total)}</td>
+            <td>{day(p.paid_at ?? p.created_at)}</td><td>{p.invoice_number ?? "—"}</td><td>{p.org_name}</td><td>{p.plan} ({p.billing_interval})</td><td className="num">{inr(p.total, p.currency)}</td>
             <td>{p.provider === "manual" ? "Bank transfer" : p.provider_subscription_id ? "Auto-pay" : "Razorpay"}</td>
             <td><Badge color={p.status === "paid" ? "green" : "gray"}>{p.status === "paid" ? "Paid" : "Not completed"}</Badge></td>
             <td className="font-mono text-xs">{p.provider_payment_id ?? "—"}</td></tr>
@@ -312,7 +312,7 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <dt className="muted">Subscription</dt><dd><Badge color={STATUS[data.subscription.status]?.[1] ?? "gray"}>{STATUS[data.subscription.status]?.[0] ?? data.subscription.status}</Badge> {data.subscription.plan}
               {data.subscription.trial_ends_at && <> · trial until {day(data.subscription.trial_ends_at)}</>}{data.subscription.paid_until && <> · paid until {day(data.subscription.paid_until)}</>}</dd>
             <dt className="muted">Auto-pay</dt><dd>{AUTOPAY[data.subscription_row?.autopay_status] ?? "—"}{data.subscription_row?.autopay_id && <span className="ml-2 select-all font-mono text-xs">{data.subscription_row.autopay_id}</span>}
-              {data.subscription_row?.autopay_total ? ` · ${inr(data.subscription_row.autopay_total)} ${data.subscription_row.autopay_interval} (${data.subscription_row.autopay_plan})` : ""}</dd>
+              {data.subscription_row?.autopay_total ? ` · ${inr(data.subscription_row.autopay_total, data.subscription_row.autopay_currency)} ${data.subscription_row.autopay_interval} (${data.subscription_row.autopay_plan})` : ""}</dd>
           </dl>
           {data.organisation.suspended_at && <Alert>Access paused on {day(data.organisation.suspended_at)}: {data.organisation.suspended_reason}</Alert>}
           <div className="flex flex-wrap gap-2">
@@ -353,7 +353,7 @@ function OrgDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <section><h3 className="mb-1 font-semibold">Payments ({data.payments.length})</h3>
             {data.payments.length ? <TableWrap><table className="table text-xs"><thead><tr><th>Date</th><th>Invoice</th><th>Plan</th><th className="num">Total</th><th>Status</th><th>Payment ID</th></tr></thead>
               <tbody>{data.payments.map((p: any) => <tr key={p.id}><td>{day(p.paid_at ?? p.created_at)}</td><td>{p.invoice_number ? <Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/billing/${id}/invoice/${p.id}`} target="_blank">{p.invoice_number}</Link> : "—"}</td>
-                <td>{p.plan} ({p.billing_interval})</td><td className="num">{inr(p.total)}</td><td>{p.status}</td><td className="font-mono">{p.provider_payment_id ?? "—"}</td></tr>)}</tbody></table></TableWrap> : <p className="muted">None yet.</p>}
+                <td>{p.plan} ({p.billing_interval})</td><td className="num">{inr(p.total, p.currency)}</td><td>{p.status}</td><td className="font-mono">{p.provider_payment_id ?? "—"}</td></tr>)}</tbody></table></TableWrap> : <p className="muted">None yet.</p>}
           </section>
           {data.devices?.length > 0 && <section><h3 className="mb-1 font-semibold">Desktop computers ({data.devices.length})</h3>
             <TableWrap><table className="table text-xs"><thead><tr><th>Computer</th><th>Connected by</th><th>Since</th><th>Last check</th><th>Status</th></tr></thead>

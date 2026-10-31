@@ -27,7 +27,7 @@ describe("education mode (practice companies)", () => {
     expect((await L.client.post(`/api/billing/org/${L.orgId}/checkout`, { plan: "starter", interval: "monthly" })).json.error.code).toBe("DEMO_ONLY");
   });
 
-  it("accepts entries only on the 1st, 2nd and last day of a month, like Tally's educational mode", async () => {
+  it("accepts entries only on the 1st, 2nd and last day of a month, like common educational modes", async () => {
     const W = await world();
     const L = await learner(W);
     const cust = (await L.client.post(L.c("/contacts"), { kind: "customer", name: "Ravi" })).json.id;

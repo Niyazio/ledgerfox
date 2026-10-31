@@ -54,7 +54,7 @@ The app also shows a yellow bar near the end of the trial or plan.
 ## Education mode (practice companies)
 For students, trainees and beginners: tick **Practice company (education mode)** when creating a company, on the website or in the desktop app.
 - **Free forever, every feature:** POS, payroll, GST reports, manufacturing and the rest, on any plan, with no auto-pay. A learning-only organisation (only practice companies) can hold a class of up to 50 users, 10 companies and 5 branches.
-- **Not for business, like Tally's educational mode:**
+- **Not for business, like the educational modes of other accounting software:**
   - entries can be dated only the **1st, 2nd and last day of a month**, enforced by the database;
   - printouts and PDFs carry a "Practice — not a valid tax document" mark and watermark;
   - Excel/CSV downloads start with a "practice company" line;
@@ -78,6 +78,14 @@ For students, trainees and beginners: tick **Practice company (education mode)**
 When creating a company, choose the type of business. LedgerFox adds suitable accounts, units, sample items, HSN codes and GST rates. Types: general, supermarket / retail, jewellery / gold & silver, clothing / textiles, mobile / electronics, medical store / pharmacy, hardware / paints, automobile garage, salon / spa / gym, agri inputs, furniture, restaurant / café, software / IT, school / coaching, clinic / hospital, manufacturing, wholesale, construction, hotel, professional services, NGO / trust, transport, and real estate / rentals.
 
 **Jewellery shops:** items are priced per gram (22K, 18K, 24K, silver). Enter the weight as the quantity, to 3 decimals (12.345). Add making charges as a second line (also per gram, or a fixed amount). Update the day's gold rate in Products & stock. Old gold taken in exchange: record it as a purchase bill from the same customer (set the contact as "both" customer and supplier; account "Old Gold Purchased (Exchange)"). Their balance then shows only the difference to collect. GST rates and HSN codes are defaults: check them with your accountant.
+
+## Customers in the Gulf and other countries
+
+- **Creating a company:** choose the country, and LedgerFox sets up its currency, financial year and tax rates. UAE: VAT 5% (plus 0%, exempt, out of scope and reverse charge). Saudi Arabia: VAT 15%. Bahrain: VAT 10%. Oman: VAT 5%. Qatar and Kuwait: no VAT.
+- **Tax number:** UAE asks for the 15-digit **TRN**; Saudi Arabia for the 15-digit **VAT number** (starts and ends with 3). Both are checked.
+- **Invoices:** VAT-registered sellers print a **Tax Invoice** with both parties' VAT numbers. In Saudi Arabia, a sale to someone without a VAT number prints as a **Simplified Tax Invoice**. Saudi invoices always print in English and Arabic and carry the **ZATCA QR code**. Any company can choose English + Arabic in Settings → Bill language.
+- **Not included yet:** Saudi ZATCA phase 2 (sending signed XML invoices to the FATOORA platform), UAE e-invoicing through an accredited provider, Arabic for the app screens (only bills are in Arabic), and Gulf payroll rules (end-of-service gratuity, WPS salary files). Customers subject to phase 2 must still use an approved e-invoicing solution for that step.
+- **Paying for LedgerFox:** UAE customers pay in AED, Saudi customers in SAR, and others in USD, by card, with auto-renew.
 
 ## Helping a customer (admin panel, https://ledgerfox.niyazio.com/vendor)
 

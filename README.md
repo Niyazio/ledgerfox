@@ -68,4 +68,4 @@ No secrets are required for the core application.
 
 ## Licence
 
-MIT. Not affiliated with Tally, Zoho, Intuit or Sage. Not certified by any tax authority.
+MIT. Not affiliated with any other accounting software company. Not certified by any tax authority.

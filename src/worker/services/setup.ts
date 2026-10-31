@@ -1,4 +1,5 @@
 import { stmt } from "../lib/db";
+import { countryPack } from "@shared/countries";
 import { newId } from "../lib/crypto";
 import { seedAccountsFor } from "@shared/coa";
 import { DEFAULT_IN_GST_CODES, schemeForCountry } from "@shared/tax";
@@ -125,7 +126,12 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
         id, companyId, t.name, "in_gst", t.rate_bp, t.category, t.active === false ? 0 : 1));
     }
   } else {
-    stmts.push(stmt(db, `INSERT INTO tax_codes (id, company_id, name, scheme, rate_bp, category) VALUES (?,?,?,?,?,?)`, newId(), companyId, "No tax", "simple", 0, "exempt"));
+    // The country's VAT / GST / sales tax rates (UAE 5%, Saudi 15%, UK 20%…), ready to use and editable.
+    for (const t of countryPack(input.country).codes) {
+      const id = newId();
+      taxIdByName.set(t.name, id);
+      stmts.push(stmt(db, `INSERT INTO tax_codes (id, company_id, name, scheme, rate_bp, category) VALUES (?,?,?,?,?,?)`, id, companyId, t.name, "simple", t.rate_bp, t.category));
+    }
   }
 
   for (const [key, prefix] of SEQUENCES) {

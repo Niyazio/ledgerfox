@@ -9,7 +9,9 @@ import { emailOn, sendMail, siteUrl } from "./email";
  * ending, plan ending, plan ended). Each notice is recorded in billing_notices and sent at most once.
  */
 
-const inr = (paise: number) => `₹${(paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** An amount in minor units with its currency, e.g. ₹943.00 or USD 12.00. */
+const amountIn = (minor: number, currency = "INR") =>
+  `${currency === "INR" ? "₹" : `${currency} `}${(minor / 100).toLocaleString(currency === "INR" ? "en-IN" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 
 async function owner(env: Env, orgId: string) {
@@ -33,12 +35,12 @@ async function once(env: Env, orgId: string, key: string, compose: (o: { email: 
 const plansLink = (url: string) => `${url}/app (Settings → Plan & billing)`;
 
 export async function sendReceipt(env: Env, paymentRowId: string) {
-  const p = await first<{ org_id: string; plan: PlanId; billing_interval: string; total: number; invoice_number: string | null; period_start: string; period_end: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }>(env.DB,
-    `SELECT org_id, plan, billing_interval, total, invoice_number, period_start, period_end, provider, provider_payment_id, provider_subscription_id FROM billing_payments WHERE id = ? AND status = 'paid'`, paymentRowId);
+  const p = await first<{ org_id: string; plan: PlanId; billing_interval: string; total: number; currency: string; invoice_number: string | null; period_start: string; period_end: string; provider: string; provider_payment_id: string | null; provider_subscription_id: string | null }>(env.DB,
+    `SELECT org_id, plan, billing_interval, total, currency, invoice_number, period_start, period_end, provider, provider_payment_id, provider_subscription_id FROM billing_payments WHERE id = ? AND status = 'paid'`, paymentRowId);
   if (!p) return false;
   return once(env, p.org_id, `receipt:${paymentRowId}`, (o, url) => ({
     subject: `Payment received — LedgerFox ${PLANS[p.plan].name} plan (invoice ${p.invoice_number ?? ""})`,
-    text: [`Hello ${o.name},`, "", `Thank you. We received ${inr(p.total)} for ${o.org_name}.`, "",
+    text: [`Hello ${o.name},`, "", `Thank you. We received ${amountIn(p.total, p.currency)} for ${o.org_name}.`, "",
       `Plan: ${PLANS[p.plan].name} (${p.billing_interval})`, `Period: ${day(p.period_start)} to ${day(p.period_end)}`, `Invoice number: ${p.invoice_number ?? "—"}`,
       ...(p.provider_payment_id ? [`Payment ID: ${p.provider_payment_id}`] : []), ...(p.provider_subscription_id ? [`Auto-renew subscription ID: ${p.provider_subscription_id}`] : []),
       `Account ID: ${p.org_id}`, "", `Your tax invoice: ${url}/billing/${p.org_id}/invoice/${paymentRowId}`, "",
@@ -55,7 +57,7 @@ export async function sendAutopayProblem(env: Env, subscriptionId: string, statu
       status === "halted"
         ? `We could not charge the renewal of the ${PLANS[s.autopay_plan].name} plan for ${o.org_name} after several tries, so auto-renew has stopped.`
         : `The renewal charge for the ${PLANS[s.autopay_plan].name} plan of ${o.org_name} failed. Razorpay will try again over the next few days.`,
-      "", "Please check your UPI app, card or bank, or pay once from:", plansLink(url), "",
+      "", "Please check your card, UPI app or bank, or pay once from:", plansLink(url), "",
       ...(s.paid_until ? [`Your paid period ends on ${day(s.paid_until)}; after that there are 7 days of grace, then new entries pause until you renew. Your data is never deleted and stays viewable.`] : []),
       "", `Subscription ID: ${subscriptionId}`, "", "LedgerFox"].join("\n"),
   }));

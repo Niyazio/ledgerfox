@@ -5,7 +5,7 @@ import { AppError } from "../lib/errors";
 import { newId } from "../lib/crypto";
 import { sendReceipt } from "./notices";
 import { desktopLicenceState, licenceDays, licensingOn, refreshInBackground } from "./licence";
-import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, withGst, type Feature, type Interval, type PlanId } from "@shared/plans";
+import { FEATURE_LABELS, GRACE_DAYS, PLANS, TRIAL_DAYS, TRIAL_PLAN, billingCurrencyFor, planPrice, withGst, type BillingCurrency, type Feature, type Interval, type PlanId } from "@shared/plans";
 
 /** Billing applies only to the hosted edition with BILLING_ENABLED=true; desktop and phone copies are never limited. */
 export const billingOn = (env: Env) => env.BILLING_ENABLED === "true" && env.APP_ENV !== "desktop" && env.APP_ENV !== "offline";
@@ -208,12 +208,12 @@ async function providerError(res: Response, what: string, hint = ""): Promise<Ap
   return new AppError(502, "PAYMENT_PROVIDER", `Razorpay could not ${what}${detail ? `: ${detail}` : ` (${res.status})`}.${hint ? ` ${hint}` : ""}`);
 }
 
-export async function createRazorpayOrder(env: Env, amount: number, receipt: string, notes: Record<string, string>): Promise<{ id: string }> {
+export async function createRazorpayOrder(env: Env, amount: number, receipt: string, notes: Record<string, string>, currency: BillingCurrency = "INR"): Promise<{ id: string }> {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) throw new AppError(503, "BILLING_NOT_CONFIGURED", "Online payment is not set up yet. Contact support to pay by bank transfer.");
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Basic ${btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`)}` },
-    body: JSON.stringify({ amount, currency: "INR", receipt, notes }),
+    body: JSON.stringify({ amount, currency, receipt, notes }),
   });
   if (!res.ok) throw await providerError(res, "create the payment");
   return (await res.json()) as { id: string };
@@ -270,14 +270,14 @@ async function razorpay<T>(env: Env, method: "GET" | "POST", path: string, paylo
 }
 
 /** The Razorpay plan for this plan, interval and price; created the first time it is needed and remembered. */
-export async function razorpayPlanId(env: Env, plan: PlanId, interval: Interval, total: number) {
-  const key = `${plan}:${interval}:${total}`;
+export async function razorpayPlanId(env: Env, plan: PlanId, interval: Interval, total: number, currency: BillingCurrency = "INR") {
+  const key = currency === "INR" ? `${plan}:${interval}:${total}` : `${plan}:${interval}:${total}:${currency}`;
   const known = await first<{ razorpay_plan_id: string }>(env.DB, `SELECT razorpay_plan_id FROM billing_rzp_plans WHERE plan_key = ?`, key);
   if (known) return known.razorpay_plan_id;
   const created = await razorpay<{ id: string }>(env, "POST", "/plans", {
     period: interval, interval: 1,
-    item: { name: `LedgerFox ${PLANS[plan].name} (${interval})`, amount: total, currency: "INR", description: "Including GST" },
-    notes: { plan, interval },
+    item: { name: `LedgerFox ${PLANS[plan].name} (${interval})`, amount: total, currency, description: currency === "INR" ? "Including GST" : "Export of services" },
+    notes: { plan, interval, currency },
   });
   await run(env.DB, `INSERT INTO billing_rzp_plans (plan_key, razorpay_plan_id) VALUES (?, ?) ON CONFLICT (plan_key) DO NOTHING`, key, created.id);
   return (await first<{ razorpay_plan_id: string }>(env.DB, `SELECT razorpay_plan_id FROM billing_rzp_plans WHERE plan_key = ?`, key))!.razorpay_plan_id;
@@ -310,16 +310,18 @@ export async function verifySubscriptionSignature(secret: string, paymentId: str
  * Razorpay payment id is unique, so a repeated event finds the same row and markPaid does nothing the second time.
  */
 export async function recordAutopayCharge(env: Env, subscriptionId: string, paymentId: string, amount: number) {
-  const s = await first<{ org_id: string; autopay_plan: PlanId; autopay_interval: Interval; autopay_total: number }>(env.DB,
-    `SELECT org_id, autopay_plan, autopay_interval, autopay_total FROM org_subscriptions WHERE autopay_id = ?`, subscriptionId);
+  const s = await first<{ org_id: string; autopay_plan: PlanId; autopay_interval: Interval; autopay_total: number; autopay_currency: BillingCurrency }>(env.DB,
+    `SELECT org_id, autopay_plan, autopay_interval, autopay_total, autopay_currency FROM org_subscriptions WHERE autopay_id = ?`, subscriptionId);
   if (!s || amount !== s.autopay_total) return { recorded: false };
   // Split the charged total into price and GST; a later price change does not affect subscriptions already running.
-  const now = withGstFor(env, s.autopay_plan, s.autopay_interval);
-  const base = now.total === amount ? now.amount : Math.round(amount / (1 + gstPercentOf(env) / 100));
+  const currency = s.autopay_currency ?? "INR";
+  const pct = taxPercentFor(env, currency);
+  const now = withGst(planPrice(s.autopay_plan, s.autopay_interval, currency), pct);
+  const base = now.total === amount ? now.amount : Math.round(amount / (1 + pct / 100));
   const price = { amount: base, gst: amount - base, total: amount };
-  await run(env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, provider_payment_id, provider_subscription_id)
-     VALUES (?,?,?,?,?,?,?,'razorpay',?,?) ON CONFLICT (provider_payment_id) DO NOTHING`,
-    newId(), s.org_id, s.autopay_plan, s.autopay_interval, price.amount, price.gst, price.total, paymentId, subscriptionId);
+  await run(env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, provider_payment_id, provider_subscription_id, currency)
+     VALUES (?,?,?,?,?,?,?,'razorpay',?,?,?) ON CONFLICT (provider_payment_id) DO NOTHING`,
+    newId(), s.org_id, s.autopay_plan, s.autopay_interval, price.amount, price.gst, price.total, paymentId, subscriptionId, currency);
   const row = await first<{ id: string }>(env.DB, `SELECT id FROM billing_payments WHERE provider_payment_id = ? AND org_id = ?`, paymentId, s.org_id);
   if (!row) return { recorded: false };
   return { recorded: true, ...(await markPaid(env, row.id, paymentId)) };
@@ -327,3 +329,19 @@ export async function recordAutopayCharge(env: Env, subscriptionId: string, paym
 
 export const gstPercentOf = (env: Env) => Number(env.BILLING_GST_PERCENT ?? "18") || 0;
 export const withGstFor = (env: Env, plan: PlanId, interval: Interval) => withGst(PLANS[plan].price[interval], gstPercentOf(env));
+
+/** Indian GST applies to customers in India only; subscriptions sold abroad are exports of services (no GST). */
+export const taxPercentFor = (env: Env, currency: BillingCurrency) => (currency === "INR" ? gstPercentOf(env) : 0);
+
+/** The currency an organisation pays in: from the country of its first real company (else any company). */
+export async function orgBillingCurrency(env: Env, orgId: string): Promise<BillingCurrency> {
+  const co = await first<{ country: string }>(env.DB,
+    `SELECT country FROM companies WHERE org_id = ? ORDER BY (is_demo = 0 AND is_practice = 0) DESC, created_at LIMIT 1`, orgId);
+  return billingCurrencyFor(co?.country);
+}
+
+/** The price of a plan for this organisation: amount, tax and total in its billing currency. */
+export async function orgPrice(env: Env, orgId: string, plan: PlanId, interval: Interval) {
+  const currency = await orgBillingCurrency(env, orgId);
+  return { currency, ...withGst(planPrice(plan, interval, currency), taxPercentFor(env, currency)) };
+}

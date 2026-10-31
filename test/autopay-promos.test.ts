@@ -136,7 +136,7 @@ describe("Free-plan promotions", () => {
     for (const bad of ["javascript:alert(1)", "http://plain.example", "https://user:pw@evil.example", "data:text/html,hi"]) {
       expect((await W.owner.post("/api/billing/vendor/promotions", { title: "T", body: "B", link_url: bad })).status, bad).toBe(400);
     }
-    const created = await W.owner.post("/api/billing/vendor/promotions", { title: "Tally to LedgerFox in a day", body: "Our partner moves your old books for you.", link_url: "https://partner.example/offer", sponsor: "Partner Co", weight: 10 });
+    const created = await W.owner.post("/api/billing/vendor/promotions", { title: "Move your old books in a day", body: "Our partner moves your old books for you.", link_url: "https://partner.example/offer", sponsor: "Partner Co", weight: 10 });
     expect(created.status).toBe(201);
     const seen = new Set<string>();
     for (let i = 0; i < 30; i++) seen.add((await W.owner.get(`/api/billing/org/${W.orgId}/promo`)).json.promo.id);

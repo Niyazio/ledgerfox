@@ -77,7 +77,7 @@ describe("desktop server", () => {
     orgId = ((await org.json()) as { org_id: string }).org_id;
   });
 
-  it("owner adds users Tally-style; the server generates a different one-time password for each", async () => {
+  it("owner adds users with one-time passwords; the server generates a different one-time password for each", async () => {
     const r = await fetch(`${base}/api/orgs/${orgId}/users`, { method: "POST", headers: { ...json, cookie }, body: JSON.stringify({ name: "Cashier", username: "cashier1", role: "billing" }) });
     expect(r.status).toBe(201);
     const temp = ((await r.json()) as { temporary_password: string }).temporary_password;

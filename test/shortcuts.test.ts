@@ -13,7 +13,7 @@ describe("keyboard shortcuts", () => {
     expect(keyName(ev("k", { ctrlKey: true }))).toBe("Ctrl+K");
   });
 
-  it("follows Tally's voucher keys and has aliases", () => {
+  it("follows the familiar voucher keys and has aliases", () => {
     expect(findShortcut("F8")?.to).toBe("sales/invoice/new");
     expect(findShortcut("F9")?.to).toBe("purchases/bill/new");
     expect(findShortcut("F6")?.to).toBe("payments/in/new");

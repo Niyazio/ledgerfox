@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { taxIdProblem } from "@shared/countries";
 import { z } from "zod";
 import type { Context } from "hono";
 import type { AppEnv } from "../env";
@@ -45,6 +46,9 @@ export function validateCompanyInput(input: z.infer<typeof companySchema>) {
       throw badRequest("GSTIN state code does not match the selected state");
     }
   }
+  // VAT numbers that tax authorities check strictly (UAE TRN, Saudi VAT number).
+  const problem = taxIdProblem(input.country, input.tax_id);
+  if (problem) throw badRequest(problem);
 }
 
 interface Member { role: Role; perms: Permission[] }
@@ -233,7 +237,7 @@ orgs.post("/:orgId/invitations", async (c) => {
 });
 
 /**
- * Tally-style user creation: the server generates a random one-time password, shown once to the owner/admin; the
+ * Familiar user creation (as in common desktop accounting software): the server generates a random one-time password, shown once to the owner/admin; the
  * person must choose their own password at first sign-in. No email needed and no shared default password.
  */
 orgs.post("/:orgId/users", async (c) => {

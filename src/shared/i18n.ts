@@ -119,10 +119,25 @@ export const UI_WORDS: Dict = {
   "each": { hi: "प्रति", ta: "ஒன்றுக்கு", ml: "ഓരോന്നിനും", kn: "ಪ್ರತಿ" },
 };
 
-/** "Qty" → "Qty / मात्रा" when the bill language is not English. */
-export function bilingual(en: string, lang: Lang | null | undefined): string {
+/** Bill languages: the app's languages plus Arabic (Gulf countries; bills only, the app itself stays in English). */
+export type PrintLang = Lang | "ar";
+export const PRINT_LANGS: { value: PrintLang; label: string }[] = [...LANGS.map(({ value, label }) => ({ value, label })), { value: "ar", label: "العربية (Arabic)" }];
+
+/** Arabic labels for bills (UAE, Saudi Arabia and the other Gulf countries). */
+const PRINT_AR: Record<string, string> = {
+  "Tax Invoice": "فاتورة ضريبية", "Simplified Tax Invoice": "فاتورة ضريبية مبسطة", "Invoice": "فاتورة", "Credit note": "إشعار دائن", "Debit note": "إشعار مدين",
+  "Quotation": "عرض سعر", "Proforma invoice": "فاتورة مبدئية", "Delivery challan": "إذن تسليم", "Number": "الرقم", "Date": "التاريخ", "Due date": "تاريخ الاستحقاق",
+  "Reference": "المرجع", "Bill to": "فاتورة إلى", "Supplier": "المورد", "Ship to": "الشحن إلى", "Place of supply": "مكان التوريد", "Description": "الوصف",
+  "Qty": "الكمية", "Rate": "السعر", "Disc.": "الخصم", "Taxable": "الخاضع للضريبة", "Taxable value": "المبلغ الخاضع للضريبة", "Tax": "الضريبة",
+  "VAT": "ضريبة القيمة المضافة", "Amount": "المبلغ", "Round off": "التقريب", "Total": "الإجمالي", "Paid": "المدفوع", "Balance due": "الرصيد المستحق",
+  "Amount in words": "المبلغ كتابةً", "Authorised signatory for": "المفوض بالتوقيع عن", "Thank you! Visit again.": "شكراً لزيارتكم",
+  "Scan to verify": "امسح للتحقق", "VAT number": "الرقم الضريبي", "TRN": "رقم التسجيل الضريبي", "Customer VAT number": "الرقم الضريبي للعميل",
+};
+
+/** "Qty" → "Qty / मात्रा" (or "Qty / الكمية") when the bill language is not English. */
+export function bilingual(en: string, lang: PrintLang | null | undefined): string {
   if (!lang || lang === "en") return en;
-  const t = PRINT_WORDS[en]?.[lang];
+  const t = lang === "ar" ? PRINT_AR[en] : PRINT_WORDS[en]?.[lang];
   return t ? `${en} / ${t}` : en;
 }
 

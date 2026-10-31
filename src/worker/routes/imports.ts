@@ -14,7 +14,7 @@ import { stockMoveStmt, defaultWarehouse } from "../services/inventory";
 /**
  * Bulk import of customers/suppliers and products from a spreadsheet. The browser reads the Excel/CSV file and sends
  * rows (header → value) in chunks of up to 200; `dry_run` checks every row without saving. A chunk is all-or-nothing.
- * Header names are matched loosely (e.g. "GSTIN", "GST No", "Party name") so files from Tally/Vyapar exports work.
+ * Header names are matched loosely (e.g. "GSTIN", "GST No", "Party name") so exports from other accounting and billing software work.
  */
 const imports = new Hono<AppEnv>();
 const MAX_ROWS = 200;
