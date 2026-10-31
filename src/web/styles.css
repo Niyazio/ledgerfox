@@ -21,7 +21,11 @@
 
 @layer base {
   :root {
-    --bg: #f6f7f9;
+    --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.06);
+    --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.07), 0 10px 24px -6px rgb(15 23 42 / 0.12);
+    --shadow-lg: 0 20px 45px -12px rgb(15 23 42 / 0.25);
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --bg: #f4f6fa;
     --surface: #ffffff;
     --surface-2: #f9fafb;
     --border: #e5e7eb;
@@ -30,6 +34,9 @@
     color-scheme: light;
   }
   .dark {
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 6px 20px -6px rgb(0 0 0 / 0.55);
+    --shadow-lg: 0 24px 50px -12px rgb(0 0 0 / 0.7);
     --bg: #0b1120;
     --surface: #111827;
     --surface-2: #0f172a;
@@ -47,23 +54,49 @@
     font-feature-settings: "tnum" 1, "cv11" 1;
   }
   :focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+  html { scroll-behavior: smooth; }
+  /* Grid and flex columns may shrink below their content, so long names wrap instead of widening the page on phones. */
+  :where(.grid) > *, :where(.flex-1) { min-width: 0; }
+  main, .overflow-y-auto { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  /* Thin, rounded scrollbars. */
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--muted) 65%, transparent); }
   ::selection { background: var(--color-brand-200); color: #172554; }
 }
 
 @layer components {
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; }
+  /* Soft, rounded "bubble" surfaces with gentle shadows; clickable cards lift on hover. */
+  .card { background: var(--surface); border: 1px solid color-mix(in srgb, var(--border) 85%, transparent); border-radius: 1.125rem; box-shadow: var(--shadow-sm); transition: box-shadow 0.25s var(--ease), transform 0.25s var(--ease), border-color 0.2s; }
+  a.card:hover, button.card:hover, .card-hover:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: color-mix(in srgb, var(--color-brand-400) 45%, var(--border)); }
+  a.card:active, button.card:active { transform: translateY(0) scale(0.99); }
   .muted { color: var(--muted); }
   .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
   .input {
-    width: 100%; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface);
-    padding: 0.5rem 0.75rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--text);
+    width: 100%; border-radius: 0.75rem; border: 1px solid var(--border); background: var(--surface);
+    padding: 0.55rem 0.8rem; font-size: 0.875rem; line-height: 1.25rem; color: var(--text);
+    box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.04); transition: border-color 0.15s, box-shadow 0.2s var(--ease);
   }
-  .input:focus { outline: 2px solid var(--color-brand-500); outline-offset: 0; border-color: transparent; }
+  .input:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-brand-400) 50%, var(--border)); }
+  .input:focus { outline: none; border-color: var(--color-brand-500); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand-500) 18%, transparent); }
   .input:disabled { opacity: 0.6; cursor: not-allowed; }
   .table { width: 100%; font-size: 0.875rem; border-collapse: separate; border-spacing: 0; }
   .table th { text-align: left; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border); background: var(--surface-2); position: sticky; top: 0; z-index: 1; }
   .table td { padding: 0.625rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-  .table tbody tr:hover td { background: var(--surface-2); }
+  .table tbody tr td { transition: background-color 0.15s; }
+  .table tbody tr:hover td { background: color-mix(in srgb, var(--color-brand-50) 55%, var(--surface-2)); }
+  .dark .table tbody tr:hover td { background: color-mix(in srgb, var(--color-brand-900) 25%, var(--surface-2)); }
+  .table th:first-child { border-top-left-radius: 0.75rem; }
+  .table th:last-child { border-top-right-radius: 0.75rem; }
+
+  /* Gentle entrance animations: pages, dialogs, menus and messages. */
+  .anim-page { animation: lf-rise 0.35s var(--ease) both; }
+  .anim-pop { animation: lf-pop 0.22s var(--ease) both; }
+  .anim-fade { animation: lf-fade 0.2s ease-out both; }
+  .anim-slide-left { animation: lf-slide-left 0.28s var(--ease) both; }
+  .anim-toast { animation: lf-toast 0.3s var(--ease) both; }
+  .glass { background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px); }
   .table tfoot td { font-weight: 600; border-top: 2px solid var(--border); border-bottom: none; }
 }
 
@@ -98,13 +131,24 @@
   @media print { body { background: #fff !important; background-image: none !important; } }
 }
 
+@keyframes lf-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes lf-pop { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes lf-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lf-slide-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes lf-toast { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: none; } }
+/* Respect "reduce motion" in the operating system. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
 /* Print: documents and reports render cleanly; app chrome is hidden. */
 @media print {
   @page { margin: 14mm; }
   body { background: #fff !important; color: #000 !important; }
   .no-print, nav, header.app-header, aside { display: none !important; }
   .print-area { box-shadow: none !important; border: none !important; padding: 0 !important; }
-  .card { border: none !important; }
+  .card { border: none !important; box-shadow: none !important; }
+  .anim-page, .anim-pop { animation: none !important; }
   .table th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   main { padding: 0 !important; margin: 0 !important; }
   a { color: inherit; text-decoration: none; }

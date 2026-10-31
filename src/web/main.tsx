@@ -52,6 +52,7 @@ const PrintPage = lazy(() => import("./pages/Print"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
+const ScanOpen = lazy(() => import("./pages/ScanOpen"));
 const SecurityPage = lazy(() => import("./pages/SecurityPage"));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -81,6 +82,7 @@ function App() {
       <Route path="/download" element={<Download />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
+      <Route path="/scan" element={<ScanOpen />} />
       <Route path="/security" element={<SecurityPage />} />
       <Route path="/verify/:token" element={<Verify />} />
       <Route path="/billing/:orgId/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />

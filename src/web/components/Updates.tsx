@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpCircle, X } from "lucide-react";
 import { useSession } from "../lib/session";
-import { applyUpdate, useAppUpdate, type UpdateInfo } from "../lib/updates";
+import { applyUpdate, useAppUpdate, watchApkProgress, type UpdateInfo } from "../lib/updates";
 import { Alert, Button, Modal } from "./ui";
 
 const EDITION = { cloud: "website", desktop: "desktop app", android: "Android app" } as const;
@@ -10,7 +10,7 @@ function actionLabel(info: UpdateInfo) {
   switch (info.action) {
     case "reload": return "Reload to update";
     case "restart": return "Restart to update";
-    case "download": return "Download update";
+    case "download": return info.edition === "android" ? "Update" : "Download update";
     case "open-download-page": return "Download update";
     default: return null;
   }
@@ -21,7 +21,7 @@ function statusText(info: UpdateInfo) {
   if (info.status === "downloading") return `Downloading LedgerFox ${info.latest ?? ""}${info.progress != null ? ` (${info.progress}%)` : ""}… You can keep working.`;
   if (info.status === "ready") return `LedgerFox ${info.latest} is downloaded and installs when the app restarts. Your data file is not changed.`;
   if (info.available && info.edition === "cloud") return "A new version of LedgerFox has been published. Reload to start using it (unsaved form entries on this page are lost).";
-  if (info.available && info.edition === "android") return `LedgerFox ${info.latest} is available. Download and open the new APK to install it over this one; your phone copy is kept.`;
+  if (info.available && info.edition === "android") return `LedgerFox ${info.latest} is available. Tap Update: the app downloads it and Android asks you to tap Install. Your data and sign-in are kept.`;
   if (info.available) return `LedgerFox ${info.latest} is available.`;
   if (info.status === "up-to-date") return "You have the latest version.";
   return "";
@@ -34,10 +34,16 @@ export function UpdateCenter() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [apk, setApk] = useState<number | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => { watchApkProgress(setApk); return () => watchApkProgress(null); }, []);
   const label = actionLabel(info);
   const key = `${info.latest}-${info.status}`;
   const showBar = info.available && dismissed !== key && (info.status !== "downloading");
-  const apply = async () => { setBusy(true); try { await applyUpdate(info); } finally { setBusy(false); } };
+  const apply = async () => {
+    setBusy(true); setFailed(null);
+    try { await applyUpdate(info); } catch (e) { setOpen(true); setFailed((e as Error).message || "The update could not be downloaded. Check the internet and try again."); } finally { setBusy(false); }
+  };
   const canApply = label && (info.edition !== "desktop" || info.can_install);
   return (
     <>
@@ -65,6 +71,9 @@ export function UpdateCenter() {
             {info.checked_at && <><dt className="muted">Last checked</dt><dd>{new Date(info.checked_at).toLocaleString()}</dd></>}
           </dl>
           {error ? <Alert className="mt-3">{error}</Alert> : statusText(info) && <Alert kind={info.available ? "info" : "success"} className="mt-3">{statusText(info)}</Alert>}
+          {apk !== null && <div className="mt-3 text-sm">Downloading the update{apk >= 0 ? ` (${apk}%)` : "…"}
+            {apk >= 0 && <div className="mt-1 h-2 overflow-hidden rounded bg-[var(--surface-2)]"><div className="h-full bg-brand-600 transition-all" style={{ width: `${apk}%` }} /></div>}</div>}
+          {failed && <Alert className="mt-3">{failed}</Alert>}
           {info.status === "downloading" && info.progress != null && <div className="mt-2 h-2 overflow-hidden rounded bg-[var(--surface-2)]"><div className="h-full bg-brand-600" style={{ width: `${info.progress}%` }} /></div>}
           {info.edition === "desktop" && info.available && !info.can_install && <p className="mt-3 text-sm muted">Updates are installed by the owner or an administrator on the computer that runs LedgerFox.</p>}
           {info.notes && <div className="mt-4"><p className="mb-1 text-sm font-semibold">What's new</p><pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--surface-2)] p-3 text-xs">{info.notes}</pre></div>}

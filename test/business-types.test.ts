@@ -54,3 +54,20 @@ describe("business types", () => {
     expect(issued.json.number).toBeTruthy();
   });
 });
+
+describe("product codes", () => {
+  it("gives starter items codes, and the 0025 update fills only missing codes without clashes", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { rawQuery } = await import("./helpers");
+    const W = await world();
+    const co = (await W.owner.post(`/api/orgs/${W.orgId}/companies`, { name: "Shop", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", business_type: "retail" })).json.company_id;
+    const codes = (await W.owner.get(`/api/c/${co}/items?limit=50`)).json.items.map((i: any) => i.code).sort();
+    expect(codes).toEqual(["P000001", "P000002", "P000003", "P000004"]);
+    // As for companies made before this fix: two products without codes, next to a later P000007.
+    await rawQuery(W, `UPDATE items SET code = NULL WHERE company_id = ? AND code IN ('P000001','P000003')`, co);
+    await rawQuery(W, `UPDATE items SET code = 'P000007' WHERE company_id = ? AND code = 'P000004'`, co);
+    for (const sql of readFileSync("migrations/0025_item_codes.sql", "utf8").replace(/--.*$/gm, "").split(";").map((s) => s.trim()).filter(Boolean)) await rawQuery(W, sql);
+    const after = (await rawQuery(W, `SELECT code FROM items WHERE company_id = ? ORDER BY code`, co)).map((r: any) => r.code);
+    expect(after).toEqual(["P000002", "P000007", "P000008", "P000009"]);
+  });
+});

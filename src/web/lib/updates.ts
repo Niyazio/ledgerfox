@@ -125,6 +125,18 @@ export async function applyUpdate(info: UpdateInfo) {
   } else if (info.action === "restart") {
     await fetch("/api/desktop/update/install", { method: "POST", headers: { "x-requested-with": "ledgerfox", "content-type": "application/json" }, body: "{}", credentials: "same-origin" });
   } else if ((info.action === "download" || info.action === "open-download-page") && info.url) {
-    window.open(info.url, "_blank", "noopener");
+    // Android app: download inside the app and open Android's installer (one tap on "Install"), no browser needed.
+    const caps = (globalThis as { Capacitor?: { Plugins?: Record<string, any> } }).Capacitor?.Plugins;
+    if (info.edition === "android" && caps?.ApkUpdater && info.url.endsWith(".apk")) {
+      const sub = await caps.ApkUpdater.addListener?.("progress", (p: { percent: number }) => onApkProgress?.(p.percent));
+      try { await caps.ApkUpdater.install({ url: info.url }); } finally { await sub?.remove?.(); onApkProgress?.(null); }
+      return;
+    }
+    if (caps?.Browser) await caps.Browser.open({ url: info.url });
+    else window.open(info.url, "_blank", "noopener");
   }
 }
+
+/** Download progress of an in-app Android update (0–100, -1 when the size is unknown, null when finished). */
+let onApkProgress: ((percent: number | null) => void) | null = null;
+export const watchApkProgress = (fn: ((percent: number | null) => void) | null) => { onApkProgress = fn; };

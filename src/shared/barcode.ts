@@ -1,6 +1,7 @@
 /**
  * Code 128 (subset B) barcode encoder: printable ASCII to bar widths, drawn as SVG by the labels page.
- * Any USB or camera barcode scanner reads it. The product QR payload is `LF1|P|<code>`: identity only, never prices or costs.
+ * Any USB or camera barcode scanner reads it. The product QR is a link, `<site>/scan?p=<code>`, so any phone camera can open
+ * it straight into billing; it holds the product code only, never prices or costs. Older labels hold `LF1|P|<code>`.
  */
 
 // Bar/space widths for symbol values 0–106 (106 = stop, followed by a 2-module termination bar).
@@ -16,7 +17,17 @@ const PATTERNS = [
 const START_B = 104;
 const STOP = 106;
 
-export const productQrPayload = (code: string) => `LF1|P|${code}`;
+export const productQrPayload = (code: string, origin = "https://ledgerfox.niyazio.com") => `${origin}/scan?p=${encodeURIComponent(code)}`;
+
+/** The product code inside anything a scanner read: a LedgerFox QR link, an older `LF1|P|` QR, or a plain code. */
+export function scannedCode(raw: string): string {
+  const v = raw.trim();
+  const old = /^LF1\|P\|([A-Z0-9._-]{1,32})$/i.exec(v);
+  if (old) return old[1];
+  const link = /^https?:\/\/[^\s?#]+\/scan\?(?:[^#\s]*&)?p=([A-Za-z0-9._%-]{1,96})/.exec(v);
+  if (link) { try { return decodeURIComponent(link[1]); } catch { return link[1]; } }
+  return v;
+}
 
 /** Module widths (alternating bar, space, … starting with a bar) for `text`, including start, checksum and stop. */
 export function code128(text: string): number[] {

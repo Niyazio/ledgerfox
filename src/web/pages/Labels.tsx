@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
+import { api } from "../lib/api";
 import QRCode from "qrcode";
 import { Printer, Trash2 } from "lucide-react";
 import { useCompany } from "../lib/company";
@@ -20,7 +22,7 @@ function Label({ item, showPrice, size }: { item: Item; showPrice: boolean; size
   const { money } = useCompany();
   const [qr, setQr] = useState("");
   const code = item.code ?? item.sku ?? "";
-  useEffect(() => { if (code) QRCode.toDataURL(productQrPayload(code), { margin: 0, width: 160, errorCorrectionLevel: "M" }).then(setQr); }, [code]);
+  useEffect(() => { if (code) QRCode.toDataURL(productQrPayload(code, location.origin), { margin: 0, width: 200, errorCorrectionLevel: "M" }).then(setQr); }, [code]);
   const s = SIZES[size];
   const bar = item.barcode || code;
   return (
@@ -45,12 +47,19 @@ export default function Labels() {
   const [size, setSize] = useState<keyof typeof SIZES>("50x25");
   const [showPrice, setShowPrice] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // From a product's "Print labels" button: start with that product.
+  const [params] = useSearchParams();
+  const first = params.get("item");
+  useEffect(() => {
+    if (first) api.get<{ item: Item }>(path(`/items/${first}`)).then((r) => add(r.item)).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [first]);
   const add = (item: Item) => setPicked((p) => (p.some((x) => x.item.id === item.id) ? p.map((x) => (x.item.id === item.id ? { ...x, copies: x.copies + 1 } : x)) : [...p, { item, copies: 1 }]));
   const labels = picked.flatMap(({ item, copies }) => Array.from({ length: copies }, (_, i) => ({ item, key: `${item.id}-${i}` })));
   return (
     <>
       <div className="no-print">
-        <PageHeader title="Product labels" subtitle="QR codes hold only the product code (never prices or costs). Scan them at billing, purchase or stock count."
+        <PageHeader title="Product labels" subtitle="The QR holds only the product code (never prices or costs). Scan it in POS, or with any phone camera while signed in: it opens billing with the product added."
           actions={<Button disabled={!labels.length} onClick={printPage}><Printer className="h-4 w-4" />Print {labels.length || ""} label{labels.length === 1 ? "" : "s"}</Button>} />
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Add products">

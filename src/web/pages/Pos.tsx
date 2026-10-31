@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Pause, Play, Plus, Printer, Trash2, X } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
-import { errorMessage } from "../lib/api";
+import { api, errorMessage } from "../lib/api";
+import { useSearchParams } from "react-router";
 import { Alert, Button, Card, Input, Select } from "../components/ui";
 import { ScanInput } from "../components/Scanner";
 import { isQueued, postOrQueue } from "../lib/offline";
@@ -49,6 +50,15 @@ export default function Pos() {
     setError(null); setLast(null);
     setCart((c) => (c.some((l) => l.item.id === item.id) ? c.map((l) => (l.item.id === item.id ? { ...l, qty: l.qty + n } : l)) : [...c, { item, qty: n }]));
   };
+  // A product QR scanned with the phone camera opens /scan → here with ?add=<code>: put that product on the bill.
+  const [params, setParams] = useSearchParams();
+  const addCode = params.get("add");
+  useEffect(() => {
+    if (!addCode) return;
+    setParams((p) => { p.delete("add"); return p; }, { replace: true });
+    api.get<{ item: Item }>(path(`/items/lookup?code=${encodeURIComponent(addCode)}`)).then((r) => add(r.item)).catch((e) => setError(errorMessage(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addCode]);
   const setQty = (itemId: string, qty: number) => setCart((c) => (qty <= 0 ? c.filter((l) => l.item.id !== itemId) : c.map((l) => (l.item.id === itemId ? { ...l, qty } : l))));
 
   // Same calculation as the server (intra-state for a counter sale), so the total shown is what gets billed.
@@ -113,7 +123,7 @@ export default function Pos() {
       <div className="space-y-3">
         <Card>
           <div className="grid gap-3 sm:grid-cols-2">
-            <ScanInput label="Scan barcode / QR" autoFocus onItem={(it) => add(it as Item)} onError={setError} />
+            <ScanInput label="Scan barcode / QR" autoFocus continuous onItem={(it) => add(it as Item)} onError={setError} />
             <div><label className="mb-1.5 block text-sm font-medium" htmlFor="pos-search">Search (F2)</label>
               <input id="pos-search" className="input" ref={searchRef} value={q} placeholder={t("Search products")} onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && items.data?.items[0]) { add(items.data.items[0]); setQ(""); } }} /></div>

@@ -139,10 +139,11 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
   }
   // Starter items for the business type (prices in the company currency; editable later).
   const exp = currencyExponent(input.base_currency);
-  for (const it of biz.items) {
+  // Numbered like products added later (P000001…), so their QR labels and scanning work from the start.
+  for (const [n, it] of biz.items.entries()) {
     stmts.push(stmt(db,
-      `INSERT INTO items (id, company_id, kind, name, unit, hsn_sac, sale_price, tax_code_id, income_account_id, track_inventory) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      newId(), companyId, it.kind, it.name, it.unit, scheme === "in_gst" ? it.hsn ?? null : null, parseDecimal(it.price, exp),
+      `INSERT INTO items (id, company_id, kind, name, unit, code, hsn_sac, sale_price, tax_code_id, income_account_id, track_inventory) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      newId(), companyId, it.kind, it.name, it.unit, `P${String(n + 1).padStart(6, "0")}`, scheme === "in_gst" ? it.hsn ?? null : null, parseDecimal(it.price, exp),
       scheme === "in_gst" && it.gst ? taxIdByName.get(it.gst) ?? null : null, it.income ? idByCode.get(it.income) ?? null : null, it.track ? 1 : 0));
   }
   stmts.push(stmt(db, `INSERT INTO branches (id, company_id, name, code, state_code) VALUES (?,?,?,?,?)`, newId(), companyId, "Head Office", "HO", input.state_code ?? null));
