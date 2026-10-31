@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { COUNTRY_PACKS, countryPack, taxIdProblem } from "@shared/countries";
-import { Navigate, useNavigate, Link } from "react-router";
+import { Navigate, useNavigate, useSearchParams, Link } from "react-router";
 import { api } from "../lib/api";
 import { useAction } from "../lib/hooks";
 import { useSession } from "../lib/session";
@@ -17,9 +17,9 @@ import { errorMessage } from "../lib/api";
 const COUNTRIES: [string, string, string, number][] = COUNTRY_PACKS.map((p) => [p.code, p.name, p.currency, p.fyStart]);
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function CompanyForm({ onSubmit, busy, withOrg }: { onSubmit: (v: any, branding: BrandingValue) => void; busy: boolean; withOrg?: boolean }) {
+export function CompanyForm({ onSubmit, busy, withOrg, practice = false }: { onSubmit: (v: any, branding: BrandingValue) => void; busy: boolean; withOrg?: boolean; practice?: boolean }) {
   const [branding, setBranding] = useState<BrandingValue>({});
-  const [v, setV] = useState({ practice: false, org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
+  const [v, setV] = useState({ practice, org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -168,6 +168,7 @@ export function NewCompany() {
   const { busy, error, run } = useAction();
   const toast = useToast();
   const [org, setOrg] = useState(me?.organisations[0]?.org_id ?? "");
+  const [params] = useSearchParams();
   if (!me?.user) return <Navigate to="/login" replace />;
   if (!me.organisations.length) return <Navigate to="/app" replace />;
   return (
@@ -179,7 +180,7 @@ export function NewCompany() {
         <Field label="Organisation" className="mb-4">{(id) => <Select id={id} value={org} onChange={(e) => setOrg(e.target.value)}>{me.organisations.map((o) => <option key={o.org_id} value={o.org_id}>{o.org_name}</option>)}</Select>}</Field>
       )}
       <div className="mb-6"><DemoLoader orgId={org} /></div>
-      <Card><CompanyForm busy={busy} onSubmit={async (v, branding) => {
+      <Card><CompanyForm busy={busy} practice={params.get("practice") === "1"} onSubmit={async (v, branding) => {
         const r = await run(async () => { const c = await api.post<{ company_id: string }>(`/api/orgs/${org}/companies`, v); return { ...c, brandingError: await saveBranding(c.company_id, branding) }; });
         if (r) { if (r.brandingError) toast("error", r.brandingError); await refresh(); nav(`/app/${r.company_id}/dashboard`); }
       }} /></Card>

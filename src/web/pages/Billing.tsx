@@ -145,7 +145,10 @@ export function TrialGate() {
   const { data } = useApi<BillingInfo>(orgId ? `/api/billing/org/${orgId}` : null);
   const [interval, setInterval] = useState<Interval>("monthly");
   const [plan, setPlan] = useState("business");
-  if (!data?.autopay_required) return null;
+  const nav = useNavigate();
+  const [later, setLater] = useState(false);
+  // Practice companies (education mode) are free and never ask for a plan, even inside a business's organisation.
+  if (!data?.autopay_required || settings?.company.is_practice || later) return null;
   const ends = data.subscription.trial_ends_at ? fmtDate(data.subscription.trial_ends_at.slice(0, 10)) : "";
   return (
     <div className="no-print fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="trial-title">
@@ -174,6 +177,13 @@ export function TrialGate() {
             ? <Button className="mt-5 w-full" onClick={() => goCheckout(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}&mode=autopay`)}>Start free trial — set up auto-pay</Button>
             : <Alert className="mt-4">Online payment is not available right now. Write to info@niyazio.com with your account ID {data.account_id}.</Alert>}
         </> : <Alert kind="info" className="mt-4">Your organisation's owner needs to start the free trial (Settings → Plan & billing). You can look around meanwhile.</Alert>}
+        <div className="mt-4 rounded-xl border border-orange-300 bg-orange-50 p-3 text-sm dark:border-orange-800 dark:bg-orange-950/30">
+          <p><b>Teaching or learning?</b> Education mode is free, with every feature, and needs no payment: create a <b>practice company</b> for your students.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => { setLater(true); nav("/app/new-company?practice=1"); }}>Create a practice company (free)</Button>
+            <Button size="sm" variant="secondary" onClick={() => setLater(true)}>Look around first</Button>
+          </div>
+        </div>
         <div className="mt-3 flex justify-between text-sm"><span className="muted">Account ID {data.account_id}</span><button className="muted hover:underline" onClick={() => void logout()}>Sign out</button></div>
       </div>
     </div>
