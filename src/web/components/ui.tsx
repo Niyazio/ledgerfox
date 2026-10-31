@@ -289,7 +289,7 @@ export function DownloadButtons({ onDownload, disabled, size = "md", className }
   return (
     <span className={cx("inline-flex gap-1", className)}>
       <Button variant="secondary" size={size} disabled={disabled || busy !== null} loading={busy === "xlsx"} onClick={() => void go("xlsx")} title="Download as an Excel workbook (.xlsx)"><FileSpreadsheet className="h-4 w-4" />Excel</Button>
-      <Button variant="secondary" size={size} disabled={disabled || busy !== null} loading={busy === "csv"} onClick={() => void go("csv")} title="Download as CSV (for Tally and other tools)">CSV</Button>
+      <Button variant="secondary" size={size} disabled={disabled || busy !== null} loading={busy === "csv"} onClick={() => void go("csv")} title="Download as CSV (for other accounting software and tools)">CSV</Button>
     </span>
   );
 }

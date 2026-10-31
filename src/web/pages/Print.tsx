@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 import QRCode from "qrcode";
-import { bilingual, type Lang } from "@shared/i18n";
+import { bilingual, type PrintLang } from "@shared/i18n";
+import { countryPack } from "@shared/countries";
+import { zatcaAmount, zatcaQr } from "@shared/zatca";
 import { ArrowLeft, Download, Printer, Share2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useApi } from "../lib/hooks";
@@ -28,6 +30,10 @@ type Kind = "document" | "payment" | "payslip";
 
 /** Logo and the business's own payment QR image, loaded once per preview. */
 const BrandingCtx = createContext<{ logo: string | null; payment_qr: string | null }>({ logo: null, payment_qr: null });
+
+/** The bill language; Saudi invoices always carry Arabic (a ZATCA requirement), so English-only becomes English + Arabic. */
+const billLang = (co: { country: string; print_language?: string | null }): PrintLang =>
+  co.country === "SA" && (!co.print_language || co.print_language === "en") ? "ar" : ((co.print_language ?? "en") as PrintLang);
 
 function useQr(text: string | null, size = 220) {
   const [src, setSrc] = useState<string | null>(null);
@@ -119,13 +125,14 @@ function CompanyBlock({ thermal, center }: { thermal?: boolean; center?: boolean
   const { logo } = useContext(BrandingCtx);
   const co = settings!.company;
   const india = co.country === "IN";
+  const pack = countryPack(co.country);
   return (
     <div className={`${center ? "text-center" : ""} ${logo && !center ? "flex items-start gap-4" : ""}`}>
       {logo && <img src={logo} alt="" className={thermal ? "mx-auto mb-1 max-h-12 max-w-[60%] object-contain grayscale" : center ? "mx-auto mb-2 max-h-16 max-w-[40%] object-contain" : "max-h-20 max-w-[140px] object-contain"} />}
       <div>
       <p className={thermal ? "text-[13px] font-bold" : "text-xl font-bold tracking-tight"}>{co.legal_name || co.name}</p>
       <p className="whitespace-pre-line text-slate-600">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code && india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : null].filter(Boolean).join(thermal ? ", " : "\n")}</p>
-      {co.tax_id && <p>{india ? "GSTIN" : "Tax ID"}: <b className="font-mono">{co.tax_id}</b></p>}
+      {co.tax_id && <p>{india ? "GSTIN" : bilingual(pack.regLabel, billLang(co))}: <b className="font-mono">{co.tax_id}</b></p>}
       {(co.phone || co.email) && <p className="text-slate-600">{[co.phone, co.email].filter(Boolean).join(" · ")}</p>}
       </div>
     </div>
@@ -156,15 +163,28 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
   // GST e-invoice: the IRP's signed QR must be printed on the invoice (not for cancelled IRNs).
   const gst = data?.gst_refs as { irn: string | null; ack_no: string | null; ack_date: string | null; signed_qr: string | null; irn_cancelled: number; ewb_no: string | null; ewb_date: string | null } | null | undefined;
   const irnQr = useQr(gst?.irn && !gst.irn_cancelled ? gst.signed_qr : null, 300);
+  // Saudi Arabia: the ZATCA QR (seller, VAT number, time, total, VAT) on every issued invoice and credit/debit note.
+  const zatcaText = d && co.country === "SA" && co.tax_id && d.status !== "draft" && ["invoice", "credit_note", "debit_note"].includes(d.doc_type)
+    ? zatcaQr({ seller: co.legal_name || co.name, vatNumber: co.tax_id, timestamp: `${d.issue_date}T${(d.created_at ?? "").slice(11, 19) || "00:00:00"}Z`,
+        total: zatcaAmount(d.total, currencyExponent(cur)), vat: zatcaAmount(d.tax_total ?? (sum(lines, "other_tax") + sum(lines, "cgst") + sum(lines, "sgst") + sum(lines, "igst")), currencyExponent(cur)) })
+    : null;
+  const zatcaImg = useQr(zatcaText, 260);
   if (error) return <Alert>{error}</Alert>;
   if (!d) return <Spinner />;
   const df = co.date_format;
   const taxes = { cgst: sum(lines, "cgst"), sgst: sum(lines, "sgst"), igst: sum(lines, "igst"), other: sum(lines, "other_tax") };
-  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply") : DOC_LABELS[d.variant ?? d.doc_type].one;
+  const pack = countryPack(co.country);
+  // India: Tax Invoice / Bill of Supply. VAT countries: "Tax Invoice" when the seller is registered; Saudi Arabia calls
+  // an invoice to a customer without a VAT number a "Simplified Tax Invoice".
+  const title = d.doc_type === "invoice" && india ? (taxes.cgst || taxes.sgst || taxes.igst ? "Tax Invoice" : "Bill of Supply")
+    : d.doc_type === "invoice" && !india && co.tax_id && (pack.gccVat || taxes.other > 0) ? (pack.zatca && !d.contact_tax_id ? "Simplified Tax Invoice" : "Tax Invoice")
+    : DOC_LABELS[d.variant ?? d.doc_type].one;
+  const taxWord = india ? "Tax" : pack.taxName === "VAT" ? "VAT" : pack.taxName;
+  const partyTaxLabel = india ? "GSTIN" : pack.gccVat ? "Customer VAT number" : pack.regLabel;
   const words = amountInWords(d.total, cur, currencyExponent(cur));
   const thermal = format.startsWith("thermal");
   const watermark = d.status === "draft" ? "DRAFT" : d.status === "void" ? "VOID" : null;
-  const L = (en: string) => bilingual(en, co.print_language as Lang | undefined);
+  const L = (en: string) => bilingual(en, billLang(co));
 
   if (thermal) {
     return (
@@ -174,7 +194,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
         <p className="text-center font-bold uppercase">{L(title)}</p>
         <p className="flex justify-between"><span>No: {d.number ?? "DRAFT"}</span><span>{fmtDate(d.issue_date, df)}</span></p>
         <p>{sales ? "To" : "From"}: {d.contact_name}</p>
-        {d.contact_tax_id && <p>GSTIN: {d.contact_tax_id}</p>}
+        {d.contact_tax_id && <p>{L(partyTaxLabel)}: {d.contact_tax_id}</p>}
         <Rule />
         {lines.map((l) => (
           <div key={l.id} className="mb-1">
@@ -188,13 +208,13 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
         {taxes.cgst > 0 && <Row k="CGST" v={money(taxes.cgst, cur)} />}
         {taxes.sgst > 0 && <Row k="SGST" v={money(taxes.sgst, cur)} />}
         {taxes.igst > 0 && <Row k="IGST" v={money(taxes.igst, cur)} />}
-        {taxes.other > 0 && <Row k="Tax" v={money(taxes.other, cur)} />}
+        {taxes.other > 0 && <Row k={L(taxWord)} v={money(taxes.other, cur)} />}
         {d.round_off !== 0 && <Row k={L("Round off")} v={money(d.round_off, cur)} />}
         <p className="mt-1 flex justify-between border-y border-dashed border-slate-500 py-1 text-[13px] font-bold"><span>{L("Total").toUpperCase()}</span><span>{money(d.total, cur)}</span></p>
         <p className="mt-1 text-[10px]">{words}</p>
         {gst?.irn && !gst.irn_cancelled && <div className="mt-2 text-center text-[9px]"><p className="break-all">IRN {gst.irn}</p>{gst.ack_no && <p>Ack {gst.ack_no} · {gst.ack_date}</p>}{irnQr && <img src={irnQr} alt="e-invoice QR" className="mx-auto mt-1 h-32 w-32" />}</div>}
         {gst?.ewb_no && <p className="mt-1 text-center text-[10px]">E-way bill {gst.ewb_no}</p>}
-        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? L("Scan to pay (UPI)")} size={110} /><Qr src={verify} label={L("Scan to verify")} size={90} /></div>
+        <div className="mt-2 flex justify-center gap-3"><Qr src={upi} label={payLabel ?? L("Scan to pay (UPI)")} size={110} /><Qr src={zatcaImg} label="ZATCA" size={110} /><Qr src={verify} label={L("Scan to verify")} size={90} /></div>
         {watermark && <p className="mt-2 text-center font-bold">*** {watermark} ***</p>}
         <p className="mt-2 text-center">{L("Thank you! Visit again.")}</p>
       </Sheet>
@@ -240,7 +260,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{sales ? L("Bill to") : L("Supplier")}</p>
             <p className="mt-1 text-base font-semibold">{d.contact_name}</p>
             <p className="whitespace-pre-line text-slate-600">{d.contact_address}</p>
-            {d.contact_tax_id && <p>{india ? "GSTIN" : "Tax ID"}: <span className="font-mono">{d.contact_tax_id}</span></p>}
+            {d.contact_tax_id && <p>{L(partyTaxLabel)}: <span className="font-mono">{d.contact_tax_id}</span></p>}
             {d.contact_phone && <p className="text-slate-600">{d.contact_phone}</p>}
           </div>
           <div className="text-right">
@@ -278,7 +298,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
             <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{L("Amount in words")}</p><p className="font-medium">{words}</p></div>
             {d.notes && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Notes</p><p className="whitespace-pre-line">{d.notes}</p></div>}
             {d.terms && <div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Terms &amp; conditions</p><p className="whitespace-pre-line text-slate-600">{d.terms}</p></div>}
-            <div className="flex gap-4 pt-1"><Qr src={upi} label={payLabel ? `${payLabel} · ${money(outstanding, cur)} due` : `Scan to pay ${money(outstanding, cur)} by UPI`} size={104} /><Qr src={verify} label="Scan to verify this document" size={92} /></div>
+            <div className="flex gap-4 pt-1"><Qr src={upi} label={payLabel ? `${payLabel} · ${money(outstanding, cur)} due` : `Scan to pay ${money(outstanding, cur)} by UPI`} size={104} /><Qr src={zatcaImg} label="ZATCA e-invoice QR" size={104} /><Qr src={verify} label="Scan to verify this document" size={92} /></div>
           </div>
           <div className="w-72">
             <dl className={`space-y-1 ${classic ? "border-2 border-slate-800 p-3" : "rounded-lg bg-slate-50 p-4"}`}>
@@ -286,7 +306,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
               {taxes.cgst > 0 && <Row k="CGST" v={money(taxes.cgst, cur)} />}
               {taxes.sgst > 0 && <Row k="SGST" v={money(taxes.sgst, cur)} />}
               {taxes.igst > 0 && <Row k="IGST" v={money(taxes.igst, cur)} />}
-              {taxes.other > 0 && <Row k="Tax" v={money(taxes.other, cur)} />}
+              {taxes.other > 0 && <Row k={L(taxWord)} v={money(taxes.other, cur)} />}
               {d.round_off !== 0 && <Row k={L("Round off")} v={money(d.round_off, cur)} />}
               <p className={`flex justify-between border-t pt-2 text-base font-bold ${classic ? "border-slate-800" : "border-brand-700 text-brand-800"}`}><span>{L("Total")}</span><span>{money(d.total, cur)}</span></p>
               {d.status === "posted" && d.amount_settled > 0 && <><Row k={L("Paid")} v={money(d.amount_settled, cur)} /><Row k={L("Balance due")} v={<b>{money(outstanding, cur)}</b>} /></>}

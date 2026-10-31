@@ -74,7 +74,7 @@ export default function Import() {
   const columns = rows?.length ? Object.keys(rows[0]) : [];
   return (
     <>
-      <PageHeader title="Import data" subtitle="Bring customers, suppliers and products from Excel, Tally, Vyapar or any spreadsheet." />
+      <PageHeader title="Import data" subtitle="Bring customers, suppliers and products from Excel, another accounting or billing app, or any spreadsheet." />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="1. What are you importing?">
           <Field label="Import">{(fid) => (

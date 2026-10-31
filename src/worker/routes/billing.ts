@@ -8,9 +8,9 @@ import { body } from "../lib/validate";
 import { hashPassword, newId, temporaryPassword } from "../lib/crypto";
 import { iterations } from "./auth";
 import { audit, orgPermissions, rateLimit, requireAuth } from "../lib/auth";
-import { GRACE_DAYS, PAID_PLANS, PLANS, TRIAL_DAYS, withGst, type Interval, type PlanId } from "@shared/plans";
+import { GRACE_DAYS, PAID_PLANS, PLANS, TRIAL_DAYS, plansIn, type Interval, type PlanId } from "@shared/plans";
 import type { Role } from "@shared/permissions";
-import { autopayRequired, billingEvent, billingOn, renewRequired, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
+import { autopayRequired, billingEvent, billingOn, orgBillingCurrency, orgPrice, renewRequired, taxPercentFor, cancelRazorpaySubscription, hasRealCompany, isVendor, createRazorpayOrder, createRazorpaySubscription, fetchRazorpayPayment, markPaid, razorpayPlanId, recordAutopayCharge, subscription, usage, verifyCheckoutSignature, verifySubscriptionSignature, verifyWebhookSignature } from "../services/billing";
 import { sendAutopayProblem } from "../services/notices";
 import { emailOn, siteUrl } from "../services/email";
 import { licensingOn } from "../services/licence";
@@ -68,14 +68,16 @@ org.get("/:orgId", async (c) => {
   // Desktop app: the plan comes from the computer's licence; buying happens on the website.
   if (licensingOn(c.env)) {
     const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
-    return c.json({ enabled: true, desktop: true, subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: false, payments: [], online: false, autopay: null, account_id: orgId, autopay_required: false, renew_required: await renewRequired(c.env, orgId), trial_days: TRIAL_DAYS, demo_only: false, role: m.role });
+    const cur = await orgBillingCurrency(c.env, orgId);
+    return c.json({ enabled: true, desktop: true, subscription: sub, usage: used, plans: plansIn(cur), currency: cur, gst_percent: taxPercentFor(c.env, cur), can_buy: false, payments: [], online: false, autopay: null, account_id: orgId, autopay_required: false, renew_required: await renewRequired(c.env, orgId), trial_days: TRIAL_DAYS, demo_only: false, role: m.role });
   }
   const [sub, used] = await Promise.all([subscription(c.env, orgId), usage(c.env, orgId)]);
   const payments = m.role === "owner"
-    ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, period_start, period_end, created_at, paid_at, provider_payment_id, provider_order_id, provider_subscription_id FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
+    ? await all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, currency, provider, status, invoice_number, period_start, period_end, created_at, paid_at, provider_payment_id, provider_order_id, provider_subscription_id FROM billing_payments WHERE org_id = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 50`, orgId)
     : [];
-  const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
-  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: Object.values(PLANS), gst_percent: gstPercent(c), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId,
+  const autopay = await first(c.env.DB, `SELECT autopay_id AS id, autopay_status AS status, autopay_plan AS plan, autopay_interval AS "interval", autopay_total AS total, autopay_currency AS currency FROM org_subscriptions WHERE org_id = ? AND autopay_id IS NOT NULL AND autopay_status <> 'created'`, orgId);
+  const cur = await orgBillingCurrency(c.env, orgId);
+  return c.json({ enabled: billingOn(c.env), subscription: sub, usage: used, plans: plansIn(cur), currency: cur, gst_percent: taxPercentFor(c.env, cur), can_buy: m.role === "owner", payments, online: Boolean(c.env.RAZORPAY_KEY_ID), autopay, account_id: orgId,
     autopay_required: await autopayRequired(c.env, orgId, c.get("user").email), renew_required: await renewRequired(c.env, orgId, c.get("user").email), trial_days: TRIAL_DAYS, demo_only: !(await hasRealCompany(c.env, orgId)), role: m.role });
 });
 
@@ -97,16 +99,16 @@ org.post("/:orgId/checkout", async (c) => {
   await requireRealCompany(c, orgId);
   await paymentRate(c, orgId);
   const input = await body(c, choice);
-  const price = withGst(PLANS[input.plan].price[input.interval as Interval], gstPercent(c));
+  const price = await orgPrice(c.env, orgId, input.plan, input.interval as Interval);
   const id = newId();
-  const order = await createRazorpayOrder(c.env, price.total, id.slice(0, 40), { org_id: orgId, plan: input.plan, interval: input.interval });
+  const order = await createRazorpayOrder(c.env, price.total, id.slice(0, 40), { org_id: orgId, plan: input.plan, interval: input.interval }, price.currency);
   await batch(c.env.DB, [
-    stmt(c.env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, provider_order_id, created_by) VALUES (?,?,?,?,?,?,?,'razorpay',?,?)`,
-      id, orgId, input.plan, input.interval, price.amount, price.gst, price.total, order.id, c.get("user").id),
+    stmt(c.env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, provider_order_id, created_by, currency) VALUES (?,?,?,?,?,?,?,'razorpay',?,?,?)`,
+      id, orgId, input.plan, input.interval, price.amount, price.gst, price.total, order.id, c.get("user").id, price.currency),
     audit(c, "billing.checkout", "billing_payment", id, { plan: input.plan, interval: input.interval, total: price.total }, { orgId, companyId: null }),
   ]);
   const user = c.get("user");
-  return c.json({ payment_id: id, order_id: order.id, key_id: c.env.RAZORPAY_KEY_ID, amount: price.total, currency: "INR", name: PLANS[input.plan].name, prefill: { name: user.name, email: user.email.endsWith(".ledgerfox.local") ? "" : user.email } });
+  return c.json({ payment_id: id, order_id: order.id, key_id: c.env.RAZORPAY_KEY_ID, amount: price.total, currency: price.currency, name: PLANS[input.plan].name, prefill: { name: user.name, email: user.email.endsWith(".ledgerfox.local") ? "" : user.email } });
 });
 
 org.post("/:orgId/verify", async (c) => {
@@ -139,21 +141,21 @@ org.post("/:orgId/autopay", async (c) => {
   const row = await first<{ autopay_id: string | null; autopay_status: string | null; paid_until: string | null; trial_ends_at: string | null }>(c.env.DB,
     `SELECT autopay_id, autopay_status, paid_until, trial_ends_at FROM org_subscriptions WHERE org_id = ?`, orgId);
   if (row?.autopay_id && LIVE_AUTOPAY.includes(row.autopay_status ?? "")) throw new AppError(409, "AUTOPAY_ON", "Auto-renew is already on. Turn it off first to change the plan.");
-  const price = withGst(PLANS[input.plan].price[input.interval as Interval], gstPercent(c));
-  const planId = await razorpayPlanId(c.env, input.plan, input.interval, price.total);
+  const price = await orgPrice(c.env, orgId, input.plan, input.interval as Interval);
+  const planId = await razorpayPlanId(c.env, input.plan, input.interval, price.total, price.currency);
   const ends = Math.max(current.status === "active" || current.status === "grace" ? Date.parse(row?.paid_until ?? "") || 0 : 0, current.status === "trial" ? Date.parse(row?.trial_ends_at ?? "") || 0 : 0);
   const startAt = ends > Date.now() + 15 * 60_000 ? Math.floor(ends / 1000) : null;
   const created = await createRazorpaySubscription(c.env, planId, input.interval, startAt, { org_id: orgId, plan: input.plan, interval: input.interval });
   // An abandoned earlier attempt is simply replaced; it was never approved, so it cannot charge.
   await batch(c.env.DB, [
-    stmt(c.env.DB, `INSERT INTO org_subscriptions (org_id, autopay_id, autopay_status, autopay_plan, autopay_interval, autopay_total) VALUES (?, ?, 'created', ?, ?, ?)
-       ON CONFLICT (org_id) DO UPDATE SET autopay_id = excluded.autopay_id, autopay_status = 'created', autopay_plan = excluded.autopay_plan, autopay_interval = excluded.autopay_interval, autopay_total = excluded.autopay_total`,
-      orgId, created.id, input.plan, input.interval, price.total),
+    stmt(c.env.DB, `INSERT INTO org_subscriptions (org_id, autopay_id, autopay_status, autopay_plan, autopay_interval, autopay_total, autopay_currency) VALUES (?, ?, 'created', ?, ?, ?, ?)
+       ON CONFLICT (org_id) DO UPDATE SET autopay_id = excluded.autopay_id, autopay_status = 'created', autopay_plan = excluded.autopay_plan, autopay_interval = excluded.autopay_interval, autopay_total = excluded.autopay_total, autopay_currency = excluded.autopay_currency`,
+      orgId, created.id, input.plan, input.interval, price.total, price.currency),
     audit(c, "billing.autopay_start", "organisation", orgId, { plan: input.plan, interval: input.interval, total: price.total, starts: startAt ? new Date(startAt * 1000).toISOString() : "now" }, { orgId, companyId: null }),
   ]);
-  await billingEvent(c.env, orgId, "autopay_started", { autopay_id: created.id, plan: input.plan, interval: input.interval, total: price.total }, c.get("user").email, c.get("user").id);
+  await billingEvent(c.env, orgId, "autopay_started", { autopay_id: created.id, plan: input.plan, interval: input.interval, total: price.total, currency: price.currency }, c.get("user").email, c.get("user").id);
   const user = c.get("user");
-  return c.json({ subscription_id: created.id, key_id: c.env.RAZORPAY_KEY_ID, amount: price.total, name: PLANS[input.plan].name, starts_at: startAt ? new Date(startAt * 1000).toISOString() : null,
+  return c.json({ subscription_id: created.id, key_id: c.env.RAZORPAY_KEY_ID, amount: price.total, currency: price.currency, name: PLANS[input.plan].name, starts_at: startAt ? new Date(startAt * 1000).toISOString() : null,
     prefill: { name: user.name, email: user.email.endsWith(".ledgerfox.local") ? "" : user.email } });
 });
 
@@ -198,7 +200,7 @@ org.get("/:orgId/invoice/:paymentId", async (c) => {
   if (!isVendor(c.env, c.get("user").email) && (await member(c, orgId)).role !== "owner") throw forbidden();
   const p = await first(c.env.DB, `SELECT * FROM billing_payments WHERE id = ? AND org_id = ? AND status = 'paid'`, c.req.param("paymentId"), orgId);
   if (!p) throw notFound("Invoice");
-  const buyer = await first(c.env.DB, `SELECT o.name AS org_name, co.legal_name, co.name, co.tax_id, co.address, co.city, co.state_code FROM organisations o LEFT JOIN companies co ON co.org_id = o.id AND co.is_demo = 0 WHERE o.id = ? ORDER BY co.created_at LIMIT 1`, orgId);
+  const buyer = await first(c.env.DB, `SELECT o.name AS org_name, co.legal_name, co.name, co.tax_id, co.address, co.city, co.state_code, co.country FROM organisations o LEFT JOIN companies co ON co.org_id = o.id AND co.is_demo = 0 WHERE o.id = ? ORDER BY co.created_at LIMIT 1`, orgId);
   return c.json({ payment: p, buyer, seller: { name: c.env.VENDOR_LEGAL_NAME ?? "Niyazio", gstin: c.env.VENDOR_GSTIN ?? null, address: c.env.VENDOR_ADDRESS ?? null, state_code: c.env.VENDOR_STATE_CODE ?? null, udyam: c.env.VENDOR_UDYAM ?? null, email: "info@niyazio.com" }, sac: "998431" });
 });
 
@@ -283,7 +285,7 @@ vendor.get("/subscribers", async (c) => {
      FROM organisations o JOIN users u ON u.id = o.owner_user_id ORDER BY o.created_at DESC LIMIT 1000`);
   const subs = await Promise.all(rows.map(async (r) => ({ ...r, subscription: await subscription(c.env, r.org_id) })));
   const revenue = await first<{ total: number; month: number }>(c.env.DB,
-    `SELECT COALESCE(SUM(amount),0) AS total, COALESCE(SUM(CASE WHEN paid_at >= ? THEN amount END),0) AS month FROM billing_payments WHERE status = 'paid'`, new Date(Date.now() - 30 * 86_400_000).toISOString());
+    `SELECT COALESCE(SUM(amount),0) AS total, COALESCE(SUM(CASE WHEN paid_at >= ? THEN amount END),0) AS month FROM billing_payments WHERE status = 'paid' AND currency = 'INR'`, new Date(Date.now() - 30 * 86_400_000).toISOString());
   const counts = subs.reduce((m, s) => ({ ...m, [s.subscription.status]: (m[s.subscription.status] ?? 0) + 1 }), {} as Record<string, number>);
   return c.json({ enabled: billingOn(c.env), subscribers: subs, revenue, counts });
 });
@@ -293,11 +295,11 @@ vendor.post("/orgs/:orgId/activate", async (c) => {
   const orgId = c.req.param("orgId");
   const input = await body(c, choice.extend({ amount_received: z.union([z.string(), z.number()]).nullish(), note: z.string().max(300).nullish() }));
   if (!(await first(c.env.DB, `SELECT 1 FROM organisations WHERE id = ?`, orgId))) throw notFound("Organisation");
-  const price = withGst(PLANS[input.plan].price[input.interval], gstPercent(c));
+  const price = await orgPrice(c.env, orgId, input.plan, input.interval);
   const id = newId();
   await batch(c.env.DB, [
-    stmt(c.env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, created_by) VALUES (?,?,?,?,?,?,?,'manual',?)`,
-      id, orgId, input.plan, input.interval, price.amount, price.gst, price.total, c.get("user").id),
+    stmt(c.env.DB, `INSERT INTO billing_payments (id, org_id, plan, billing_interval, amount, gst, total, provider, created_by, currency) VALUES (?,?,?,?,?,?,?,'manual',?,?)`,
+      id, orgId, input.plan, input.interval, price.amount, price.gst, price.total, c.get("user").id, price.currency),
     stmt(c.env.DB, `INSERT INTO org_subscriptions (org_id, note) VALUES (?, ?) ON CONFLICT (org_id) DO UPDATE SET note = excluded.note`, orgId, input.note ?? "Manual payment"),
     audit(c, "billing.manual_activate", "billing_payment", id, input, { orgId, companyId: null }),
   ]);
@@ -463,8 +465,8 @@ vendor.get("/overview", async (c) => {
        (SELECT COUNT(*) FROM users WHERE created_at >= ?) AS signups_7d, (SELECT COUNT(*) FROM users WHERE created_at >= ?) AS signups_30d,
        (SELECT COUNT(*) FROM users WHERE last_login_at >= ?) AS active_7d, (SELECT COUNT(*) FROM users WHERE last_login_at >= ?) AS active_30d,
        (SELECT COUNT(*) FROM org_subscriptions WHERE autopay_status = 'active') AS autopay_active,
-       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid') AS revenue_total,
-       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid' AND paid_at >= ?) AS revenue_30d,
+       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid' AND currency = 'INR') AS revenue_total,
+       (SELECT COALESCE(SUM(amount),0) FROM billing_payments WHERE status = 'paid' AND currency = 'INR' AND paid_at >= ?) AS revenue_30d,
        (SELECT COUNT(*) FROM billing_payments WHERE status = 'paid') AS payments`,
     since(7), since(30), since(7), since(30), since(30));
   const orgs = await all<{ id: string }>(c.env.DB, `SELECT id FROM organisations`);
@@ -473,7 +475,9 @@ vendor.get("/overview", async (c) => {
   const daily = await all(c.env.DB, `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM organisations WHERE created_at >= ? GROUP BY day ORDER BY day`, since(30));
   const recent = await all(c.env.DB,
     `SELECT o.id, o.name, o.created_at, u.name AS owner_name, u.email AS owner_email FROM organisations o JOIN users u ON u.id = o.owner_user_id ORDER BY o.created_at DESC LIMIT 8`);
-  return c.json({ enabled: billingOn(c.env), totals, statuses, daily, recent });
+  // Payments in other currencies (international customers), never added to rupees.
+  const foreign = await all(c.env.DB, `SELECT currency, COALESCE(SUM(amount),0) AS total, COUNT(*) AS payments FROM billing_payments WHERE status = 'paid' AND currency <> 'INR' GROUP BY currency`);
+  return c.json({ enabled: billingOn(c.env), totals, statuses, daily, recent, revenue_foreign: foreign });
 });
 
 /** Every organisation with its owner, size, activity and subscription. */
@@ -487,6 +491,7 @@ vendor.get("/orgs", async (c) => {
        (SELECT co.phone FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 AND co.phone IS NOT NULL ORDER BY co.created_at LIMIT 1) AS phone,
        (SELECT co.city FROM companies co WHERE co.org_id = o.id AND co.is_demo = 0 ORDER BY co.created_at LIMIT 1) AS city,
        (SELECT COALESCE(SUM(p.amount),0) FROM billing_payments p WHERE p.org_id = o.id AND p.status = 'paid') AS revenue,
+       (SELECT p.currency FROM billing_payments p WHERE p.org_id = o.id AND p.status = 'paid' ORDER BY p.paid_at DESC LIMIT 1) AS revenue_currency,
        s.autopay_status, s.autopay_id, o.suspended_at, o.suspended_reason,
        (SELECT COUNT(*) FROM billing_events e WHERE e.org_id = o.id AND e.kind LIKE 'autopay_cancel%') AS autopay_cancellations
      FROM organisations o JOIN users u ON u.id = o.owner_user_id LEFT JOIN org_subscriptions s ON s.org_id = o.id
@@ -510,7 +515,7 @@ vendor.get("/orgs/:orgId/detail", async (c) => {
          (SELECT COUNT(*) FROM branches b WHERE b.company_id = co.id AND b.is_active = 1) AS branches,
          (SELECT MAX(created_at) FROM audit_logs a WHERE a.company_id = co.id) AS last_activity
        FROM companies co WHERE co.org_id = ? ORDER BY co.created_at`, orgId),
-    all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, provider, status, invoice_number, provider_payment_id, provider_order_id, provider_subscription_id, period_start, period_end, created_at, paid_at
+    all(c.env.DB, `SELECT id, plan, billing_interval, amount, gst, total, currency, provider, status, invoice_number, provider_payment_id, provider_order_id, provider_subscription_id, period_start, period_end, created_at, paid_at
        FROM billing_payments WHERE org_id = ? ORDER BY created_at DESC LIMIT 200`, orgId),
     all(c.env.DB, `SELECT notice_key, sent_at FROM billing_notices WHERE org_id = ? ORDER BY sent_at DESC LIMIT 50`, orgId),
     subscription(c.env, orgId),
@@ -533,7 +538,7 @@ vendor.get("/users", async (c) => {
 /** Every subscription payment. */
 vendor.get("/payments", async (c) => {
   const payments = await all(c.env.DB,
-    `SELECT p.id, p.org_id, o.name AS org_name, p.plan, p.billing_interval, p.amount, p.gst, p.total, p.provider, p.status, p.invoice_number,
+    `SELECT p.id, p.org_id, o.name AS org_name, p.plan, p.billing_interval, p.amount, p.gst, p.total, p.currency, p.provider, p.status, p.invoice_number,
        p.provider_payment_id, p.provider_order_id, p.provider_subscription_id, p.period_start, p.period_end, p.created_at, p.paid_at
      FROM billing_payments p JOIN organisations o ON o.id = p.org_id ORDER BY p.created_at DESC LIMIT 5000`);
   return c.json({ payments });

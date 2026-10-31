@@ -1,4 +1,5 @@
-import { LANGS } from "@shared/i18n";
+import { PRINT_LANGS } from "@shared/i18n";
+import { countryPack, taxIdProblem } from "@shared/countries";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Download, Lock, Unlock } from "lucide-react";
@@ -32,7 +33,7 @@ function CompanyTab() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Company name">{(id) => <Input id={id} disabled={disabled} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
         <Field label="Legal name">{(id) => <Input id={id} disabled={disabled} value={v.legal_name} onChange={(e) => setV({ ...v, legal_name: e.target.value })} />}</Field>
-        <Field label={c.country === "IN" ? "GSTIN" : "Tax ID"}>{(id) => <Input id={id} disabled={disabled} className="font-mono uppercase" value={v.tax_id} onChange={(e) => setV({ ...v, tax_id: e.target.value.toUpperCase() })} />}</Field>
+        <Field label={countryPack(c.country).regLabel} hint={c.country === "IN" ? undefined : countryPack(c.country).regHint} error={taxIdProblem(c.country, v.tax_id)}>{(id) => <Input id={id} disabled={disabled} className="font-mono uppercase" value={v.tax_id} onChange={(e) => setV({ ...v, tax_id: e.target.value.toUpperCase() })} />}</Field>
         {c.country === "IN" && <Field label="State">{(id) => <Select id={id} disabled={disabled} value={v.state_code} onChange={(e) => setV({ ...v, state_code: e.target.value })}><option value="">—</option>{Object.entries(INDIA_STATES).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}</Select>}</Field>}
         <Field label="Address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} disabled={disabled} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} />}</Field>
         <Field label="City">{(id) => <Input id={id} disabled={disabled} value={v.city} onChange={(e) => setV({ ...v, city: e.target.value })} />}</Field>
@@ -50,7 +51,7 @@ function CompanyTab() {
           <label className="flex items-center gap-2"><input type="checkbox" disabled={disabled} checked={v.print_qr_upi} onChange={(e) => setV({ ...v, print_qr_upi: e.target.checked })} /> UPI payment QR on unpaid invoices</label>
           <p className="text-xs muted">The GST e-invoice QR always prints when an IRN is recorded (it is required).</p>
         </div>
-        <Field label="Bill language" hint="Labels print in English plus the chosen language (e.g. “Qty / मात्रा”)">{(id) => <Select id={id} disabled={disabled} value={v.print_language} onChange={(e) => setV({ ...v, print_language: e.target.value })}>{LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "English only" : `English + ${l.label}`}</option>)}</Select>}</Field>
+        <Field label="Bill language" hint="Labels print in English plus the chosen language (e.g. “Qty / मात्रा”)">{(id) => <Select id={id} disabled={disabled} value={v.print_language} onChange={(e) => setV({ ...v, print_language: e.target.value })}>{PRINT_LANGS.map((l) => <option key={l.value} value={l.value}>{l.value === "en" ? "English only" : `English + ${l.label}`}</option>)}</Select>}</Field>
         <Field label="Purchase approval limit" hint="Bills above this amount need approval by someone with “Approve purchases”. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.purchase_approval_limit} onChange={(e) => setV({ ...v, purchase_approval_limit: e.target.value })} />}</Field>
         <Field label="Billing discount limit (%)" hint="Billing staff cannot give a line discount above this. Blank = no limit.">{(id) => <Input id={id} disabled={disabled} inputMode="decimal" value={v.billing_discount_limit} onChange={(e) => setV({ ...v, billing_discount_limit: e.target.value })} />}</Field>
         <Field label="Default invoice terms" className="sm:col-span-2">{(id) => <Textarea id={id} disabled={disabled} value={v.invoice_terms} onChange={(e) => setV({ ...v, invoice_terms: e.target.value })} />}</Field>
