@@ -35,6 +35,12 @@ const BrandingCtx = createContext<{ logo: string | null; payment_qr: string | nu
 const billLang = (co: { country: string; print_language?: string | null }): PrintLang =>
   co.country === "SA" && (!co.print_language || co.print_language === "en") ? "ar" : ((co.print_language ?? "en") as PrintLang);
 
+/** The Umm al-Qura (Hijri) date used in Saudi Arabia, e.g. ١٠ جمادى الأولى ١٤٤٨ هـ. */
+function hijri(isoDate: string) {
+  try { return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${isoDate}T12:00:00Z`)); }
+  catch { return ""; }
+}
+
 function useQr(text: string | null, size = 220) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
@@ -86,7 +92,7 @@ function Sheet({ format, name, text, children }: { format: Format; name?: string
   return (
     <div ref={fit} className="print-fit" style={{ zoom }}>
       <style>{`@page { size: ${f.page}; margin: ${thermal ? "2mm" : "12mm"}; } @media print { body { background: #fff; } .print-fit { zoom: 1 !important; } }`}</style>
-      <div data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
+      <div dir="ltr" data-format={format} data-pdf-name={name} data-share-text={text} className={`print-sheet mx-auto bg-white text-slate-900 shadow-lg print:shadow-none ${thermal ? "p-2 font-mono text-[11px] leading-snug" : "p-8 text-[13px]"}`}
         style={{ width: f.width, minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
         {practice && <p className="mb-2 border-2 border-orange-600 py-1 text-center text-[11px] font-black uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
         {children}
@@ -239,6 +245,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
               <dl className="mt-3 space-y-0.5">
                 <Meta k={L("Number")} v={<b>{d.number ?? "DRAFT"}</b>} />
                 <Meta k={L("Date")} v={fmtDate(d.issue_date, df)} />
+                {co.country === "SA" && <Meta k="Hijri / الهجري" v={hijri(d.issue_date)} />}
                 {d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}
                 {d.reference && <Meta k={L("Reference")} v={d.reference} />}
               </dl>
@@ -264,7 +271,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
             {d.contact_phone && <p className="text-slate-600">{d.contact_phone}</p>}
           </div>
           <div className="text-right">
-            {classic && <dl className="space-y-0.5"><Meta k={L("Number")} v={<b>{d.number ?? "DRAFT"}</b>} /><Meta k={L("Date")} v={fmtDate(d.issue_date, df)} />{d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}</dl>}
+            {classic && <dl className="space-y-0.5"><Meta k={L("Number")} v={<b>{d.number ?? "DRAFT"}</b>} /><Meta k={L("Date")} v={fmtDate(d.issue_date, df)} />{co.country === "SA" && <Meta k="Hijri / الهجري" v={hijri(d.issue_date)} />}{d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}</dl>}
             {india && sales && d.place_of_supply && <p className="mt-1"><span className="text-slate-500">{L("Place of supply")}: </span>{INDIA_STATES[d.place_of_supply] ?? ""} ({d.place_of_supply})</p>}
             {d.contact_shipping_address && <><p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{L("Ship to")}</p><p className="whitespace-pre-line text-slate-600">{d.contact_shipping_address}</p></>}
           </div>

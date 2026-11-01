@@ -84,6 +84,10 @@ When creating a company, choose the type of business. LedgerFox adds suitable ac
 - **Creating a company:** choose the country, and LedgerFox sets up its currency, financial year and tax rates. UAE: VAT 5% (plus 0%, exempt, out of scope and reverse charge). Saudi Arabia: VAT 15%. Bahrain: VAT 10%. Oman: VAT 5%. Qatar and Kuwait: no VAT.
 - **Tax number:** UAE asks for the 15-digit **TRN**; Saudi Arabia for the 15-digit **VAT number** (starts and ends with 3). Both are checked.
 - **Invoices:** VAT-registered sellers print a **Tax Invoice** with both parties' VAT numbers. In Saudi Arabia, a sale to someone without a VAT number prints as a **Simplified Tax Invoice**. Saudi invoices always print in English and Arabic and carry the **ZATCA QR code**. Any company can choose English + Arabic in Settings → Bill language.
+- **Wider region:** Egypt, Jordan, Lebanon, Iraq, Türkiye, Morocco, Algeria, Tunisia, Libya and Pakistan are also set up with their tax rates and currencies (3-decimal dinars where official).
+- **VAT return:** Reports → VAT return (UAE with VAT 201 box numbers). File the figures on EmaraTax (UAE), ZATCA (Saudi Arabia) or the local portal.
+- **Gratuity:** Payroll → End-of-service gratuity (UAE and Saudi labour law), from each employee's joining date and basic salary.
+- **Arabic:** the app menu and POS in Arabic (right to left); Saudi invoices also show the Hijri date.
 - **Not included yet:** Saudi ZATCA phase 2 (sending signed XML invoices to the FATOORA platform), UAE e-invoicing through an accredited provider, Arabic for the app screens (only bills are in Arabic), and Gulf payroll rules (end-of-service gratuity, WPS salary files). Customers subject to phase 2 must still use an approved e-invoicing solution for that step.
 - **Paying for LedgerFox:** UAE customers pay in AED, Saudi customers in SAR, and others in USD, by card, with auto-renew.
 

@@ -48,6 +48,18 @@ export const COUNTRY_PACKS: CountryPack[] = [
   { code: "OM", name: "Oman", currency: "OMR", fyStart: 1, taxName: "VAT", regLabel: "VATIN", regPattern: /^OM\d{10}$/, regHint: "OM followed by 10 digits", gccVat: true, codes: vat(5) },
   { code: "QA", name: "Qatar", currency: "QAR", fyStart: 1, taxName: "Tax", regLabel: "Tax card number", codes: [{ name: "No VAT", rate_bp: 0, category: "non_gst" }] },
   { code: "KW", name: "Kuwait", currency: "KWD", fyStart: 1, taxName: "Tax", regLabel: "Commercial registration", codes: [{ name: "No VAT", rate_bp: 0, category: "non_gst" }] },
+  // ── Wider Middle East and North Africa ──
+  { code: "EG", name: "Egypt", currency: "EGP", fyStart: 1, taxName: "VAT", regLabel: "Tax registration number", regPattern: /^\d{9}$/, regHint: "9 digits", codes: vat(14, reduced("VAT", 5)) },
+  { code: "JO", name: "Jordan", currency: "JOD", fyStart: 1, taxName: "Sales tax", regLabel: "Sales tax number", codes: vat(16, reduced("Sales tax", 4), "Sales tax") },
+  { code: "LB", name: "Lebanon", currency: "LBP", fyStart: 1, taxName: "VAT", regLabel: "VAT number", codes: vat(11) },
+  { code: "IQ", name: "Iraq", currency: "IQD", fyStart: 1, taxName: "Tax", regLabel: "Tax number", codes: [{ name: "No VAT", rate_bp: 0, category: "non_gst" }] },
+  { code: "TR", name: "Türkiye", currency: "TRY", fyStart: 1, taxName: "KDV (VAT)", regLabel: "Vergi no (tax number)", regPattern: /^\d{10,11}$/, regHint: "10 digits (companies) or 11 (individuals)", codes: vat(20, reduced("VAT", 10, 1)) },
+  { code: "MA", name: "Morocco", currency: "MAD", fyStart: 1, taxName: "TVA (VAT)", regLabel: "Identifiant fiscal (IF)", codes: vat(20, reduced("VAT", 14, 10, 7)) },
+  { code: "DZ", name: "Algeria", currency: "DZD", fyStart: 1, taxName: "TVA (VAT)", regLabel: "NIF (tax number)", codes: vat(19, reduced("VAT", 9)) },
+  { code: "TN", name: "Tunisia", currency: "TND", fyStart: 1, taxName: "TVA (VAT)", regLabel: "Matricule fiscal", codes: vat(19, reduced("VAT", 13, 7)) },
+  { code: "LY", name: "Libya", currency: "LYD", fyStart: 1, taxName: "Tax", regLabel: "Tax number", codes: [{ name: "No VAT", rate_bp: 0, category: "non_gst" }] },
+  { code: "PK", name: "Pakistan", currency: "PKR", fyStart: 7, taxName: "Sales tax", regLabel: "NTN / STRN", regHint: "Services are taxed by each province at its own rate",
+    codes: [{ name: "Sales tax 18%", rate_bp: 1800, category: "standard" }, { name: "Sales tax 0% (zero-rated)", rate_bp: 0, category: "zero" }, { name: "Sales tax exempt", rate_bp: 0, category: "exempt" }] },
   // ── Rest of the world ──
   { code: "US", name: "United States", currency: "USD", fyStart: 1, taxName: "Sales tax", regLabel: "EIN / sales tax permit", regHint: "Add your state and local sales tax rates in Settings → Tax codes",
     codes: [{ name: "No sales tax", rate_bp: 0, category: "exempt" }] },
