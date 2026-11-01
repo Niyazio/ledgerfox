@@ -23,6 +23,17 @@ export const CURRENCIES: Record<string, { name: string; exponent: number; symbol
   BDT: { name: "Bangladeshi Taka", exponent: 2, symbol: "৳" },
   MYR: { name: "Malaysian Ringgit", exponent: 2, symbol: "RM" },
   KES: { name: "Kenyan Shilling", exponent: 2, symbol: "KSh" },
+  // Middle East and North Africa (ISO 4217 minor units: dinars of Jordan, Iraq, Tunisia and Libya have 3 decimals).
+  EGP: { name: "Egyptian Pound", exponent: 2, symbol: "EGP" },
+  JOD: { name: "Jordanian Dinar", exponent: 3, symbol: "JOD" },
+  LBP: { name: "Lebanese Pound", exponent: 2, symbol: "LBP" },
+  IQD: { name: "Iraqi Dinar", exponent: 3, symbol: "IQD" },
+  TRY: { name: "Turkish Lira", exponent: 2, symbol: "₺" },
+  MAD: { name: "Moroccan Dirham", exponent: 2, symbol: "MAD" },
+  DZD: { name: "Algerian Dinar", exponent: 2, symbol: "DZD" },
+  TND: { name: "Tunisian Dinar", exponent: 3, symbol: "TND" },
+  LYD: { name: "Libyan Dinar", exponent: 3, symbol: "LYD" },
+  PKR: { name: "Pakistani Rupee", exponent: 2, symbol: "PKR" },
 };
 
 export function currencyExponent(code: string): number {

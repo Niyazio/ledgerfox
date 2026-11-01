@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { CURRENCIES } from "@shared/currencies";
 import { useCompany, type Account } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { Select } from "./ui";
@@ -65,4 +66,4 @@ export function DimensionSelect({ kind, value, onChange, id }: { kind: "departme
   );
 }
 
-export const CURRENCY_OPTIONS = ["INR", "USD", "EUR", "GBP", "AED", "SAR", "QAR", "OMR", "KWD", "BHD", "SGD", "AUD", "CAD", "NZD", "JPY", "CNY", "CHF", "ZAR", "NPR", "LKR", "BDT", "MYR", "KES"];
+export const CURRENCY_OPTIONS = Object.keys(CURRENCIES);

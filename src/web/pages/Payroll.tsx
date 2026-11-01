@@ -10,7 +10,7 @@ import { AccountSelect, isCashOrBank } from "../components/pickers";
 import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, Spinner, Stat, TableWrap, Tabs, useToast, DownloadButtons } from "../components/ui";
 import { printPage, saveFile } from "../lib/download";
 
-type Tab = "runs" | "employees" | "timesheets" | "report";
+type Tab = "runs" | "employees" | "timesheets" | "report" | "gratuity";
 
 const prevMonth = () => {
   const d = new Date();
@@ -307,16 +307,51 @@ function Tds24q() {
   );
 }
 
+/** End-of-service gratuity (UAE and Saudi Arabia) for every employee, as of a date. */
+function Gratuity() {
+  const { path, money, settings } = useCompany();
+  const [asOf, setAsOf] = useState(today());
+  const [reason, setReason] = useState<"termination" | "resignation">("termination");
+  const r = useApi<{ employees: any[]; total: number }>(path(`/payroll/gratuity?as_of=${asOf}&reason=${reason}`));
+  const cur = settings?.company.base_currency ?? "AED";
+  const uae = settings?.company.country === "AE";
+  return (
+    <Card title="End-of-service gratuity">
+      <p className="mb-3 text-sm muted">{uae
+        ? "UAE labour law (2021): after one year of service, 21 days' basic wage for each of the first 5 years and 30 days' for each year after, capped at two years' wage. Resigning does not reduce it."
+        : "Saudi labour law (articles 84–85): half a month's wage for each of the first 5 years and a month's for each year after. On resignation: none under 2 years, a third for 2–5 years, two thirds for 5–10 years, full from 10 years."}
+        {" "}Calculated from the basic monthly salary; an estimate to plan the provision — confirm final settlements with the contract and current rules.</p>
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <Field label="As of">{(id) => <Input id={id} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />}</Field>
+        {!uae && <Field label="Reason for leaving">{(id) => <Select id={id} value={reason} onChange={(e) => setReason(e.target.value as "termination" | "resignation")}><option value="termination">Contract ended / terminated by employer</option><option value="resignation">Resignation</option></Select>}</Field>}
+        {r.data && <DownloadButtons size="sm" onDownload={() => downloadCsv(`gratuity-${asOf}`, ["Code", "Employee", "Joined", "Years", "Basic monthly", "Gratuity", "Note"],
+          r.data!.employees.map((e) => [e.code, e.name, e.date_of_joining ?? "", e.years === null ? "" : e.years.toFixed(2), toInput(e.monthly_basic, cur), e.amount === null ? "" : toInput(e.amount, cur), e.note]))} />}
+      </div>
+      {r.error ? <Alert>{r.error}</Alert> : !r.data ? <Spinner /> : (
+        <TableWrap><table className="table text-sm">
+          <thead><tr><th>Employee</th><th>Joined</th><th className="num">Years</th><th className="num">Basic monthly</th><th className="num">Gratuity</th><th>Note</th></tr></thead>
+          <tbody>{r.data.employees.map((e) => <tr key={e.id}><td>{e.name} <span className="font-mono text-xs muted">{e.code}</span></td><td>{e.date_of_joining ? fmtDate(e.date_of_joining) : "—"}</td>
+            <td className="num">{e.years === null ? "—" : e.years.toFixed(2)}</td><td className="num">{money(e.monthly_basic)}</td><td className="num font-medium">{e.amount === null ? "—" : money(e.amount)}</td><td className="text-xs muted">{e.note}</td></tr>)}</tbody>
+          <tfoot><tr><td colSpan={4}>Total provision</td><td className="num">{money(r.data.total)}</td><td /></tr></tfoot>
+        </table></TableWrap>
+      )}
+    </Card>
+  );
+}
+
 export default function Payroll() {
   const [tab, setTab] = useState<Tab>("runs");
+  const { settings } = useCompany();
+  const gulf = settings?.company.country === "AE" || settings?.company.country === "SA";
   return (
     <>
       <PageHeader title="Payroll & timesheets" subtitle="Employees, monthly salary runs, payslips with QR verification, and the salary register." />
-      <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: "runs", label: "Payroll" }, { value: "employees", label: "Employees" }, { value: "timesheets", label: "Timesheets" }, { value: "report", label: "Salary report" }]} /></div>
+      <div className="mb-4"><Tabs value={tab} onChange={setTab} tabs={[{ value: "runs", label: "Payroll" }, { value: "employees", label: "Employees" }, { value: "timesheets", label: "Timesheets" }, { value: "report", label: "Salary report" }, ...(gulf ? [{ value: "gratuity" as Tab, label: "End-of-service gratuity" }] : [])]} /></div>
       {tab === "runs" && <Runs />}
       {tab === "employees" && <Employees />}
       {tab === "timesheets" && <Timesheets />}
-      {tab === "report" && <><Report /><Tds24q /></>}
+      {tab === "report" && <><Report />{!gulf && <Tds24q />}</>}
+      {tab === "gratuity" && <Gratuity />}
     </>
   );
 }

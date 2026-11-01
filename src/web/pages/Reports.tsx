@@ -28,14 +28,19 @@ const REPORTS = [
   { key: "purchases-by-supplier", title: "Purchases by supplier", group: "Customers & suppliers", desc: "Billed amounts less debit notes, in base currency." },
   { key: "expenses", title: "Expense report", group: "Operations", desc: "Expenses by category from the ledger, plus claim status." },
   { key: "inventory-valuation", title: "Inventory valuation", group: "Operations", desc: "Stock quantity and value per item, reconciled to the ledger." },
-  { key: "gst-returns", title: "GSTR-1 / GSTR-3B", group: "Tax", desc: "Monthly returns prepared from your books: B2B, B2C, credit notes, HSN summary, documents issued, ITC. JSON for the GST offline tool and CSV sheets." },
+  { key: "vat-return", title: "VAT return", group: "Tax", only: "vat", desc: "Standard-rated, zero-rated, exempt and reverse-charge sales and purchases, output VAT, recoverable VAT and the net amount — the figures for UAE (VAT 201), Saudi and other VAT returns." },
+  { key: "gst-returns", title: "GSTR-1 / GSTR-3B", group: "Tax", only: "IN", desc: "Monthly returns prepared from your books: B2B, B2C, credit notes, HSN summary, documents issued, ITC. JSON for the GST offline tool and CSV sheets." },
   { key: "gst-summary", title: "Tax / GST summary", group: "Tax", desc: "Output and input tax by rate, and net payable from the ledger." },
   { key: "budgets", title: "Budget vs actual", group: "Planning", desc: "Compare budgets with posted results." },
 ];
 
 export function ReportIndex() {
   const { id } = useCompany();
-  const groups = [...new Set(REPORTS.map((r) => r.group))];
+  const { settings } = useCompany();
+  const india = settings?.company.country === "IN";
+  // India files GST returns; everywhere else gets the VAT return.
+  const shown = REPORTS.filter((r) => !("only" in r) || (r.only === "IN" ? india : !india));
+  const groups = [...new Set(shown.map((r) => r.group))];
   return (
     <>
       <PageHeader title="Reports" subtitle="All figures are calculated from posted ledger entries at the time you open the report." />
@@ -44,7 +49,7 @@ export function ReportIndex() {
           <section key={g}>
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide muted">{g}</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {REPORTS.filter((r) => r.group === g).map((r) => (
+              {shown.filter((r) => r.group === g).map((r) => (
                 <Link key={r.key} to={`/app/${id}/reports/${r.key}`} className="card p-4 transition-colors hover:border-brand-500">
                   <p className="font-medium">{r.title}</p><p className="mt-1 text-sm muted">{r.desc}</p>
                 </Link>
@@ -488,6 +493,45 @@ export function InventoryValuation() {
   );
 }
 
+/** VAT return figures; for the UAE with the VAT 201 box numbers. */
+export function VatReturn() {
+  const { path, money, settings } = useCompany();
+  const { from, to, controls } = useRange();
+  const r = useApi<any>(path(`/reports/vat-return?from=${from}&to=${to}`));
+  const d = r.data;
+  const uae = settings?.company.country === "AE";
+  const cur = settings?.company.base_currency ?? "AED";
+  const rows: [string, string, number, number | null][] = d ? [
+    [uae ? "1" : "", "Standard-rated supplies (sales)", d.sales.standard.taxable, d.sales.standard.vat],
+    [uae ? "3" : "", "Supplies subject to reverse charge (imports, self-assessed VAT)", d.purchases.reverse_charge.taxable, d.purchases.reverse_charge.vat],
+    [uae ? "4" : "", "Zero-rated supplies", d.sales.zero.taxable, null],
+    [uae ? "5" : "", "Exempt supplies", d.sales.exempt.taxable, null],
+    ["", "Out-of-scope sales", d.sales.out_of_scope.taxable, null],
+    [uae ? "9" : "", "Standard-rated expenses (purchases)", d.purchases.standard.taxable, d.purchases.standard.vat],
+    [uae ? "10" : "", "Supplies subject to reverse charge (recoverable)", d.purchases.reverse_charge.taxable, d.purchases.reverse_charge.vat],
+    ["", "Zero-rated, exempt and out-of-scope purchases", d.purchases.zero.taxable + d.purchases.exempt.taxable + d.purchases.out_of_scope.taxable, null],
+  ] : [];
+  return (
+    <Shell title="VAT return" controls={controls} subtitle={`${fmtDate(from)} to ${fmtDate(to)}`}
+      onCsv={d ? () => downloadCsv(`vat-return-${from}-${to}.csv`, ["Box", "Description", "Amount", "VAT"], [...rows.map(([b, n, a, v]) => [b, n, toInput(a, cur), v === null ? "" : toInput(v, cur)]),
+        [uae ? "12" : "", "Total VAT due", "", toInput(d.output_vat, cur)], [uae ? "13" : "", "Recoverable VAT", "", toInput(d.input_vat, cur)], [uae ? "14" : "", "Net VAT payable (refundable if negative)", "", toInput(d.net_vat, cur)]]) : undefined}>
+      <Loading r={r} />
+      {d && <>
+        <Alert kind="warning">{d.disclaimer}</Alert>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="card p-4"><p className="text-xs muted">{uae ? "Box 12 · " : ""}VAT due</p><p className="text-lg font-semibold">{money(d.output_vat)}</p></div>
+          <div className="card p-4"><p className="text-xs muted">{uae ? "Box 13 · " : ""}Recoverable VAT</p><p className="text-lg font-semibold">{money(d.input_vat)}</p></div>
+          <div className="card p-4"><p className="text-xs muted">{uae ? "Box 14 · " : ""}{d.net_vat >= 0 ? "Net VAT payable" : "Net VAT refundable"}</p><p className="text-lg font-semibold">{money(Math.abs(d.net_vat))}</p></div>
+        </div>
+        <TableWrap><table className="table mt-4">
+          <thead><tr>{uae && <th>Box</th>}<th>Description</th><th className="num">Amount ({cur})</th><th className="num">VAT</th></tr></thead>
+          <tbody>{rows.map(([b, n, a, v]) => <tr key={n}>{uae && <td>{b}</td>}<td>{n}</td><td className="num">{money(a)}</td><td className="num">{v === null ? "—" : money(v)}</td></tr>)}</tbody>
+        </table></TableWrap>
+      </>}
+    </Shell>
+  );
+}
+
 export function GstSummary() {
   const { path, money, settings } = useCompany();
   const { from, to, controls } = useRange();
@@ -599,6 +643,7 @@ export function ReportRouter() {
     case "expenses": return <ExpenseReport />;
     case "inventory-valuation": return <InventoryValuation />;
     case "gst-summary": return <GstSummary />;
+    case "vat-return": return <VatReturn />;
     case "budgets": return <Budgets />;
     default: return <EmptyState title="Unknown report" />;
   }

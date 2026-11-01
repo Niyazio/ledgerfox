@@ -3,16 +3,19 @@
  * English stays the source; anything not listed here shows in English. Bills print both languages ("Qty / मात्रा").
  * The translations use common Indian billing terms; have a native speaker review them for your customers.
  */
-export type Lang = "en" | "hi" | "ta" | "ml" | "kn";
+export type Lang = "en" | "hi" | "ta" | "ml" | "kn" | "ar";
 export const LANGS: { value: Lang; label: string; short: string }[] = [
   { value: "en", label: "English", short: "EN" },
   { value: "hi", label: "हिन्दी (Hindi)", short: "हि" },
   { value: "ta", label: "தமிழ் (Tamil)", short: "த" },
   { value: "ml", label: "മലയാളം (Malayalam)", short: "മ" },
   { value: "kn", label: "ಕನ್ನಡ (Kannada)", short: "ಕ" },
+  { value: "ar", label: "العربية (Arabic)", short: "ع" },
 ];
+/** Languages written right to left: the whole app layout is mirrored for them. */
+export const isRtl = (lang: string | null | undefined) => lang === "ar";
 
-type Dict = Record<string, { hi: string; ta: string; ml: string; kn: string }>;
+type Dict = Record<string, { hi: string; ta: string; ml: string; kn: string; ar?: string }>;
 
 /** Labels on printed invoices, receipts and thermal bills. */
 export const PRINT_WORDS: Dict = {
@@ -119,9 +122,9 @@ export const UI_WORDS: Dict = {
   "each": { hi: "प्रति", ta: "ஒன்றுக்கு", ml: "ഓരോന്നിനും", kn: "ಪ್ರತಿ" },
 };
 
-/** Bill languages: the app's languages plus Arabic (Gulf countries; bills only, the app itself stays in English). */
-export type PrintLang = Lang | "ar";
-export const PRINT_LANGS: { value: PrintLang; label: string }[] = [...LANGS.map(({ value, label }) => ({ value, label })), { value: "ar", label: "العربية (Arabic)" }];
+/** Bill languages: the same as the app's (English plus one more on each bill). */
+export type PrintLang = Lang;
+export const PRINT_LANGS: { value: PrintLang; label: string }[] = LANGS.map(({ value, label }) => ({ value, label }));
 
 /** Arabic labels for bills (UAE, Saudi Arabia and the other Gulf countries). */
 const PRINT_AR: Record<string, string> = {
@@ -137,12 +140,30 @@ const PRINT_AR: Record<string, string> = {
 /** "Qty" → "Qty / मात्रा" (or "Qty / الكمية") when the bill language is not English. */
 export function bilingual(en: string, lang: PrintLang | null | undefined): string {
   if (!lang || lang === "en") return en;
-  const t = lang === "ar" ? PRINT_AR[en] : PRINT_WORDS[en]?.[lang];
+  const t = lang === "ar" ? PRINT_AR[en] : PRINT_WORDS[en]?.[lang as Exclude<Lang, "en" | "ar">];
   return t ? `${en} / ${t}` : en;
 }
+
+/** Arabic for the app's navigation and POS (Gulf and Middle East customers). */
+const UI_AR: Record<string, string> = {
+  "Dashboard": "لوحة التحكم", "Daybook": "دفتر اليومية", "Sales & billing": "المبيعات والفواتير", "POS / counter billing": "نقطة البيع", "Customers": "العملاء",
+  "Quotations": "عروض الأسعار", "Proforma invoices": "الفواتير المبدئية", "Sales orders": "أوامر البيع", "Delivery challans": "إذونات التسليم", "Invoices / bills": "الفواتير",
+  "Recurring invoices": "الفواتير المتكررة", "Sales returns": "مرتجعات المبيعات", "Receipts": "المقبوضات", "Purchases": "المشتريات", "Suppliers": "الموردون",
+  "Purchase orders": "أوامر الشراء", "Supplier bills": "فواتير الموردين", "Purchase returns": "مرتجعات المشتريات", "Supplier payments": "مدفوعات الموردين",
+  "Inventory": "المخزون", "Products & stock": "المنتجات والمخزون", "Stock transfers": "تحويلات المخزون", "Product labels / QR": "ملصقات المنتجات / QR",
+  "Manufacturing": "التصنيع", "Accounting": "المحاسبة", "Reports": "التقارير", "Settings": "الإعدادات", "Users": "المستخدمون", "Payroll": "الرواتب",
+  "Expenses": "المصروفات", "Banking": "البنوك", "GST returns": "الإقرارات الضريبية", "Journals & ledgers": "القيود والدفاتر", "Chart of accounts": "دليل الحسابات",
+  "Fixed assets": "الأصول الثابتة", "People": "الموظفون", "Payroll & timesheets": "الرواتب وسجلات الدوام", "Reports & control": "التقارير والرقابة",
+  "Cash / bank book": "دفتر النقدية والبنك", "Daily report": "التقرير اليومي", "Profit & loss": "الأرباح والخسائر", "Balance sheet": "الميزانية العمومية",
+  "All reports": "جميع التقارير", "Insights": "التحليلات", "Audit log": "سجل التدقيق", "Administration": "الإدارة", "Users & permissions": "المستخدمون والصلاحيات",
+  "Branches": "الفروع", "Import from Excel": "استيراد من Excel", "Language": "اللغة", "VAT return": "إقرار ضريبة القيمة المضافة", "End-of-service gratuity": "مكافأة نهاية الخدمة",
+  "Search products": "البحث عن المنتجات", "Walk-in customer": "عميل نقدي", "Scan or tap products": "امسح أو اختر المنتجات", "Hold": "تعليق", "Clear": "مسح",
+  "Cash": "نقداً", "Card": "بطاقة", "Split": "تقسيم", "Cash given": "المبلغ المستلم", "Change": "الباقي", "Total": "الإجمالي", "Pay & print": "ادفع واطبع", "each": "للوحدة",
+};
 
 /** UI wording in the user's language (English when no translation exists). */
 export function translate(en: string, lang: Lang | null | undefined): string {
   if (!lang || lang === "en") return en;
+  if (lang === "ar") return UI_AR[en] ?? en;
   return UI_WORDS[en]?.[lang] ?? en;
 }

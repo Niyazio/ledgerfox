@@ -10,6 +10,16 @@ The desktop app is LedgerFox online in its own window: sign in with the same ema
 
 Self-hosted builds and the information below about data files, Wi-Fi access and the server apply to the open-source code and to old files; the official app works online.
 
+## Microsoft Store (no warning, free)
+
+Microsoft lets individual developers publish on the Microsoft Store free of charge; Store apps are signed by Microsoft, install without the "unknown publisher" warning and update themselves. To publish:
+1. Register as an individual developer in **Partner Center** (free; ID check), and reserve the app name **LedgerFox**.
+2. In Partner Center → the app → Product identity, copy **Package/Identity/Name**, **Package/Identity/Publisher** (starts with `CN=`) and **Publisher display name**.
+3. In GitHub → Settings → Secrets and variables → Actions → **Variables**, add `MS_STORE_IDENTITY_NAME`, `MS_STORE_PUBLISHER` and `MS_STORE_PUBLISHER_DISPLAY_NAME` with those values.
+4. The next release also builds `LedgerFox-Store-x64.appx` (workflow artifact **microsoft-store-package**). Upload it in Partner Center → Packages, fill the listing (description, screenshots, privacy policy https://ledgerfox.niyazio.com/privacy), and submit for certification.
+
+Store installs update from the Store, not from GitHub. The direct download stays available for people who prefer it.
+
 ## Install
 
 | System | File | First launch |

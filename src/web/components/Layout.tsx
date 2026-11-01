@@ -152,7 +152,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useLang();
   const location = useLocation();
   const allowed = (it: NavItem) => !it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm));
-  const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
+  // Outside India the tax-return link opens the VAT return.
+  const india = (settings?.company.country ?? "IN") === "IN";
+  const localise = (i: (typeof NAV)[number]["items"][number]) => (!india && i.to === "reports/gst-returns" ? { ...i, to: "reports/vat-return", label: "VAT return" } : i);
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed).map(localise) })).filter((g) => g.items.length);
   const here = `${location.pathname.replace(`/app/${companyId}/`, "")}${location.search}`;
   return (
     <nav aria-label="Main" className="flex h-full flex-col gap-4 overflow-y-auto px-3 py-4">
@@ -165,8 +168,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <NavLink to={`/app/${companyId}/${it.to}`} end={it.to === "reports"} onClick={onNavigate}
                   className={({ isActive }) => cx("group relative flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-sm transition-all duration-200 ease-out",
                     (it.to.includes("?") ? here === it.to : isActive && !NAV.some((g2) => g2.items.some((x) => x.to.includes("?") && here === x.to)))
-                      ? "bg-gradient-to-r from-brand-100 to-brand-50 font-medium text-brand-800 shadow-sm before:absolute before:inset-y-1.5 before:-left-1 before:w-1 before:rounded-full before:bg-brand-600 dark:from-brand-900/50 dark:to-brand-900/20 dark:text-brand-200"
-                      : "hover:translate-x-0.5 hover:bg-[var(--surface-2)]")}>
+                      ? "bg-gradient-to-r from-brand-100 to-brand-50 font-medium text-brand-800 shadow-sm before:absolute before:inset-y-1.5 before:-left-1 before:w-1 before:rounded-full before:bg-brand-600 rtl:before:left-auto rtl:before:-right-1 dark:from-brand-900/50 dark:to-brand-900/20 dark:text-brand-200"
+                      : "hover:translate-x-0.5 hover:bg-[var(--surface-2)] rtl:hover:-translate-x-0.5")}>
                   {it.icon}<span className="flex-1">{t(it.label)}</span>{HINTS[it.to] && <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[10px] muted lg:inline">{HINTS[it.to]}</kbd>}
                 </NavLink>
               </li>
@@ -317,14 +320,14 @@ function Shell() {
   }, [settings, me?.brand]);
   return (
     <div className="flex h-full">
-      <aside className="glass hidden w-60 shrink-0 border-r border-[var(--border)] lg:flex lg:flex-col">
+      <aside className="glass hidden w-60 shrink-0 border-r border-[var(--border)] rtl:border-l rtl:border-r-0 lg:flex lg:flex-col">
         <Link to="/app" className="px-5 py-4 text-base"><Wordmark brand={me?.brand} /></Link>
         <Sidebar />
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="anim-fade absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" onClick={() => setMobileOpen(false)} />
-          <aside className="anim-slide-left absolute inset-y-0 left-0 flex w-72 flex-col rounded-r-3xl bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+          <aside className="anim-slide-left absolute inset-y-0 left-0 flex w-72 flex-col rounded-r-3xl bg-[var(--surface)] shadow-[var(--shadow-lg)] rtl:left-auto rtl:right-0 rtl:rounded-l-3xl rtl:rounded-r-none rtl:[animation-name:lf-slide-right]">
             <div className="flex items-center justify-between px-4 py-3"><Wordmark brand={me?.brand} />
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded p-1 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div>
             <Sidebar onNavigate={() => setMobileOpen(false)} />

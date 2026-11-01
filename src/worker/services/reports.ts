@@ -307,6 +307,40 @@ export async function gstSummary(db: D1Database, company: CompanyRow, from: stri
   };
 }
 
+/**
+ * VAT return (Gulf and other VAT countries): sales and purchases in the period by VAT treatment — standard-rated,
+ * zero-rated, exempt, out of scope and reverse charge — with output VAT, recoverable input VAT and the net amount.
+ * The figures are what the UAE (VAT 201), Saudi (ZATCA) and other Gulf returns ask for; the customer files them on the
+ * authority's portal. Credit and debit notes reduce the matching totals. Base-currency documents only.
+ */
+export async function vatReturn(db: D1Database, company: CompanyRow, from: string, to: string) {
+  const rows = await all<{ doc_type: string; category: string | null; taxable: number; vat: number }>(db,
+    `SELECT d.doc_type, t.category, SUM(l.taxable) AS taxable, SUM(l.cgst + l.sgst + l.igst + l.other_tax) AS vat
+     FROM document_lines l JOIN documents d ON d.id = l.document_id LEFT JOIN tax_codes t ON t.id = l.tax_code_id
+     WHERE d.company_id = ? AND d.status = 'posted' AND d.doc_type IN ('invoice','credit_note','bill','debit_note') AND d.issue_date BETWEEN ? AND ? AND d.currency = ?
+     GROUP BY d.doc_type, t.category`, company.id, from, to, company.base_currency);
+  const box = () => ({ taxable: 0, vat: 0 });
+  const sales = { standard: box(), zero: box(), exempt: box(), out_of_scope: box() };
+  const purchases = { standard: box(), reverse_charge: box(), zero: box(), exempt: box(), out_of_scope: box() };
+  for (const r of rows) {
+    const sign = r.doc_type === "credit_note" || r.doc_type === "debit_note" ? -1 : 1;
+    const cat = r.category ?? "out_of_scope";
+    const key = cat === "standard" ? "standard" : cat === "zero" ? "zero" : cat === "exempt" ? "exempt" : cat === "reverse_charge" ? "reverse_charge" : "out_of_scope";
+    const side = r.doc_type === "invoice" || r.doc_type === "credit_note" ? sales : purchases;
+    const b = (side as Record<string, { taxable: number; vat: number }>)[key === "reverse_charge" && side === sales ? "standard" : key] ?? side.out_of_scope;
+    b.taxable += sign * r.taxable;
+    b.vat += sign * r.vat;
+  }
+  // Reverse charge (imports): the buyer accounts for the VAT as output tax and, if entitled, recovers it as input tax.
+  const outputVat = sales.standard.vat + purchases.reverse_charge.vat;
+  const inputVat = purchases.standard.vat + purchases.reverse_charge.vat;
+  return {
+    from, to, currency: company.base_currency, country: company.country, sales, purchases,
+    output_vat: outputVat, input_vat: inputVat, net_vat: outputVat - inputVat,
+    disclaimer: "Prepared from posted invoices, credit notes and supplier bills in your base currency. Check the figures, then file them on your tax authority's portal (e.g. EmaraTax in the UAE, ZATCA in Saudi Arabia). LedgerFox does not file returns.",
+  };
+}
+
 export async function inventoryValuation(db: D1Database, company: CompanyRow, asOf: string) {
   const rows = await all<{ item_id: string; name: string; sku: string | null; unit: string; qty_milli: number; value: number; reorder_level_milli: number }>(db,
     `SELECT i.id AS item_id, i.name, i.sku, i.unit, i.reorder_level_milli, COALESCE(SUM(s.qty_milli),0) AS qty_milli, COALESCE(SUM(s.value),0) AS value

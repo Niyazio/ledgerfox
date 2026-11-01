@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { gratuity, type GratuityCountry } from "@shared/gratuity";
 import { z } from "zod";
 import type { AppEnv, CompanyRow } from "../env";
 import { all, batch, first, stmt } from "../lib/db";
@@ -95,6 +96,23 @@ payroll.get("/employees", async (c) => {
   requirePerm(c, "payroll.read");
   const rows = await all(c.env.DB, `SELECT * FROM employees WHERE company_id = ? ORDER BY is_active DESC, code`, c.get("company").id);
   return c.json({ employees: rows });
+});
+
+/** End-of-service gratuity for every employee as of a date (UAE and Saudi Arabia). */
+payroll.get("/gratuity", async (c) => {
+  requirePerm(c, "payroll.read");
+  const company = c.get("company");
+  if (company.country !== "AE" && company.country !== "SA") throw badRequest("End-of-service gratuity is calculated for companies in the UAE and Saudi Arabia");
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("as_of") ?? "") ? c.req.query("as_of")! : new Date().toISOString().slice(0, 10);
+  const reason = c.req.query("reason") === "resignation" ? "resignation" : "termination";
+  const rows = await all<{ id: string; code: string; name: string; date_of_joining: string | null; date_of_leaving: string | null; monthly_basic: number; is_active: number }>(c.env.DB,
+    `SELECT id, code, name, date_of_joining, date_of_leaving, monthly_basic, is_active FROM employees WHERE company_id = ? ORDER BY is_active DESC, code`, company.id);
+  const employees = rows.map((e) => {
+    if (!e.date_of_joining) return { ...e, years: null, amount: null, note: "Add the date of joining to calculate." };
+    const until = e.date_of_leaving && e.date_of_leaving < asOf ? e.date_of_leaving : asOf;
+    return { ...e, ...gratuity(company.country as GratuityCountry, e.monthly_basic, e.date_of_joining, until, reason) };
+  });
+  return c.json({ as_of: asOf, reason, country: company.country, employees, total: employees.reduce((t, e) => t + (e.amount ?? 0), 0) });
 });
 
 payroll.post("/employees", async (c) => {

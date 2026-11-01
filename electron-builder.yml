@@ -27,6 +27,14 @@ win:
   target:
     - target: nsis
       arch: [x64]
+# Microsoft Store package (free to publish for individual developers). The Store signs it and updates it, so Windows
+# shows no "unknown publisher" warning. identityName / publisher come from Partner Center (repository variables).
+appx:
+  displayName: LedgerFox
+  applicationId: LedgerFox
+  backgroundColor: "#1d4ed8"
+  languages: [en-US, ar, hi]
+  artifactName: LedgerFox-Store-${arch}.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

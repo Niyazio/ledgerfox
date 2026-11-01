@@ -50,8 +50,11 @@ async function checkGithub(manual: boolean) {
 }
 
 let started = false;
+/** Installed from the Microsoft Store: the Store signs and updates the app itself. */
+const fromStore = () => Boolean((process as { windowsStore?: boolean }).windowsStore);
+
 export function setupAutoUpdate() {
-  if (!app.isPackaged || started) return;
+  if (!app.isPackaged || started || fromStore()) return;
   started = true;
   if (process.platform === "darwin") {
     void checkGithub(false);
@@ -75,6 +78,10 @@ export function setupAutoUpdate() {
 }
 
 export async function checkForUpdatesNow() {
+  if (fromStore()) {
+    void dialog.showMessageBox({ type: "info", message: "Updates come from the Microsoft Store", detail: `Version ${app.getVersion()}. The Store installs new versions automatically (Microsoft Store → Library → Get updates).` });
+    return;
+  }
   if (!app.isPackaged || process.platform === "darwin") return checkGithub(true);
   try {
     const r = await autoUpdater.checkForUpdates();

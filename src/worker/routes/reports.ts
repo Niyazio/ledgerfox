@@ -157,6 +157,12 @@ reports.get("/gst-summary", async (c) => {
   return c.json(await R.gstSummary(c.env.DB, c.get("company"), from, to));
 });
 
+reports.get("/vat-return", async (c) => {
+  consolidatedOnly(c);
+  const { from, to } = range(c);
+  return c.json(await R.vatReturn(c.env.DB, c.get("company"), from, to));
+});
+
 reports.get("/inventory-valuation", async (c) => {
   consolidatedOnly(c);
   return c.json(await R.inventoryValuation(c.env.DB, c.get("company"), dateParam(c, "as_of", todayIso())));
