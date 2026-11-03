@@ -11,6 +11,7 @@ import { useCompany, CompanyProvider } from "../lib/company";
 import { useSession } from "../lib/session";
 import { DOC_LABELS, SALES_DOCS, fmtDate, qty as fmtQty, pct } from "../lib/format";
 import { Alert, Spinner, useToast } from "../components/ui";
+import { regionsFor } from "@shared/regions";
 import { INDIA_STATES } from "@shared/tax";
 import { amountInWords } from "@shared/words";
 import { currencyExponent } from "@shared/currencies";
@@ -137,7 +138,7 @@ function CompanyBlock({ thermal, center }: { thermal?: boolean; center?: boolean
       {logo && <img src={logo} alt="" className={thermal ? "mx-auto mb-1 max-h-12 max-w-[60%] object-contain grayscale" : center ? "mx-auto mb-2 max-h-16 max-w-[40%] object-contain" : "max-h-20 max-w-[140px] object-contain"} />}
       <div>
       <p className={thermal ? "text-[13px] font-bold" : "text-xl font-bold tracking-tight"}>{co.legal_name || co.name}</p>
-      <p className="whitespace-pre-line text-slate-600">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code && india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : null].filter(Boolean).join(thermal ? ", " : "\n")}</p>
+      <p className="whitespace-pre-line text-slate-600">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code ? (india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : regionsFor(co.country)?.[co.state_code] ?? null) : null].filter(Boolean).join(thermal ? ", " : "\n")}</p>
       {co.tax_id && <p>{india ? "GSTIN" : bilingual(pack.regLabel, billLang(co))}: <b className="font-mono">{co.tax_id}</b></p>}
       {(co.phone || co.email) && <p className="text-slate-600">{[co.phone, co.email].filter(Boolean).join(" · ")}</p>}
       </div>

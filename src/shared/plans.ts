@@ -58,3 +58,19 @@ export function withGst(amount: number, gstPercent: number) {
   const gst = Math.round((amount * gstPercent) / 100 / 100) * 100;
   return { amount, gst, total: amount + gst };
 }
+
+/**
+ * Education mode (practice companies) is given by LedgerFox to the emails it approves — a teacher, an institute or a
+ * trainer. It is free for up to EDUCATION_FREE_DEVICES devices; a class that needs more buys a student pack, which
+ * runs for 6 months. Prices are in minor units before tax. Edit freely.
+ */
+export type EducationPackId = "edu25" | "edu50" | "edu100";
+export const EDUCATION_FREE_DEVICES = 10;
+export const EDUCATION_PACK_MONTHS = 6;
+export interface EducationPack { id: EducationPackId; students: number; price: Record<BillingCurrency, number> }
+export const EDUCATION_PACKS: Record<EducationPackId, EducationPack> = {
+  edu25: { id: "edu25", students: 25, price: { INR: 2_999_00, USD: 39_00, AED: 149_00, SAR: 149_00 } },
+  edu50: { id: "edu50", students: 50, price: { INR: 4_999_00, USD: 59_00, AED: 219_00, SAR: 219_00 } },
+  edu100: { id: "edu100", students: 100, price: { INR: 7_999_00, USD: 99_00, AED: 369_00, SAR: 369_00 } },
+};
+export const EDUCATION_PACK_IDS = Object.keys(EDUCATION_PACKS) as EducationPackId[];

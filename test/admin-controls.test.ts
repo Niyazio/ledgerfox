@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { world, rawQuery, register, Client } from "./helpers";
+import { world, rawQuery, register, Client, grantEducation } from "./helpers";
 
 /** A billed world, plus a vendor (admin panel) account. */
 async function adminWorld() {
@@ -89,11 +89,12 @@ describe("demo companies, terms and old desktop files", () => {
     const onTrial = await W.owner.post(`/api/orgs/${W.orgId}/companies`, demo);
     expect([onTrial.status, onTrial.json.error.code]).toEqual([402, "DEMO_NEEDS_PLAN"]);
     expect(onTrial.json.error.message).toMatch(/practice company/);
-    // Practice companies stay free on the trial.
-    expect((await W.owner.post(`/api/orgs/${W.orgId}/companies`, { ...demo, is_demo: false, is_practice: true, name: "Class" })).status).toBe(201);
     await admin.post(`/api/billing/vendor/orgs/${W.orgId}/free-access`, { plan: "business", months: 1 });
     expect((await W.owner.post(`/api/orgs/${W.orgId}/companies`, demo)).status).toBe(201);
     expect((await W.owner.post(`/api/orgs/${W.orgId}/companies`, demo)).json.error.code).toBe("DEMO_EXISTS");
+    // One demo or practice company per organisation.
+    await grantEducation(W, (await W.owner.get("/api/auth/me")).json.user.email);
+    expect((await W.owner.post(`/api/orgs/${W.orgId}/companies`, { ...demo, is_demo: false, is_practice: true, name: "Class" })).json.error.code).toBe("LEARNING_COMPANY_EXISTS");
     // Someone without a business of their own cannot start with a demo either.
     const { client: fresh } = await register(W.env, "Fresh");
     expect((await fresh.post("/api/orgs", { name: "X", company: demo })).json.error.code).toBe("DEMO_NEEDS_PLAN");

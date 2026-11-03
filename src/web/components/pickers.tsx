@@ -4,6 +4,8 @@ import { useCompany, type Account } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { Select } from "./ui";
 import { pct } from "../lib/format";
+import { regionsFor, regionLabel } from "@shared/regions";
+import { COUNTRY_PACKS } from "@shared/countries";
 
 const TYPE_ORDER = ["asset", "liability", "equity", "income", "expense"];
 const TYPE_LABEL: Record<string, string> = { asset: "Assets", liability: "Liabilities", equity: "Equity", income: "Income", expense: "Expenses" };
@@ -67,3 +69,27 @@ export function DimensionSelect({ kind, value, onChange, id }: { kind: "departme
 }
 
 export const CURRENCY_OPTIONS = Object.keys(CURRENCIES);
+
+/** State / emirate / region of the chosen country; nothing when the country has no list. */
+export function RegionSelect({ country, value, onChange, id, disabled, india = "names" }: { country: string; value: string; onChange: (code: string) => void; id?: string; disabled?: boolean; india?: "names" | "codes" }) {
+  const list = regionsFor(country);
+  if (!list) return null;
+  const known = !value || list[value];
+  return (
+    <Select id={id} disabled={disabled} value={known ? value : ""} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Select {regionLabel(country).toLowerCase()}…</option>
+      {Object.entries(list).sort(([a, x], [b, y]) => (country === "IN" ? a.localeCompare(b) : x.localeCompare(y))).map(([k, n]) => <option key={k} value={k}>{country === "IN" || india === "codes" ? `${k} · ${n}` : n}</option>)}
+    </Select>
+  );
+}
+
+/** Every country LedgerFox has a tax pack for, plus the stored value if it is another ISO code. */
+export function CountrySelect({ value, onChange, id, disabled }: { value: string; onChange: (code: string) => void; id?: string; disabled?: boolean }) {
+  const known = COUNTRY_PACKS.some((p) => p.code === value);
+  return (
+    <Select id={id} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)}>
+      {!known && value && <option value={value}>{value}</option>}
+      {COUNTRY_PACKS.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+    </Select>
+  );
+}

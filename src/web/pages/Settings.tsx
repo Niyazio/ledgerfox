@@ -8,10 +8,10 @@ import { useSession } from "../lib/session";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { Alert, Badge, Button, Card, ConfirmButton, Field, Input, Modal, PageHeader, Select, StatusBadge, TableWrap, Tabs, Textarea, useToast } from "../components/ui";
-import { CURRENCY_OPTIONS } from "../components/pickers";
+import { CURRENCY_OPTIONS, RegionSelect } from "../components/pickers";
 import { BrandingFields, type BrandingValue } from "../components/Branding";
 import { ROLE_LABELS, type Role } from "@shared/permissions";
-import { INDIA_STATES } from "@shared/tax";
+import { regionsFor, regionLabel, regionProblem } from "@shared/regions";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
@@ -23,7 +23,7 @@ function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
   const toast = useToast();
   const c = settings!.company;
-  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern", print_language: (c.print_language ?? "en") as string, print_qr_verify: c.print_qr_verify !== 0, print_qr_upi: c.print_qr_upi !== 0,
+  const [v, setV] = useState({ name: c.name, legal_name: c.legal_name ?? "", tax_id: c.tax_id ?? "", state_code: regionProblem(c.country, c.state_code) ? "" : c.state_code ?? "", address: c.address ?? "", city: c.city ?? "", postal_code: c.postal_code ?? "", phone: c.phone ?? "", email: c.email ?? "", round_off_invoices: Boolean(c.round_off_invoices), invoice_terms: c.invoice_terms ?? "", date_format: c.date_format, number_locale: c.number_locale, upi_id: c.upi_id ?? "", print_template: c.print_template ?? "modern", print_language: (c.print_language ?? "en") as string, print_qr_verify: c.print_qr_verify !== 0, print_qr_upi: c.print_qr_upi !== 0,
     purchase_approval_limit: c.purchase_approval_limit != null ? toInput(c.purchase_approval_limit, c.base_currency) : "", billing_discount_limit: c.billing_discount_limit_bp != null ? String(c.billing_discount_limit_bp / 100) : "" });
   const { busy, error, run } = useAction();
   const disabled = !can("company.manage");
@@ -34,7 +34,7 @@ function CompanyTab() {
         <Field label="Company name">{(id) => <Input id={id} disabled={disabled} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
         <Field label="Legal name">{(id) => <Input id={id} disabled={disabled} value={v.legal_name} onChange={(e) => setV({ ...v, legal_name: e.target.value })} />}</Field>
         <Field label={countryPack(c.country).regLabel} hint={c.country === "IN" ? undefined : countryPack(c.country).regHint} error={taxIdProblem(c.country, v.tax_id)}>{(id) => <Input id={id} disabled={disabled} className="font-mono uppercase" value={v.tax_id} onChange={(e) => setV({ ...v, tax_id: e.target.value.toUpperCase() })} />}</Field>
-        {c.country === "IN" && <Field label="State">{(id) => <Select id={id} disabled={disabled} value={v.state_code} onChange={(e) => setV({ ...v, state_code: e.target.value })}><option value="">—</option>{Object.entries(INDIA_STATES).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}</Select>}</Field>}
+        {regionsFor(c.country) && <Field label={regionLabel(c.country)}>{(id) => <RegionSelect id={id} disabled={disabled} country={c.country} value={v.state_code} onChange={(code) => setV({ ...v, state_code: code })} />}</Field>}
         <Field label="Address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} disabled={disabled} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} />}</Field>
         <Field label="City">{(id) => <Input id={id} disabled={disabled} value={v.city} onChange={(e) => setV({ ...v, city: e.target.value })} />}</Field>
         <Field label="Postal code">{(id) => <Input id={id} disabled={disabled} value={v.postal_code} onChange={(e) => setV({ ...v, postal_code: e.target.value })} />}</Field>

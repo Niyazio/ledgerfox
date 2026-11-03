@@ -9,6 +9,7 @@ import { Alert, Badge, Button, Card, ConfirmButton, EmptyState, Field, Input, Li
 import { AccountSelect, ContactSelect, DimensionSelect, TaxSelect } from "../components/pickers";
 import { DOC_LABELS, SALES_DOCS, fmtDate, fmtDateTime, qty as fmtQty, today, toInput, pct } from "../lib/format";
 import { computeDocument, resolveTaxMode, INDIA_STATES, type TaxMode } from "@shared/tax";
+import { regionsFor } from "@shared/regions";
 import { parseDecimal, parseQty, parsePercentToBp, roundToWhole } from "@shared/money";
 import { CURRENCIES } from "@shared/currencies";
 import { downloadCsv } from "../lib/csv";
@@ -439,7 +440,7 @@ export function DocumentView() {
         <header className="flex flex-wrap justify-between gap-6 border-b border-[var(--border)] pb-6">
           <div>
             <p className="text-xl font-semibold">{co.legal_name || co.name}</p>
-            <p className="mt-1 whitespace-pre-line text-sm muted">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code && india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : null].filter(Boolean).join("\n")}</p>
+            <p className="mt-1 whitespace-pre-line text-sm muted">{[co.address, [co.city, co.postal_code].filter(Boolean).join(" "), co.state_code ? (india ? `${INDIA_STATES[co.state_code] ?? ""} (${co.state_code})` : regionsFor(co.country)?.[co.state_code] ?? null) : null].filter(Boolean).join("\n")}</p>
             {co.tax_id && <p className="mt-1 text-sm">{india ? "GSTIN" : "Tax ID"}: <span className="font-mono">{co.tax_id}</span></p>}
             {(co.phone || co.email) && <p className="text-sm muted">{[co.phone, co.email].filter(Boolean).join(" · ")}</p>}
           </div>

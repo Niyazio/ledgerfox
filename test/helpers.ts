@@ -59,11 +59,13 @@ export class Client {
     if (body instanceof Uint8Array) payload = body as unknown as BodyInit;
     else if (body !== undefined) { h["content-type"] = "application/json"; payload = JSON.stringify(body); }
     const res = await app.request(`${this.base}${path}`, { method, headers: h, body: payload }, this.env);
-    const sc = res.headers.get("set-cookie");
-    if (sc) {
+    // A small cookie jar: the session cookie and the education-mode device cookie.
+    const jar = new Map(this.cookie.split("; ").filter(Boolean).map((kv) => [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)] as [string, string]));
+    for (const sc of res.headers.getSetCookie?.() ?? (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")!] : [])) {
       const m = /^([^=]+)=([^;]*)/.exec(sc);
-      if (m) this.cookie = m[2] ? `${m[1]}=${m[2]}` : "";
+      if (m) { if (m[2]) jar.set(m[1], m[2]); else jar.delete(m[1]); }
     }
+    this.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
     const text = await res.text();
     let json: any;
     try { json = text ? JSON.parse(text) : null; } catch { json = text; }
@@ -126,6 +128,11 @@ export async function contact(w: World, kind: "customer" | "supplier", extra: Re
   const r = await w.owner.post(w.c("/contacts"), { kind, name: `${kind} ${Math.random().toString(36).slice(2, 6)}`, payment_terms_days: 30, ...extra });
   if (r.status !== 201) throw new Error(JSON.stringify(r.json));
   return r.json.id as string;
+}
+
+/** LedgerFox approves an email for education mode (practice companies), as in the admin panel. */
+export async function grantEducation(w: { env: Env }, email: string, devices = 10) {
+  await w.env.DB.prepare(`INSERT INTO education_access (email, devices) VALUES (?, ?) ON CONFLICT (email) DO UPDATE SET devices = excluded.devices, revoked_at = NULL`).bind(email.toLowerCase(), devices).run();
 }
 
 export async function rawQuery<T = any>(w: World, sql: string, ...params: unknown[]): Promise<T[]> {
