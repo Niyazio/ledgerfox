@@ -4,6 +4,7 @@ import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { downloadCsv } from "../lib/csv";
 import { fmtDate, money as fmt } from "../lib/format";
+import { EducationAdmin } from "../components/Education";
 import { Alert, Badge, Button, Card, DownloadButtons, Field, Input, Modal, PageHeader, Select, Spinner, Stat, TableWrap, Tabs, useToast } from "../components/ui";
 import { Wordmark } from "../components/Layout";
 import { PAID_PLANS, type Interval } from "@shared/plans";
@@ -26,7 +27,7 @@ const STATUS: Record<string, [string, "green" | "amber" | "blue" | "gray" | "red
 };
 const AUTOPAY: Record<string, string> = { active: "On", pending: "Retrying", halted: "Stopped", paused: "Paused", cancelled: "Off", completed: "Finished", created: "Not approved" };
 
-type TabId = "overview" | "orgs" | "users" | "payments" | "history" | "setup";
+type TabId = "overview" | "orgs" | "users" | "payments" | "history" | "setup" | "education";
 
 /** Names for the billing history (billing_events.kind). */
 const EVENT: Record<string, string> = {
@@ -130,13 +131,14 @@ export function VendorPanel() {
       <PageHeader title="Admin panel" subtitle={probe.data.enabled ? "Subscriptions are on." : "Subscriptions are off (BILLING_ENABLED) — nobody is limited."} />
       <Tabs<TabId> value={tab} onChange={setTab} tabs={[
         { value: "overview", label: "Overview" }, { value: "orgs", label: "Organisations" }, { value: "users", label: "Accounts" },
-        { value: "payments", label: "Payments" }, { value: "history", label: "Billing history" }, { value: "setup", label: "Set-up & promotions" },
+        { value: "payments", label: "Payments" }, { value: "education", label: "Education mode" }, { value: "history", label: "Billing history" }, { value: "setup", label: "Set-up & promotions" },
       ]} />
       <div className="mt-4">
         {tab === "overview" && <Overview data={probe.data} onOpen={setOpenOrg} />}
         {tab === "orgs" && <Organisations onOpen={setOpenOrg} />}
         {tab === "users" && <Accounts />}
         {tab === "payments" && <Payments onOpen={setOpenOrg} />}
+        {tab === "education" && <EducationAdmin />}
         {tab === "history" && <History onOpen={setOpenOrg} />}
         {tab === "setup" && <><SetupCheck /><PromotionsAdmin /></>}
       </div>

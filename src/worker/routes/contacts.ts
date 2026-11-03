@@ -7,6 +7,7 @@ import { body, reqText, shortText, minor, pageParams } from "../lib/validate";
 import { newId } from "../lib/crypto";
 import { audit, branchFilter, hasPerm, requireAnyPerm, requirePerm } from "../lib/auth";
 import type { Context } from "hono";
+import { regionProblem } from "@shared/regions";
 import { isValidGstin, INDIA_STATES } from "@shared/tax";
 import { currencyExponent, isCurrency } from "@shared/currencies";
 
@@ -43,6 +44,10 @@ function validate(input: z.infer<typeof schema>, companyCountry: string) {
     if (input.tax_id && !isValidGstin(input.tax_id)) throw badRequest("GSTIN is not valid (format or check digit)");
     if (input.state_code && !INDIA_STATES[input.state_code]) throw badRequest("Unknown state code");
     if (input.tax_id && !input.state_code) input.state_code = input.tax_id.slice(0, 2);
+  } else if (!(companyCountry === "IN" && input.state_code && INDIA_STATES[input.state_code])) {
+    // (An Indian company keeps the GST place of supply of a foreign contact, e.g. 96 = other country.)
+    const problem = regionProblem(country, input.state_code);
+    if (problem) throw badRequest(problem);
   }
 }
 

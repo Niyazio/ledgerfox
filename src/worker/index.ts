@@ -1,3 +1,5 @@
+import { checkPracticeAccess } from "./services/education";
+import { education } from "./routes/education";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { first } from "./lib/db";
@@ -104,6 +106,7 @@ app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
 app.route("/api/backups", backups);
 app.route("/api/billing", billing);
+app.route("/api/education", education);
 app.route("/api/licence", licenceCloud);
 app.route("/api/desktop/licence", licenceDesktop);
 app.route("/api/clients", clients);
@@ -135,6 +138,8 @@ company.use("*", async (c, next) => {
   }
   await next();
 });
+// Education mode: only for organisations LedgerFox approved, on a limited number of devices.
+company.use("*", async (c, next) => { await checkPracticeAccess(c); await next(); });
 // Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
 company.use("*", async (c, next) => {
   // Company set-up (details, logo, payment QR, branches) is always allowed: it comes before the trial screen.

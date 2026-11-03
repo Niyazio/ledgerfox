@@ -14,6 +14,8 @@ import { ALL_PERMISSIONS, ROLES, canAssignRole, defaultPermissions, effectivePer
 import { companySetupStatements } from "../services/setup";
 import { isCurrency } from "@shared/currencies";
 import { isValidGstin, INDIA_STATES } from "@shared/tax";
+import { regionProblem } from "@shared/regions";
+import { requireNoLearningCompany, requirePracticeAllowed } from "../services/education";
 
 const orgs = new Hono<AppEnv>();
 orgs.use("*", requireAuth);
@@ -45,6 +47,10 @@ export function validateCompanyInput(input: z.infer<typeof companySchema>) {
     if (input.tax_id && input.state_code && input.tax_id.slice(0, 2) !== input.state_code) {
       throw badRequest("GSTIN state code does not match the selected state");
     }
+  }
+  else {
+    const region = regionProblem(input.country, input.state_code);
+    if (region) throw badRequest(region);
   }
   // VAT numbers that tax authorities check strictly (UAE TRN, Saudi VAT number).
   const problem = taxIdProblem(input.country, input.tax_id);
@@ -122,12 +128,14 @@ orgs.post("/", async (c) => {
   if (input.company.is_demo) {
     const own = await first<{ id: string }>(c.env.DB, `SELECT id FROM organisations WHERE owner_user_id = ? ORDER BY created_at LIMIT 1`, user.id);
     await requireDemoAllowed(c, own?.id ?? null);
+    if (own) await requireNoLearningCompany(c.env, own.id);
     if (own) {
       const setup = companySetupStatements(c.env.DB, { ...input.company, email: input.company.email || null, org_id: own.id }, todayIso());
       await batch(c.env.DB, [...setup.stmts, audit(c, "company.create", "company", setup.companyId, { name: input.company.name }, { orgId: own.id, companyId: setup.companyId })]);
       return c.json({ org_id: own.id, company_id: setup.companyId }, 201);
     }
   }
+  if (input.company.is_practice) await requirePracticeAllowed(c, null);
   const count = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM organisations WHERE owner_user_id = ?`, user.id);
   if ((count?.n ?? 0) >= 10) throw forbidden("Organisation limit reached for this account");
   const orgId = newId();
@@ -147,8 +155,9 @@ orgs.post("/:orgId/companies", async (c) => {
   await requireOrgPerm(c, orgId, "company.manage");
   const input = practiceName(await body(c, companySchema));
   validateCompanyInput(input);
-  if (input.is_demo) await requireDemoAllowed(c, orgId);
-  else if (!input.is_practice) await requireCapacity(c, orgId, "companies");
+  if (input.is_demo) { await requireDemoAllowed(c, orgId); await requireNoLearningCompany(c.env, orgId); }
+  else if (input.is_practice) await requirePracticeAllowed(c, orgId);
+  else await requireCapacity(c, orgId, "companies");
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM companies WHERE org_id = ?`, orgId);
   if ((n?.n ?? 0) >= 25) throw forbidden("Company limit reached for this organisation");
   const setup = companySetupStatements(c.env.DB, { ...input, email: input.email || null, org_id: orgId }, todayIso());

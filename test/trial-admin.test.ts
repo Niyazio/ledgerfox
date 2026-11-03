@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { createHmac } from "node:crypto";
-import { world, rawQuery, register, Client } from "./helpers";
+import { world, rawQuery, register, Client, grantEducation } from "./helpers";
 
 const SECRET = "test_key_secret", HOOK = "test_webhook_secret";
 const sign = (s: string, data: string) => createHmac("sha256", s).update(data).digest("hex");
@@ -123,7 +123,8 @@ describe("one free trial", () => {
 
   it("is not used up by a practice company made first", async () => {
     const W = await requiredWorld();
-    const { client } = await register(W.env, "Learner first");
+    const { client, email } = await register(W.env, "Learner first");
+    await grantEducation(W, email);
     const practice = { name: "Class", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_practice: true };
     const d = (await client.post("/api/orgs", { name: "Learning", company: practice })).json;
     await client.get(`/api/billing/org/${d.org_id}`);

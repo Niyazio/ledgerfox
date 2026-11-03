@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { world, register, rawQuery, contact } from "./helpers";
+import { world, register, rawQuery, contact, grantEducation } from "./helpers";
 
 const practice = { name: "Learning Traders", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_practice: true };
 
 async function learner(W: Awaited<ReturnType<typeof world>>) {
-  const { client } = await register(W.env, "Student");
+  const { client, email } = await register(W.env, "Student");
+  await grantEducation(W, email);
   const r = (await client.post("/api/orgs", { name: "My learning", company: practice })).json;
   return { client, orgId: r.org_id as string, c: (p: string) => `/api/c/${r.company_id}${p}`, companyId: r.company_id as string };
 }
@@ -71,6 +72,7 @@ describe("education mode next to a business company", () => {
     const W = await world();
     Object.assign(W.env, { BILLING_ENABLED: "true", BILLING_REQUIRE_AUTOPAY: "true", RAZORPAY_KEY_ID: "rzp_test_x", VENDOR_ADMIN_EMAILS: "" });
     expect((await W.owner.get(`/api/billing/org/${W.orgId}`)).json.autopay_required).toBe(true);
+    await grantEducation(W, (await W.owner.get("/api/auth/me")).json.user.email);
     expect((await W.owner.post(W.c("/items"), { kind: "goods", name: "Tea", sale_price: "10" })).json.error.code).toBe("AUTOPAY_REQUIRED");
     const pc = (await W.owner.post(`/api/orgs/${W.orgId}/companies`, { name: "Class 12 Commerce", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "29", is_practice: true })).json.company_id;
     expect(pc).toBeTruthy();

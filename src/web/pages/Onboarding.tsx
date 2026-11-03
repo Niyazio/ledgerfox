@@ -2,12 +2,13 @@ import { useState, type FormEvent } from "react";
 import { COUNTRY_PACKS, countryPack, taxIdProblem } from "@shared/countries";
 import { Navigate, useNavigate, useSearchParams, Link } from "react-router";
 import { api } from "../lib/api";
-import { useAction } from "../lib/hooks";
+import { useAction, useApi } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { Alert, Button, Card, Field, Input, Select, Spinner, useToast } from "../components/ui";
 import { Wordmark } from "../components/Layout";
 import { INDIA_STATES } from "@shared/tax";
-import { CURRENCY_OPTIONS } from "../components/pickers";
+import { CURRENCY_OPTIONS, RegionSelect } from "../components/pickers";
+import { regionsFor, regionLabel } from "@shared/regions";
 import { BUSINESS_TYPES } from "@shared/industries";
 import { createDemoCompany } from "../lib/demo";
 import { BrandingFields, type BrandingValue } from "../components/Branding";
@@ -21,17 +22,20 @@ export function CompanyForm({ onSubmit, busy, withOrg, practice = false }: { onS
   const [branding, setBranding] = useState<BrandingValue>({});
   const [v, setV] = useState({ practice, org: "", upi_id: "", business_type: "general", name: "", legal_name: "", country: "IN", base_currency: "INR", fiscal_year_start_month: 4, state_code: "", tax_id: "", address: "", city: "", postal_code: "", phone: "", email: "" });
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
+  const edu = useApi<{ approved: boolean; free_devices: number }>("/api/education/me");
+  const eduOk = edu.data?.approved ?? false;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const company = { name: v.name, legal_name: v.legal_name || null, country: v.country, base_currency: v.base_currency, fiscal_year_start_month: Number(v.fiscal_year_start_month),
-      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type, upi_id: v.upi_id.trim() || null, ...(v.practice ? { is_practice: true } : {}) };
+      state_code: v.state_code || null, tax_id: v.tax_id.trim().toUpperCase() || null, address: v.address || null, city: v.city || null, postal_code: v.postal_code || null, phone: v.phone || null, email: v.email || null, business_type: v.business_type, upi_id: v.upi_id.trim() || null, ...(v.practice && eduOk ? { is_practice: true } : {}) };
     onSubmit(withOrg ? { name: v.org || v.name, company } : company, branding);
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-      <label className={`sm:col-span-2 flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${v.practice ? "border-orange-400 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30" : "border-[var(--border)]"}`}>
-        <input type="checkbox" className="mt-1" checked={v.practice} onChange={(e) => set("practice", e.target.checked)} />
-        <span><b>Practice company (education mode)</b> — for students, trainees and beginners. Free forever with every feature. Like the educational modes of well-known accounting software, entries can be dated only the 1st, 2nd and last day of a month, printouts say "Practice", and it cannot be used for real business documents.</span>
+      <label className={`sm:col-span-2 flex gap-3 rounded-xl border p-3 text-sm ${eduOk ? "cursor-pointer" : "opacity-80"} ${v.practice ? "border-orange-400 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30" : "border-[var(--border)]"}`}>
+        <input type="checkbox" className="mt-1" disabled={!eduOk} checked={v.practice && eduOk} onChange={(e) => set("practice", e.target.checked)} />
+        <span><b>Practice company (education mode)</b> — for teachers, institutes and trainers that LedgerFox has approved. Every feature, free on up to {edu.data?.free_devices ?? 10} devices; student packs of 25, 50 or 100 for 6 months. Entries can be dated only the 1st, 2nd and last day of a month, printouts say "Practice", and it cannot be used for real business documents. One practice or demo company per organisation.
+          {!eduOk && edu.data && <span className="mt-1 block text-amber-700 dark:text-amber-300">Not switched on for your email yet. To use education mode, write to info@niyazio.com with the email you sign in with.</span>}</span>
       </label>
       {withOrg && <Field label="Organisation name" hint="Groups your companies and team. You can add more companies later." className="sm:col-span-2">{(id) => <Input id={id} value={v.org} placeholder="e.g. Sharma Group" onChange={(e) => set("org", e.target.value)} />}</Field>}
       <fieldset className="sm:col-span-2">
@@ -54,7 +58,7 @@ export function CompanyForm({ onSubmit, busy, withOrg, practice = false }: { onS
           {COUNTRIES.map((c) => <option key={c[0]} value={c[0]}>{c[1]}</option>)}
         </Select>
       )}</Field>
-      <Field label="Base currency" required hint="Cannot be changed later.">{(id) => (
+      <Field label="Base currency" required hint={`Set from the country (${countryPack(v.country).currency}). Change it if you keep your books in another currency — it cannot be changed later.`}>{(id) => (
         <Select id={id} value={v.base_currency} onChange={(e) => set("base_currency", e.target.value)}>{CURRENCY_OPTIONS.map((c) => <option key={c}>{c}</option>)}</Select>
       )}</Field>
       <Field label="Financial year starts in" required>{(id) => (
@@ -71,8 +75,11 @@ export function CompanyForm({ onSubmit, busy, withOrg, practice = false }: { onS
           <Field label="GSTIN" hint="Optional. Validated including the check digit.">{(id) => <Input id={id} value={v.tax_id} maxLength={15} className="font-mono uppercase" onChange={(e) => { set("tax_id", e.target.value); if (e.target.value.length >= 2 && !v.state_code) set("state_code", e.target.value.slice(0, 2)); }} />}</Field>
         </>
       ) : (
+        <>
+        {regionsFor(v.country) && <Field label={regionLabel(v.country)}>{(id) => <RegionSelect id={id} country={v.country} value={v.state_code} onChange={(code) => set("state_code", code)} />}</Field>}
         <Field label={countryPack(v.country).regLabel} hint={taxIdProblem(v.country, v.tax_id) ?? [countryPack(v.country).regHint, `Optional. ${countryPack(v.country).taxName} rates for ${countryPack(v.country).name} are set up for you.`].filter(Boolean).join(" · ")}
           error={taxIdProblem(v.country, v.tax_id)}>{(id) => <Input id={id} value={v.tax_id} className="font-mono uppercase" onChange={(e) => set("tax_id", e.target.value)} />}</Field>
+        </>
       )}
       <Field label="Address" className="sm:col-span-2">{(id) => <Input id={id} value={v.address} onChange={(e) => set("address", e.target.value)} />}</Field>
       <Field label="City">{(id) => <Input id={id} value={v.city} onChange={(e) => set("city", e.target.value)} />}</Field>
@@ -103,7 +110,7 @@ export function DemoLoader({ orgId }: { orgId: string | null }) {
   return (
     <Card title="Explore with a demo company">
       <p className="text-sm muted">Creates a sample company with customers, invoices, bills, receipts, expenses and payroll so you can try every screen. Delete it any time from Settings.</p>
-      <p className="mt-1 text-xs muted">Comes with a paid plan (one demo company at a time, with your plan's features). On the free trial, or just learning? Create a <b>practice company</b> (education mode) instead: every feature, free.</p>
+      <p className="mt-1 text-xs muted">Comes with a paid plan (one demo company at a time, with your plan's features). Teaching a class? Approved teachers and institutes can use a <b>practice company</b> (education mode) instead. One demo or practice company per organisation.</p>
       {error && <Alert className="mt-3">{error}</Alert>}
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <Field label="Type of business">{(id) => <Select id={id} value={type} onChange={(e) => setType(e.target.value)}>{BUSINESS_TYPES.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}</Select>}</Field>

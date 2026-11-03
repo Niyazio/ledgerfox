@@ -12,8 +12,26 @@ export const isOfflineCopy = () => transport !== null;
 /** True inside the Android app (Capacitor WebView). */
 export const isNativeApp = () => Boolean((globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
 
+/**
+ * This browser's or app's device id (education mode counts devices). Made once and kept, so every request of this
+ * device — even the first ones, sent together — names the same device.
+ */
+let memoryDevice = "";
+function deviceKey() {
+  try {
+    let id = localStorage.getItem("lf_device");
+    if (!id || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) { id = randomDeviceId(); localStorage.setItem("lf_device", id); }
+    return id;
+  } catch { return (memoryDevice ||= randomDeviceId()); }
+}
+function randomDeviceId() {
+  const b = new Uint8Array(18);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
 async function request<T>(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<T> {
-  const headers: Record<string, string> = { "x-requested-with": "ledgerfox", ...extraHeaders };
+  const headers: Record<string, string> = { "x-requested-with": "ledgerfox", "x-ledgerfox-device": deviceKey(), ...extraHeaders };
   let payload: BodyInit | undefined;
   if (body instanceof Blob || body instanceof ArrayBuffer) {
     payload = body as BodyInit;

@@ -11,6 +11,7 @@ import { fmtDate, money as fmt } from "../lib/format";
 import { printPage } from "../lib/download";
 import { useSession } from "../lib/session";
 import { DesktopPlanTab } from "./DesktopPlan";
+import { EducationCard } from "../components/Education";
 
 /** An amount in the organisation's billing currency (rupees in India; AED, SAR or USD elsewhere). */
 const amt = (minor: number, currency?: string) => fmt(minor, currency || "INR");
@@ -59,12 +60,15 @@ function CloudPlanTab() {
   const toast = useToast();
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
+  const edu = settings!.company.is_practice ? <EducationCard orgId={orgId} /> : null;
   if (!data.enabled) return <Card><p className="text-sm">All features are available. Subscriptions are not switched on for this LedgerFox.</p></Card>;
+  if (data.demo_only && edu) return edu;
   if (data.demo_only) return <Card><p className="text-sm">This is a demo company, so there is nothing to subscribe for here. Open your own company (company switcher at the top) and choose a plan in its Settings → Plan & billing.</p></Card>;
   const s = data.subscription;
   const current = data.plans.find((p) => p.id === s.plan)!;
   return (
     <div className="space-y-4">
+      {edu}
       <Card title="Your plan">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xl font-semibold">{s.status === "free" ? "No active plan" : current.name}</p><Badge color={s.status === "active" ? "green" : s.status === "grace" || s.status === "free" ? "amber" : "blue"}>{STATUS[s.status]}</Badge>
@@ -147,6 +151,7 @@ export function TrialGate() {
   const [plan, setPlan] = useState("business");
   const nav = useNavigate();
   const [later, setLater] = useState(false);
+  const edu = useApi<{ approved: boolean }>(data?.autopay_required ? "/api/education/me" : null);
   // Practice companies (education mode) are free and never ask for a plan, even inside a business's organisation.
   if (!data?.autopay_required || settings?.company.is_practice || later) return null;
   const ends = data.subscription.trial_ends_at ? fmtDate(data.subscription.trial_ends_at.slice(0, 10)) : "";
@@ -178,9 +183,10 @@ export function TrialGate() {
             : <Alert className="mt-4">Online payment is not available right now. Write to info@niyazio.com with your account ID {data.account_id}.</Alert>}
         </> : <Alert kind="info" className="mt-4">Your organisation's owner needs to start the free trial (Settings → Plan & billing). You can look around meanwhile.</Alert>}
         <div className="mt-4 rounded-xl border border-orange-300 bg-orange-50 p-3 text-sm dark:border-orange-800 dark:bg-orange-950/30">
-          <p><b>Teaching or learning?</b> Education mode is free, with every feature, and needs no payment: create a <b>practice company</b> for your students.</p>
+          <p><b>Teaching or training?</b> Education mode gives approved teachers, institutes and trainers a <b>practice company</b> with every feature, free on up to 10 devices (student packs of 25, 50 or 100 for 6 months).
+            {!edu.data?.approved && <> To get it, write to info@niyazio.com with the email you sign in with.</>}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => { setLater(true); nav("/app/new-company?practice=1"); }}>Create a practice company (free)</Button>
+            {edu.data?.approved && <Button size="sm" onClick={() => { setLater(true); nav("/app/new-company?practice=1"); }}>Create a practice company</Button>}
             <Button size="sm" variant="secondary" onClick={() => setLater(true)}>Look around first</Button>
           </div>
         </div>

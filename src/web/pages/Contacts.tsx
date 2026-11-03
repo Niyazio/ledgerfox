@@ -6,8 +6,9 @@ import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
-import { CURRENCY_OPTIONS } from "../components/pickers";
-import { INDIA_STATES } from "@shared/tax";
+import { CURRENCY_OPTIONS, CountrySelect, RegionSelect } from "../components/pickers";
+import { regionsFor, regionLabel, regionName, regionProblem } from "@shared/regions";
+import { countryPack } from "@shared/countries";
 import { DOC_LABELS, fmtDate, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
 
@@ -16,7 +17,7 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
   const toast = useToast();
   const [v, setV] = useState({
     kind: initial?.kind ?? kind, name: initial?.name ?? "", email: initial?.email ?? "", phone: initial?.phone ?? "", tax_id: initial?.tax_id ?? "", pan: initial?.pan ?? "",
-    state_code: initial?.state_code ?? "", country: initial?.country ?? settings?.company.country ?? "IN", billing_address: initial?.billing_address ?? "",
+    state_code: regionProblem(initial?.country ?? settings?.company.country, initial?.state_code) && !(settings?.company.country === "IN" && regionProblem("IN", initial?.state_code) === null) ? "" : initial?.state_code ?? "", country: initial?.country ?? settings?.company.country ?? "IN", billing_address: initial?.billing_address ?? "",
     shipping_address: initial?.shipping_address ?? "", currency: initial?.currency ?? "", payment_terms_days: initial?.payment_terms_days ?? 30,
     credit_limit: initial?.credit_limit ? toInput(initial.credit_limit, initial.currency ?? settings?.company.base_currency ?? "INR") : "", notes: initial?.notes ?? "", is_active: initial ? Boolean(initial.is_active) : true,
     price_list_id: initial?.price_list_id ?? "",
@@ -36,6 +37,13 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   };
   const india = v.country === "IN";
+  /** A new country brings its own regions and its currency (when that differs from the books' currency); both stay editable. */
+  const pickCountry = (country: string) => setV((p) => {
+    const base = settings?.company.base_currency;
+    const cur = countryPack(country).currency;
+    const leavingIndia = (p.country === "IN") !== (country === "IN");
+    return { ...p, country, state_code: settings?.company.country === "IN" && country !== "IN" ? "96" : "", ...(leavingIndia ? { tax_id: "", pan: "" } : {}), currency: cur === base || !CURRENCY_OPTIONS.includes(cur) ? "" : cur };
+  });
   return (
     <Modal open wide onClose={() => onClose()} title={initial ? `Edit ${initial.name}` : `New ${kind}`}
       footer={<><Button variant="secondary" onClick={() => onClose()}>Cancel</Button><Button loading={busy} onClick={save}>Save</Button></>}>
@@ -45,18 +53,19 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
         <Field label="Type">{(id) => <Select id={id} value={v.kind} onChange={(e) => set("kind", e.target.value)}><option value="customer">Customer</option><option value="supplier">Supplier</option><option value="both">Customer & supplier</option></Select>}</Field>
         <Field label="Email">{(id) => <Input id={id} type="email" value={v.email} onChange={(e) => set("email", e.target.value)} />}</Field>
         <Field label="Phone">{(id) => <Input id={id} value={v.phone} onChange={(e) => set("phone", e.target.value)} />}</Field>
-        <Field label="Country">{(id) => <Input id={id} value={v.country} maxLength={2} className="uppercase" onChange={(e) => set("country", e.target.value.toUpperCase())} />}</Field>
+        <Field label="Country">{(id) => <CountrySelect id={id} value={v.country} onChange={pickCountry} />}</Field>
         <Field label="Currency" hint="Leave as default to invoice in your base currency.">{(id) => (
           <Select id={id} value={v.currency} onChange={(e) => set("currency", e.target.value)}><option value="">Default ({settings?.company.base_currency})</option>{CURRENCY_OPTIONS.map((c) => <option key={c}>{c}</option>)}</Select>
         )}</Field>
         {india && <>
           <Field label="GSTIN" hint="Validated with its check digit; fills the state automatically.">{(id) => <Input id={id} value={v.tax_id} maxLength={15} className="font-mono uppercase" onChange={(e) => { set("tax_id", e.target.value); if (e.target.value.length >= 2 && /^\d\d/.test(e.target.value)) set("state_code", e.target.value.slice(0, 2)); }} />}</Field>
           <Field label="State / place of supply">{(id) => (
-            <Select id={id} value={v.state_code} onChange={(e) => set("state_code", e.target.value)}><option value="">Select…</option>{Object.entries(INDIA_STATES).map(([k, n]) => <option key={k} value={k}>{k} · {n}</option>)}</Select>
+            <RegionSelect id={id} country="IN" value={v.state_code} onChange={(code) => set("state_code", code)} />
           )}</Field>
           <Field label="PAN">{(id) => <Input id={id} value={v.pan} maxLength={10} className="font-mono uppercase" onChange={(e) => set("pan", e.target.value.toUpperCase())} />}</Field>
         </>}
-        {!india && <Field label="Tax ID">{(id) => <Input id={id} value={v.tax_id} onChange={(e) => set("tax_id", e.target.value)} />}</Field>}
+        {!india && regionsFor(v.country) && <Field label={regionLabel(v.country)}>{(id) => <RegionSelect id={id} country={v.country} value={v.state_code} onChange={(code) => set("state_code", code)} />}</Field>}
+        {!india && <Field label={countryPack(v.country).regLabel ?? "Tax ID"} hint="Optional">{(id) => <Input id={id} value={v.tax_id} className="font-mono uppercase" onChange={(e) => set("tax_id", e.target.value)} />}</Field>}
         <Field label="Payment terms (days)">{(id) => <Input id={id} type="number" min={0} max={365} value={v.payment_terms_days} onChange={(e) => set("payment_terms_days", e.target.value)} />}</Field>
         <Field label="Credit limit">{(id) => <Input id={id} inputMode="decimal" value={v.credit_limit} onChange={(e) => set("credit_limit", e.target.value)} />}</Field>
         {v.kind !== "supplier" && Boolean(priceLists.data?.price_lists.length) && <Field label="Price list" hint="Sets this customer's rates on invoices and at the counter">{(id) => <Select id={id} value={v.price_list_id} onChange={(e) => set("price_list_id", e.target.value)}><option value="">Normal selling prices</option>{priceLists.data!.price_lists.filter((l) => l.is_active || l.id === v.price_list_id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</Select>}</Field>}
@@ -139,7 +148,7 @@ export function ContactView() {
         <Card title="Details">
           <dl className="space-y-2 text-sm">
             <div><dt className="muted">Billing address</dt><dd className="whitespace-pre-line">{c.billing_address || "—"}</dd></div>
-            <div><dt className="muted">State</dt><dd>{c.state_code ? `${c.state_code} · ${INDIA_STATES[c.state_code] ?? ""}` : "—"}</dd></div>
+            <div><dt className="muted">{regionLabel(c.country)}</dt><dd>{c.state_code ? (c.country === "IN" ? `${c.state_code} · ${regionName(c.country, c.state_code)}` : regionName(c.country, c.state_code)) : "—"}</dd></div>
             <div><dt className="muted">Currency</dt><dd>{c.currency ?? settings?.company.base_currency}</dd></div>
             <div><dt className="muted">Payment terms</dt><dd>{c.payment_terms_days} days</dd></div>
             {c.notes && <div><dt className="muted">Notes</dt><dd className="whitespace-pre-line">{c.notes}</dd></div>}

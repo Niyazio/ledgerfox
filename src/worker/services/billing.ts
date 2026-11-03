@@ -116,7 +116,7 @@ export async function renewRequired(env: Env, orgId: string, email?: string | nu
  * there is education mode (practice companies). Self-hosted and vendor copies are not limited.
  */
 export async function requireDemoAllowed(c: Context<AppEnv>, orgId: string | null) {
-  const learn = "To try every feature for free, create a practice company (education mode) instead.";
+  const learn = "Teachers and institutes can ask LedgerFox for education mode (a practice company) instead.";
   if (!orgId) {
     if (!billingOn(c.env) && !licensingOn(c.env)) return;
     throw new AppError(402, "DEMO_NEEDS_PLAN", `A demo company comes with a paid plan. Create your own company and choose a plan first. ${learn}`);
