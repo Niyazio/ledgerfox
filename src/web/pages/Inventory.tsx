@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, QrCode } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { productPath } from "../lib/links";
 import QRCode from "qrcode";
 import { code128Svg, productQrPayload } from "@shared/barcode";
 import { saveFile } from "../lib/download";
@@ -261,21 +262,21 @@ export default function Inventory() {
             <Input placeholder="Search name, SKU, HSN, code, barcode…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" aria-label="Search items" />
             <div className="w-full max-w-xs"><ScanInput label="Scan to find" onItem={setFound} onError={(m) => toast("error", m)} /></div>
           </div>
-          {found && <Alert kind="info" className="m-3">Scanned: <b>{found.name}</b> · code {found.code}{found.barcode ? ` · barcode ${found.barcode}` : ""} · {money(found.sale_price)}
+          {found && <Alert kind="info" className="m-3">Scanned: <Link className="font-bold text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, found.id)}>{found.name}</Link> · code {found.code}{found.barcode ? ` · barcode ${found.barcode}` : ""} · {money(found.sale_price)}
             {can("items.write") && <Button size="sm" variant="ghost" onClick={() => { setEdit(found); setFound(null); }}>Edit</Button>}</Alert>}
           {items.loading && !items.data ? <Spinner /> : !items.data?.items.length ? <EmptyState title="No products or services" action={can("items.write") && <Button onClick={() => setEdit("new")}>Add item</Button>} /> : (
             <TableWrap><table className="table">
               <thead><tr><th>Name</th><th>Code</th><th>SKU / barcode</th><th>HSN/SAC</th><th className="num">Sale price</th><th className="num">On hand</th><th className="num">Stock value</th><th /></tr></thead>
               <tbody>{items.data.items.map((i) => (
                 <tr key={i.id} className={i.is_active ? "" : "opacity-60"}>
-                  <td className="font-medium">{i.name} {i.kind === "service" ? <Badge color="blue">service</Badge> : i.track_inventory ? <Badge color="green">stock</Badge> : <Badge>non-stock</Badge>}
+                  <td className="font-medium"><Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, i.id)}>{i.name}</Link> {i.kind === "service" ? <Badge color="blue">service</Badge> : i.track_inventory ? <Badge color="green">stock</Badge> : <Badge>non-stock</Badge>}
                     {i.track_batches ? <span className="ml-1"><Badge color="blue">batches</Badge></span> : null}
                     {i.track_inventory && i.reorder_level_milli > 0 && i.stock_qty_milli <= i.reorder_level_milli && <span className="ml-1"><Badge color="amber">reorder</Badge></span>}</td>
                   <td className="font-mono text-xs">{i.code}</td><td className="font-mono text-xs">{i.sku}{i.sku && i.barcode ? <br /> : null}{i.barcode}</td><td className="font-mono text-xs">{i.hsn_sac}</td>
                   <td className="num">{money(i.sale_price)}</td>
                   <td className="num">{i.track_inventory ? `${qty(i.stock_qty_milli)} ${i.unit}` : "—"}</td>
                   <td className="num">{i.track_inventory && i.stock_value !== undefined ? money(i.stock_value) : "—"}</td>
-                  <td className="text-right">{can("items.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(i)}>Edit</Button>}</td>
+                  <td className="text-right"><LinkButton size="sm" variant="ghost" to={productPath(settings!.company.id, i.id)}>View</LinkButton>{can("items.write") && <Button size="sm" variant="ghost" onClick={() => setEdit(i)}>Edit</Button>}</td>
                 </tr>
               ))}</tbody>
             </table></TableWrap>
@@ -285,7 +286,7 @@ export default function Inventory() {
       {tab === "stock" && (
         <Card padded={false}>{stock.data?.stock.length ? (
           <TableWrap><table className="table"><thead><tr><th>Item</th><th>Warehouse</th><th className="num">Quantity</th><th className="num">Value</th></tr></thead>
-            <tbody>{stock.data.stock.map((s, idx) => <tr key={idx}><td>{s.name}</td><td>{s.warehouse_name}</td><td className="num">{qty(s.qty_milli)} {s.unit}</td><td className="num">{money(s.value)}</td></tr>)}</tbody></table></TableWrap>
+            <tbody>{stock.data.stock.map((s, idx) => <tr key={idx}><td>{s.item_id ? <Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, s.item_id)}>{s.name}</Link> : s.name}</td><td>{s.warehouse_name}</td><td className="num">{qty(s.qty_milli)} {s.unit}</td><td className="num">{money(s.value)}</td></tr>)}</tbody></table></TableWrap>
         ) : <EmptyState title="No stock movements yet" body="Stock arrives through posted bills or opening-stock adjustments." />}</Card>
       )}
       {tab === "batches" && <BatchesTab />}

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer } from "lucide-react";
+import { productPath } from "../lib/links";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, ApiError, errorMessage } from "../lib/api";
@@ -193,6 +194,14 @@ export function DocumentForm() {
     const empty = ls.find((l) => !l.description.trim() && !l.item_id);
     return empty ? ls.map((l) => (l.key === empty.key ? { ...l, ...filled } : l)) : [...ls, { ...blankLine(), ...filled }];
   });
+  // Opened from a product page ("Sell" / "Buy"): start with that product on the first line.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    const want = params.get("item");
+    if (!want || docId || prefilled.current || !items.data) return;
+    const it = items.data.items.find((x) => x.id === want);
+    if (it) { prefilled.current = true; addScanned(it); }
+  }, [items.data, params, docId]); // eslint-disable-line react-hooks/exhaustive-deps
   const save = async (issue: boolean) => {
     const body = {
       doc_type: docType, contact_id: contactId, issue_date: h.issue_date, due_date: h.due_date || null, currency: currency, fx_rate: currency !== base ? h.fx_rate || null : null,
@@ -471,7 +480,7 @@ export function DocumentView() {
               {lines.map((l) => (
                 <tr key={l.id}>
                   <td className="muted">{l.line_no}</td>
-                  <td>{l.description}{l.batch_no && <span className="block text-xs muted">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date}` : ""}</span>}</td>
+                  <td>{l.item_id && can("inventory.view") ? <Link className="hover:underline" to={productPath(id, l.item_id)}>{l.description}</Link> : l.description}{l.batch_no && <span className="block text-xs muted">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date}` : ""}</span>}</td>
                   {india && <td className="font-mono text-xs">{l.hsn_sac}</td>}
                   <td className="num">{fmtQty(l.qty_milli)} {l.unit ?? ""}</td>
                   <td className="num">{money(l.unit_price, cur)}</td>

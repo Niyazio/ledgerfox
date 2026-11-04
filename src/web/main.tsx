@@ -40,6 +40,7 @@ const BillingInvoice = lazy(() => named(import("./pages/Billing"), "BillingInvoi
 const VendorPanel = lazy(() => named(import("./pages/Vendor"), "VendorPanel"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const ProductView = lazy(() => named(import("./pages/ProductView"), "ProductView"));
 const Assets = lazy(() => import("./pages/Assets"));
 const Insights = lazy(() => named(import("./pages/Reports"), "Insights"));
 const ReportIndex = lazy(() => named(import("./pages/Reports"), "ReportIndex"));
@@ -128,6 +129,7 @@ function App() {
         <Route path="expenses" element={<Expenses />} />
         <Route path="banking" element={<Banking />} />
         <Route path="inventory" element={<Inventory />} />
+        <Route path="inventory/:itemId" element={<Keyed>{(k) => <ProductView key={k} />}</Keyed>} />
         <Route path="assets" element={<Assets />} />
         <Route path="reports" element={<ReportIndex />} />
         <Route path="reports/statement/:contactId" element={<Statement />} />

@@ -5,12 +5,13 @@ import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { isQueued, postOrQueue } from "../lib/offline";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, TableWrap, Textarea, useToast, DownloadButtons } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, Modal, PageHeader, Pagination, Select, Spinner, StatusBadge, Stat, TableWrap, Tabs, Textarea, useToast, DownloadButtons } from "../components/ui";
 import { CURRENCY_OPTIONS, CountrySelect, RegionSelect } from "../components/pickers";
 import { regionsFor, regionLabel, regionName, regionProblem } from "@shared/regions";
 import { countryPack } from "@shared/countries";
-import { DOC_LABELS, fmtDate, toInput } from "../lib/format";
+import { DOC_LABELS, fmtDate, pct, qty, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
+import { docPath, paymentPath, productPath } from "../lib/links";
 
 export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "supplier"; initial?: any; onClose: (id?: string) => void }) {
   const { path, settings, can } = useCompany();
@@ -124,17 +125,47 @@ export function ContactList({ kind }: { kind: "customer" | "supplier" }) {
   );
 }
 
+type ContactTab = "summary" | "documents" | "products" | "payments";
+
 export function ContactView() {
   const { path, money, id, settings, can } = useCompany();
   const { contactId } = useParams();
+  const [params, setParams] = useSearchParams();
+  const tab = (params.get("tab") as ContactTab) || "summary";
   const { data, error, loading, reload } = useApi<any>(path(`/contacts/${contactId}`));
+  const range = [params.get("from") && `from=${params.get("from")}`, params.get("to") && `to=${params.get("to")}`].filter(Boolean).join("&");
+  const ins = useApi<any>(path(`/contacts/${contactId}/insights${range ? `?${range}` : ""}`));
+  const [from, setFrom] = useState(params.get("from") ?? "");
+  const [to, setTo] = useState(params.get("to") ?? "");
   const [editing, setEditing] = useState(false);
   if (loading && !data) return <Spinner />;
   if (error) return <Alert>{error}</Alert>;
   const c = data.contact;
   const isCustomer = c.kind !== "supplier";
   const df = settings?.company.date_format;
-  const docLink = (d: any) => `/app/${id}/${["quote", "sales_order", "invoice", "credit_note"].includes(d.doc_type) ? "sales" : "purchases"}/${d.doc_type}/${d.id}`;
+  const docLink = (d: any) => docPath(id, d.doc_type, d.id, d.variant);
+  const setTab = (t: ContactTab) => setParams((sp) => { if (t === "summary") sp.delete("tab"); else sp.set("tab", t); return sp; });
+  const I = ins.data;
+  const side = (title: string, x: any, verb: string, paidWord: string) => x && (
+    <Card title={title}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label={verb} value={money(x.summary.amount)} sub={`${x.summary.documents} ${title.startsWith("Sales") ? "invoice" : "bill"}${x.summary.documents === 1 ? "" : "s"} · ${money(x.summary.total)} with tax`} />
+        <Stat label={paidWord} value={money(x.summary.settled)} sub={`Cash ${money(x.summary.cash)} · bank ${money(x.summary.bank)}${x.summary.note ? ` · notes ${money(x.summary.note)}` : ""}`} tone="good" />
+        <Stat label="Outstanding" value={money(x.summary.outstanding)} tone={x.summary.outstanding > 0 ? "bad" : "neutral"} sub={x.summary.overdue > 0 ? `${money(x.summary.overdue)} overdue` : "Nothing overdue"} />
+        {x.summary.profit !== undefined ? <Stat label="Profit on their invoices" value={money(x.summary.profit)} tone={x.summary.profit < 0 ? "bad" : "good"} sub={x.summary.margin_bp != null ? `Margin ${pct(x.summary.margin_bp)} · stock cost ${money(x.summary.cost)}` : undefined} /> : <div />}
+      </div>
+    </Card>
+  );
+  const productTable = (x: any, who: string) => x && (
+    <Card title={who} padded={false}>{x.products.length ? <TableWrap><table className="table">
+      <thead><tr><th>Product</th><th className="num">Qty</th><th className="num">Amount</th>{x.summary.profit !== undefined && <><th className="num">Cost</th><th className="num">Profit</th></>}<th className="num">Documents</th><th>Last</th></tr></thead>
+      <tbody>{x.products.map((p: any, i: number) => <tr key={i}>
+        <td>{p.item_id && can("inventory.view") ? <Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(id, p.item_id)}>{p.name}</Link> : p.name}</td>
+        <td className="num">{qty(p.qty_milli)} {p.unit ?? ""}</td><td className="num">{money(p.amount)}</td>
+        {x.summary.profit !== undefined && <><td className="num">{p.cost ? money(p.cost) : "—"}</td><td className="num">{p.cost ? money(p.amount - p.cost) : "—"}</td></>}
+        <td className="num">{p.documents}</td><td>{fmtDate(p.last_date, df)}</td></tr>)}</tbody>
+    </table></TableWrap> : <EmptyState title="Nothing in this period" />}</Card>
+  );
   return (
     <>
       <PageHeader title={c.name} subtitle={[c.email, c.phone, c.tax_id].filter(Boolean).join(" · ")} back={{ to: `/app/${id}/${isCustomer ? "customers" : "suppliers"}`, label: isCustomer ? "Customers" : "Suppliers" }}
@@ -144,24 +175,35 @@ export function ContactView() {
           {isCustomer && can("sales.create") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
           {c.kind !== "customer" && can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}
         </>} />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="Details">
-          <dl className="space-y-2 text-sm">
-            <div><dt className="muted">Billing address</dt><dd className="whitespace-pre-line">{c.billing_address || "—"}</dd></div>
-            <div><dt className="muted">{regionLabel(c.country)}</dt><dd>{c.state_code ? (c.country === "IN" ? `${c.state_code} · ${regionName(c.country, c.state_code)}` : regionName(c.country, c.state_code)) : "—"}</dd></div>
-            <div><dt className="muted">Currency</dt><dd>{c.currency ?? settings?.company.base_currency}</dd></div>
-            <div><dt className="muted">Payment terms</dt><dd>{c.payment_terms_days} days</dd></div>
-            {c.notes && <div><dt className="muted">Notes</dt><dd className="whitespace-pre-line">{c.notes}</dd></div>}
-          </dl>
-        </Card>
-        <Card title="Documents" padded={false} className="lg:col-span-2">
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <Field label="From">{(fid) => <Input id={fid} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />}</Field>
+        <Field label="To">{(fid) => <Input id={fid} type="date" value={to} onChange={(e) => setTo(e.target.value)} />}</Field>
+        <Button variant="secondary" onClick={() => setParams((sp) => { if (from) sp.set("from", from); else sp.delete("from"); if (to) sp.set("to", to); else sp.delete("to"); return sp; })}>Apply</Button>
+        {(params.get("from") || params.get("to")) && <Button variant="ghost" onClick={() => { setFrom(""); setTo(""); setParams((sp) => { sp.delete("from"); sp.delete("to"); return sp; }); }}>All dates</Button>}
+      </div>
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "summary", label: "Summary" }, { value: "documents", label: "Documents" }, { value: "products", label: "Products" }, { value: "payments", label: "Payments" }]} />
+      <div className="mt-4 space-y-4">
+        {ins.error && <Alert>{ins.error}</Alert>}
+        {tab === "summary" && <>
+          {!I ? <Spinner /> : <>{side("Sales to them", I.sales, "Sold (before tax)", "Received")}{side("Purchases from them", I.purchases, "Bought (before tax)", "Paid")}</>}
+          <Card title="Details">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div><dt className="muted">Billing address</dt><dd className="whitespace-pre-line">{c.billing_address || "—"}</dd></div>
+              <div><dt className="muted">{regionLabel(c.country)}</dt><dd>{c.state_code ? (c.country === "IN" ? `${c.state_code} · ${regionName(c.country, c.state_code)}` : regionName(c.country, c.state_code)) : "—"}</dd></div>
+              <div><dt className="muted">Currency</dt><dd>{c.currency ?? settings?.company.base_currency}</dd></div>
+              <div><dt className="muted">Payment terms</dt><dd>{c.payment_terms_days} days{c.credit_limit ? ` · credit limit ${money(c.credit_limit, c.currency ?? undefined)}` : ""}</dd></div>
+              {c.notes && <div className="sm:col-span-2"><dt className="muted">Notes</dt><dd className="whitespace-pre-line">{c.notes}</dd></div>}
+            </dl>
+          </Card>
+        </>}
+        {tab === "documents" && <Card padded={false}>
           {data.documents.length ? (
             <TableWrap><table className="table">
               <thead><tr><th>Date</th><th>Document</th><th>Status</th><th className="num">Total</th><th className="num">Balance</th></tr></thead>
               <tbody>{data.documents.map((d: any) => (
                 <tr key={d.id}>
                   <td>{fmtDate(d.issue_date, df)}</td>
-                  <td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={docLink(d)}>{DOC_LABELS[d.doc_type].one} {d.number ?? "(draft)"}</Link></td>
+                  <td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={docLink(d)}>{DOC_LABELS[d.variant ?? d.doc_type]?.one ?? DOC_LABELS[d.doc_type].one} {d.number ?? "(draft)"}</Link></td>
                   <td><StatusBadge status={d.status} due={d.due_date} outstanding={["invoice", "bill"].includes(d.doc_type) ? d.total - d.amount_settled : undefined} /></td>
                   <td className="num">{money(d.total, d.currency)}</td>
                   <td className="num">{d.status === "posted" ? money(d.total - d.amount_settled, d.currency) : ""}</td>
@@ -169,9 +211,19 @@ export function ContactView() {
               ))}</tbody>
             </table></TableWrap>
           ) : <EmptyState title="No documents yet" />}
-        </Card>
+        </Card>}
+        {tab === "products" && (!I ? <Spinner /> : <>{productTable(I.sales, "Products they bought")}{productTable(I.purchases, "Products they supplied")}</>)}
+        {tab === "payments" && (!I ? <Spinner /> : <Card padded={false}>{I.payments.length ? <TableWrap><table className="table">
+          <thead><tr><th>Date</th><th>Payment</th><th>Paid by</th><th>Account</th><th>Reference</th><th className="num">Amount</th></tr></thead>
+          <tbody>{I.payments.map((p: any) => <tr key={p.id} className={p.status === "void" ? "line-through opacity-60" : ""}>
+            <td>{fmtDate(p.payment_date, df)}</td>
+            <td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={paymentPath(id, p.id)}>{p.direction === "in" ? "Receipt" : "Payment"} {p.number ?? ""}</Link></td>
+            <td><Badge color={p.subtype === "cash" ? "green" : p.subtype === "bank" ? "blue" : "gray"}>{p.subtype === "cash" ? "cash" : p.subtype === "bank" ? "bank" : "other"}</Badge>{p.method ? <span className="ml-1 text-xs muted">{p.method}</span> : null}</td>
+            <td>{p.account}</td><td className="text-xs">{p.reference ?? ""}</td>
+            <td className="num">{p.direction === "out" ? "−" : ""}{money(p.amount, p.currency)}</td></tr>)}</tbody>
+        </table></TableWrap> : <EmptyState title="No payments in this period" />}</Card>)}
       </div>
-      {editing && <ContactForm kind={isCustomer ? "customer" : "supplier"} initial={c} onClose={(nid) => { setEditing(false); if (nid) reload(); }} />}
+      {editing && <ContactForm kind={isCustomer ? "customer" : "supplier"} initial={c} onClose={(nid) => { setEditing(false); if (nid) { reload(); ins.reload(); } }} />}
     </>
   );
 }
