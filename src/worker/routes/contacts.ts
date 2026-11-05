@@ -8,6 +8,7 @@ import { newId } from "../lib/crypto";
 import { audit, branchFilter, hasPerm, requireAnyPerm, requirePerm } from "../lib/auth";
 import type { Context } from "hono";
 import { regionProblem } from "@shared/regions";
+import { contactInsights } from "../services/product360";
 import { isValidGstin, INDIA_STATES } from "@shared/tax";
 import { currencyExponent, isCurrency } from "@shared/currencies";
 
@@ -102,12 +103,23 @@ contacts.get("/:id", async (c) => {
   const dirs = [...(cust ? ["in"] : []), ...(supp ? ["out"] : [])];
   const bd = branchFilter(c, "branch_id");
   const docs = await all(c.env.DB,
-    `SELECT id, doc_type, number, issue_date, due_date, status, currency, total, amount_settled FROM documents
+    `SELECT id, doc_type, variant, number, issue_date, due_date, status, currency, total, amount_settled FROM documents
      WHERE company_id = ? AND contact_id = ? AND doc_type IN (${fam.map(() => "?").join(",") || "''"})${bd.sql} ORDER BY issue_date DESC LIMIT 100`, company.id, c.req.param("id"), ...fam, ...bd.params);
   const payments = await all(c.env.DB,
     `SELECT id, direction, number, payment_date, currency, amount, status FROM payments WHERE company_id = ? AND contact_id = ? AND direction IN (${dirs.map(() => "?").join(",") || "''"})${bd.sql} ORDER BY payment_date DESC LIMIT 100`,
     company.id, c.req.param("id"), ...dirs, ...bd.params);
   return c.json({ contact: ct, documents: docs, payments });
+});
+
+/** The customer's / supplier's page: products, payments by cash and bank, outstanding, profit (see services/product360). */
+contacts.get("/:id/insights", async (c) => {
+  const company = c.get("company");
+  const ct = await first<{ kind: string }>(c.env.DB, `SELECT kind FROM contacts WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
+  if (!ct) throw notFound("Contact");
+  const customer = ct.kind !== "supplier" && canSeeCustomers(c), supplier = ct.kind !== "customer" && canSeeSuppliers(c);
+  if (!customer && !supplier) throw notFound("Contact");
+  const date = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  return c.json(await contactInsights(c, c.req.param("id"), { from: date(c.req.query("from")), to: date(c.req.query("to")), customer, supplier }));
 });
 
 contacts.post("/", async (c) => {

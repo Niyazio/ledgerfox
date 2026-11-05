@@ -1,3 +1,4 @@
+import { productInsights } from "../services/product360";
 import { Hono } from "hono";
 import { scannedCode } from "@shared/barcode";
 import { z } from "zod";
@@ -145,6 +146,17 @@ items.get("/:id", async (c) => {
   const pos = await companyPosition(c.env.DB, company.id, c.req.param("id"));
   const cost = hasPerm(c, "items.cost") || hasPerm(c, "purchase.view") || hasPerm(c, "reports.read");
   return c.json({ item: hideCost(c, item as Record<string, unknown>), position: cost ? pos : { qty_milli: pos.qty_milli } });
+});
+
+/** The product page: stock, batches, production, sales, purchases, payments and profit (see services/product360). */
+items.get("/:id/insights", async (c) => {
+  requirePerm(c, "inventory.view");
+  const company = c.get("company");
+  const item = await first(c.env.DB, `SELECT * FROM items WHERE id = ? AND company_id = ?`, c.req.param("id"), company.id);
+  if (!item) throw notFound("Item");
+  const date = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  const insights = await productInsights(c, c.req.param("id"), { from: date(c.req.query("from")), to: date(c.req.query("to")) });
+  return c.json({ item: hideCost(c, item as Record<string, unknown>), ...insights });
 });
 
 items.post("/", async (c) => {
