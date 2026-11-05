@@ -18,6 +18,7 @@ import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner, RenewGate, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { ThemePicker } from "./ThemePicker";
+import { InstallAppButton } from "./InstallApp";
 import { DesktopLicenceBanner } from "../pages/DesktopPlan";
 import { setPracticeExports } from "../lib/csv";
 import { rememberCompany } from "../lib/lastCompany";
@@ -331,6 +332,7 @@ function Shell() {
             <div className="flex items-center justify-between px-4 py-3"><Wordmark brand={me?.brand} />
               <button onClick={() => setMobileOpen(false)} aria-label="Close menu" className="rounded p-1 hover:bg-[var(--surface-2)]"><X className="h-5 w-5" /></button></div>
             <Sidebar onNavigate={() => setMobileOpen(false)} />
+            <div className="px-4 pb-1"><InstallAppButton className="w-full justify-center" /></div>
             <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-2 text-sm"><span className="muted">Theme &amp; updates</span><span className="flex items-center gap-1"><ThemePicker /><UpdateCenter /></span></div>
           </aside>
         </div>
@@ -346,6 +348,7 @@ function Shell() {
             <OfflineStatus companyId={companyId} />
             {/* On phones: keyboard shortcuts are not needed, and theme / updates move into the menu, so the bar fits. */}
             <div className="hidden items-center gap-1 sm:flex">
+              <InstallAppButton oneClickOnly />
               <Shortcuts items={GOTO_ITEMS} />
               <UpdateCenter />
             </div>
