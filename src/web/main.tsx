@@ -2,6 +2,8 @@ import { StrictMode, Suspense, lazy, type ComponentType, type ReactNode } from "
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import "./styles.css";
+// Catches the browser's install offer as early as possible (it can arrive before any page shows a button).
+import "./lib/install";
 import { SessionProvider, useSession } from "./lib/session";
 import { Spinner, ToastProvider } from "./components/ui";
 import { CompanyLayout } from "./components/Layout";
