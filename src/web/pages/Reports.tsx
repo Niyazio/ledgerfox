@@ -13,6 +13,7 @@ import { api } from "../lib/api";
 import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
 import { printPage } from "../lib/download";
+import { contactPath, journalSourcePath, ledgerPath, productPath, sourceName } from "../lib/links";
 
 const REPORTS = [
   { key: "cash-book", title: "Cash book / Bank book", group: "Daily tracking", desc: "Every receipt and payment through cash or bank accounts with a running balance; CSV and PDF." },
@@ -61,6 +62,9 @@ export function ReportIndex() {
     </>
   );
 }
+
+/** The branch chosen in the top bar ("&branch_id=…"), for links that keep it. */
+const branchOf = (q: string) => new URLSearchParams(q.replace(/^&/, "")).get("branch_id");
 
 function useRange(kind: "range" | "asof" = "range") {
   const { settings } = useCompany();
@@ -202,7 +206,7 @@ export function DailyReport() {
 }
 
 export function TrialBalance() {
-  const { path, money, settings, branchQuery } = useCompany();
+  const { path, money, settings, branchQuery, id } = useCompany();
   const { from, to, controls } = useRange();
   const r = useApi<any>(path(`/reports/trial-balance?from=${from}&to=${to}${branchQuery}`));
   const cur = settings?.company.base_currency ?? "INR";
@@ -214,7 +218,7 @@ export function TrialBalance() {
       {d && (d.rows.length ? <>
         <TableWrap><table className="table">
           <thead><tr><th>Code</th><th>Account</th><th className="num">Opening</th><th className="num">Debit</th><th className="num">Credit</th><th className="num">Closing Dr</th><th className="num">Closing Cr</th></tr></thead>
-          <tbody>{d.rows.map((x: any) => <tr key={x.id}><td className="font-mono text-xs">{x.code}</td><td>{x.name}</td><td className="num">{money(x.opening)}</td><td className="num">{money(x.debit)}</td><td className="num">{money(x.credit)}</td><td className="num">{x.closing_debit ? money(x.closing_debit) : ""}</td><td className="num">{x.closing_credit ? money(x.closing_credit) : ""}</td></tr>)}</tbody>
+          <tbody>{d.rows.map((x: any) => <tr key={x.id}><td className="font-mono text-xs">{x.code}</td><td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={ledgerPath(id, x.id, from, to, { branch_id: branchOf(branchQuery) })}>{x.name}</Link></td><td className="num">{money(x.opening)}</td><td className="num">{money(x.debit)}</td><td className="num">{money(x.credit)}</td><td className="num">{x.closing_debit ? money(x.closing_debit) : ""}</td><td className="num">{x.closing_credit ? money(x.closing_credit) : ""}</td></tr>)}</tbody>
           <tfoot><tr><td colSpan={3}>Total</td><td className="num">{money(d.totals.debit)}</td><td className="num">{money(d.totals.credit)}</td><td className="num">{money(d.totals.closing_debit)}</td><td className="num">{money(d.totals.closing_credit)}</td></tr></tfoot>
         </table></TableWrap>
         <Check ok={d.balanced} okText="Debits equal credits." badText="Trial balance does not balance — please report this." />
@@ -224,7 +228,7 @@ export function TrialBalance() {
 }
 
 export function ProfitLoss() {
-  const { path, money, settings, branchQuery } = useCompany();
+  const { path, money, settings, branchQuery, id } = useCompany();
   const { from, to, controls, params, set } = useRange();
   const dims = ["department_id", "project_id", "cost_centre_id", "branch_id"].map((k) => params.get(k) ? `&${k}=${params.get(k)}` : "").join("");
   const r = useApi<any>(path(`/reports/profit-loss?from=${from}&to=${to}${dims}${params.get("branch_id") ? "" : branchQuery}`));
@@ -252,7 +256,8 @@ export function ProfitLoss() {
             {d.sections.map((s: any) => (
               <Fragment key={s.key}>
                 <tr><td colSpan={2} className="bg-[var(--surface-2)] font-semibold">{s.label}</td></tr>
-                {s.lines.map((l: any) => <tr key={l.id}><td className="pl-6"><span className="font-mono text-xs muted">{l.code}</span> {l.name}</td><td className="num">{money(l.amount)}</td></tr>)}
+                {s.lines.map((l: any) => <tr key={l.id}><td className="pl-6"><span className="font-mono text-xs muted">{l.code}</span> <Link className="hover:underline" to={ledgerPath(id, l.id, from, to, { branch_id: params.get("branch_id") ?? branchOf(branchQuery) })}>{l.name}</Link></td>
+                  <td className="num"><Link className="hover:underline" to={ledgerPath(id, l.id, from, to, { branch_id: params.get("branch_id") ?? branchOf(branchQuery) })}>{money(l.amount)}</Link></td></tr>)}
                 <tr className="font-medium"><td>Total {s.label.toLowerCase()}</td><td className="num">{money(s.total)}</td></tr>
                 {s.key === "cogs" && <Row label="Gross profit" value={d.gross_profit} strong />}
                 {s.key === "operating_expense" && <Row label="Operating profit" value={d.operating_profit} strong />}
@@ -268,7 +273,8 @@ export function ProfitLoss() {
 }
 
 export function BalanceSheet() {
-  const { path, money, settings, branchQuery } = useCompany();
+  const { path, money, settings, branchQuery, id, accounts } = useCompany();
+  const real = new Set(accounts.map((a) => a.id));
   const { asOf, controls } = useRange("asof");
   const r = useApi<any>(path(`/reports/balance-sheet?as_of=${asOf}${branchQuery}`));
   const d = r.data;
@@ -276,7 +282,12 @@ export function BalanceSheet() {
   const Section = ({ title, s }: { title: string; s: any }) => (
     <>
       <tr><td colSpan={2} className="bg-[var(--surface-2)] font-semibold">{title}</td></tr>
-      {s.lines.map((l: any) => <tr key={l.id}><td className="pl-6"><span className="font-mono text-xs muted">{l.code}</span> {l.name}</td><td className="num">{money(l.amount)}</td></tr>)}
+      {s.lines.map((l: any) => {
+        // Each figure opens its account's ledger for the financial year up to the date (opening balance included).
+        const to = real.has(l.id) ? ledgerPath(id, l.id, fyStart(settings?.company.fiscal_year_start_month ?? 4, asOf), asOf, { branch_id: branchOf(branchQuery) }) : null;
+        return <tr key={l.id}><td className="pl-6"><span className="font-mono text-xs muted">{l.code}</span> {to ? <Link className="hover:underline" to={to}>{l.name}</Link> : l.name}</td>
+          <td className="num">{to ? <Link className="hover:underline" to={to}>{money(l.amount)}</Link> : money(l.amount)}</td></tr>;
+      })}
       <tr className="font-semibold"><td>Total {title.toLowerCase()}</td><td className="num">{money(s.total)}</td></tr>
     </>
   );
@@ -336,11 +347,13 @@ export function GeneralLedger() {
   const { path, money, id, settings } = useCompany();
   const { from, to, controls, params, set } = useRange();
   const accountId = params.get("account_id") ?? "";
-  const r = useApi<any>(accountId ? path(`/reports/general-ledger?account_id=${accountId}&from=${from}&to=${to}`) : null);
+  const branchId = params.get("branch_id");
+  const r = useApi<any>(accountId ? path(`/reports/general-ledger?account_id=${accountId}&from=${from}&to=${to}${branchId ? `&branch_id=${branchId}` : ""}`) : null);
+  const branchName = branchId ? settings?.branches?.find((b: any) => b.id === branchId)?.name : null;
   const d = r.data;
   const cur = settings?.company.base_currency ?? "INR";
   return (
-    <Shell title={d ? `Ledger: ${d.account.code} ${d.account.name}` : "General ledger"} subtitle={`${fmtDate(from)} to ${fmtDate(to)}`}
+    <Shell title={d ? `Ledger: ${d.account.code} ${d.account.name}` : "General ledger"} subtitle={`${fmtDate(from)} to ${fmtDate(to)}${branchName ? ` · branch ${branchName}` : ""}`}
       controls={<><div className="min-w-[16rem]"><Field label="Account">{(fid) => <AccountSelect id={fid} value={accountId} onChange={(v) => set("account_id", v)} />}</Field></div>{controls}</>}
       onCsv={d ? () => downloadCsv(`ledger-${d.account.code}-${from}-${to}.csv`, ["Date", "Entry", "Memo", "Contact", "Debit", "Credit", "Balance"], [["", "", "Opening balance", "", "", "", toInput(d.opening, cur)], ...d.lines.map((l: any) => [l.entry_date, l.entry_number, l.description ?? l.memo, l.contact_name, toInput(l.debit, cur), toInput(l.credit, cur), toInput(l.balance, cur)])]) : undefined}>
       {!accountId ? <EmptyState title="Choose an account" /> : <>
@@ -352,7 +365,11 @@ export function GeneralLedger() {
             {d.lines.map((l: any, i: number) => (
               <tr key={i}><td className="whitespace-nowrap">{fmtDate(l.entry_date, settings?.company.date_format)}</td>
                 <td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${l.entry_id}`}>{l.entry_number}</Link></td>
-                <td>{l.description ?? l.memo}{l.contact_name && <span className="block text-xs muted">{l.contact_name}</span>}</td>
+                <td>{journalSourcePath(id, l.source_type, l.source_id)
+                  ? <Link className="font-medium text-brand-700 hover:underline dark:text-brand-300" to={journalSourcePath(id, l.source_type, l.source_id)!}>{sourceName(l.source_type)}{l.source_number ? ` ${l.source_number}` : ""}</Link>
+                  : l.source_type ? <span className="font-medium">{sourceName(l.source_type)}</span> : null}
+                  {(l.description ?? l.memo) && (l.description ?? l.memo).toLowerCase() !== (l.source_type ?? "").replace(/_/g, " ") && <span className="block">{l.description ?? l.memo}</span>}
+                  {l.contact_name && (l.contact_id ? <Link className="block text-xs muted hover:underline" to={contactPath(id, l.contact_id)}>{l.contact_name}</Link> : <span className="block text-xs muted">{l.contact_name}</span>)}</td>
                 <td className="num">{l.debit ? money(l.debit) : ""}</td><td className="num">{l.credit ? money(l.credit) : ""}</td><td className="num">{money(l.balance)}</td></tr>
             ))}
           </tbody>
@@ -385,7 +402,7 @@ export function Aging({ kind }: { kind: "receivable" | "payable" }) {
         <h3 className="mt-6 text-sm font-semibold">Open documents</h3>
         <TableWrap><table className="table mt-2 text-sm">
           <thead><tr><th>Contact</th><th>Number</th><th>Date</th><th>Due</th><th className="num">Days overdue</th><th className="num">Outstanding</th></tr></thead>
-          <tbody>{d.documents.map((x: any) => <tr key={x.id}><td>{x.contact_name}</td><td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/${kind === "receivable" ? "sales/invoice" : "purchases/bill"}/${x.id}`}>{x.number}</Link></td><td>{fmtDate(x.issue_date)}</td><td>{fmtDate(x.due_date)}</td><td className="num">{x.days_overdue}</td><td className="num">{money(x.outstanding, x.currency)}</td></tr>)}</tbody>
+          <tbody>{d.documents.map((x: any) => <tr key={x.id}><td><Link className="hover:underline" to={contactPath(id, x.contact_id)}>{x.contact_name}</Link></td><td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/${kind === "receivable" ? "sales/invoice" : "purchases/bill"}/${x.id}`}>{x.number}</Link></td><td>{fmtDate(x.issue_date)}</td><td>{fmtDate(x.due_date)}</td><td className="num">{x.days_overdue}</td><td className="num">{money(x.outstanding, x.currency)}</td></tr>)}</tbody>
         </table></TableWrap>
       </> : <EmptyState title="Nothing outstanding" />)}
       {d && <Check ok={d.unreconciled_difference === 0} okText={`Matches the ${kind === "receivable" ? "Accounts Receivable" : "Accounts Payable"} ledger balance (${money(d.ledger_balance)}).`}
@@ -431,7 +448,7 @@ export function Statement() {
 }
 
 export function SimpleTotals({ kind }: { kind: "sales-by-customer" | "purchases-by-supplier" }) {
-  const { path, money, settings, branchQuery } = useCompany();
+  const { path, money, settings, branchQuery, id } = useCompany();
   const { from, to, controls } = useRange();
   const r = useApi<any>(path(`/reports/${kind}?from=${from}&to=${to}${branchQuery}`));
   const cur = settings?.company.base_currency ?? "INR";
@@ -442,7 +459,7 @@ export function SimpleTotals({ kind }: { kind: "sales-by-customer" | "purchases-
       <Loading r={r} />
       {r.data && (r.data.rows.length ? <TableWrap><table className="table">
         <thead><tr><th>{sales ? "Customer" : "Supplier"}</th><th className="num">{sales ? "Invoices" : "Bills"}</th><th className="num">Total</th></tr></thead>
-        <tbody>{r.data.rows.map((x: any) => <tr key={x.id}><td>{x.name}</td><td className="num">{x.invoices ?? x.bills}</td><td className="num">{money(x.gross_base)}</td></tr>)}</tbody>
+        <tbody>{r.data.rows.map((x: any) => <tr key={x.id}><td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={contactPath(id, x.id)}>{x.name}</Link></td><td className="num">{x.invoices ?? x.bills}</td><td className="num">{money(x.gross_base)}</td></tr>)}</tbody>
         <tfoot><tr><td colSpan={2}>Total</td><td className="num">{money(r.data.rows.reduce((t: number, x: any) => t + x.gross_base, 0))}</td></tr></tfoot>
       </table></TableWrap> : <EmptyState title="No posted documents in this period" />)}
     </Shell>
@@ -472,7 +489,7 @@ export function ExpenseReport() {
 }
 
 export function InventoryValuation() {
-  const { path, money, settings } = useCompany();
+  const { path, money, settings, id } = useCompany();
   const { asOf, controls } = useRange("asof");
   const r = useApi<any>(path(`/reports/inventory-valuation?as_of=${asOf}`));
   const d = r.data;
@@ -484,7 +501,7 @@ export function InventoryValuation() {
       {d && (d.items.length ? <>
         <TableWrap><table className="table">
           <thead><tr><th>Item</th><th>SKU</th><th className="num">Quantity</th><th className="num">Avg cost</th><th className="num">Value</th></tr></thead>
-          <tbody>{d.items.map((x: any) => <tr key={x.item_id}><td>{x.name}{x.below_reorder && <span className="ml-2 text-xs text-amber-600">reorder</span>}</td><td className="font-mono text-xs">{x.sku}</td><td className="num">{qty(x.qty_milli)} {x.unit}</td><td className="num">{money(x.avg_cost)}</td><td className="num">{money(x.value)}</td></tr>)}</tbody>
+          <tbody>{d.items.map((x: any) => <tr key={x.item_id}><td><Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(id, x.item_id)}>{x.name}</Link>{x.below_reorder && <span className="ml-2 text-xs text-amber-600">reorder</span>}</td><td className="font-mono text-xs">{x.sku}</td><td className="num">{qty(x.qty_milli)} {x.unit}</td><td className="num">{money(x.avg_cost)}</td><td className="num">{money(x.value)}</td></tr>)}</tbody>
           <tfoot><tr><td colSpan={4}>Total stock value</td><td className="num">{money(d.stock_value)}</td></tr></tfoot>
         </table></TableWrap>
         <Check ok={d.reconciles} okText={`Matches the Inventory ledger balance (${money(d.ledger_value)}).`} badText={`Inventory ledger (${money(d.ledger_value)}) differs from stock value by ${money(d.difference)} — check manual journals to the Inventory account.`} />
