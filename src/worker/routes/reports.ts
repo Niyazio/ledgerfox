@@ -132,7 +132,7 @@ reports.get("/general-ledger", async (c) => {
   const accountId = c.req.query("account_id");
   if (!accountId) throw badRequest("account_id is required");
   consolidatedOnly(c);
-  const r = await R.generalLedger(c.env.DB, c.get("company"), accountId, from, to, c.req.query("contact_id") || null);
+  const r = await R.generalLedger(c.env.DB, c.get("company"), accountId, from, to, c.req.query("contact_id") || null, c.req.query("branch_id") || null);
   if (!r) throw notFound("Account");
   return c.json(r);
 });

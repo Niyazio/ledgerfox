@@ -197,18 +197,25 @@ function labelForAdjustment(name: string, subtype: string, effect: number) {
   return `${dir} in ${name}`;
 }
 
-export async function generalLedger(db: D1Database, company: CompanyRow, accountId: string, from: string, to: string, contactId?: string | null) {
+export async function generalLedger(db: D1Database, company: CompanyRow, accountId: string, from: string, to: string, contactId?: string | null, branchId?: string | null) {
   const acc = await first<{ id: string; code: string; name: string; type: string }>(db, `SELECT id, code, name, type FROM accounts WHERE id = ? AND company_id = ?`, accountId, company.id);
   if (!acc) return null;
-  const extra = contactId ? " AND l.contact_id = ?" : "";
+  // Optional narrowing: one contact (statements), one branch (a branch's profit & loss).
+  const extra = `${contactId ? " AND l.contact_id = ?" : ""}${branchId ? " AND e.branch_id = ?" : ""}`;
+  const extraParams = [...(contactId ? [contactId] : []), ...(branchId ? [branchId] : [])];
   const op = await first<{ b: number }>(db,
     `SELECT COALESCE(SUM(l.debit - l.credit),0) AS b FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id
-     WHERE e.company_id = ? AND e.status = 'posted' AND l.account_id = ? AND e.entry_date < ?${extra}`, ...(contactId ? [company.id, accountId, from, contactId] : [company.id, accountId, from]));
-  const lines = await all<{ entry_id: string; entry_number: string; entry_date: string; memo: string | null; description: string | null; debit: number; credit: number; contact_name: string | null; source_type: string | null; source_id: string | null }>(db,
-    `SELECT e.id AS entry_id, e.entry_number, e.entry_date, e.memo, l.description, l.debit, l.credit, ct.name AS contact_name, e.source_type, e.source_id
+     WHERE e.company_id = ? AND e.status = 'posted' AND l.account_id = ? AND e.entry_date < ?${extra}`, company.id, accountId, from, ...extraParams);
+  // Each line also names its source (invoice INV-0004, receipt RCT-0002…) and its contact, so the ledger links onward.
+  const lines = await all<{ entry_id: string; entry_number: string; entry_date: string; memo: string | null; description: string | null; debit: number; credit: number; contact_id: string | null; contact_name: string | null; source_type: string | null; source_id: string | null; source_number: string | null }>(db,
+    `SELECT e.id AS entry_id, e.entry_number, e.entry_date, e.memo, l.description, l.debit, l.credit, l.contact_id, ct.name AS contact_name, e.source_type, e.source_id,
+            COALESCE(d.number, p.number, x.number) AS source_number
      FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id LEFT JOIN contacts ct ON ct.id = l.contact_id
+     LEFT JOIN documents d ON d.id = e.source_id AND e.source_type IN ('invoice','credit_note','bill','debit_note','invoice_void','credit_note_void','bill_void','debit_note_void')
+     LEFT JOIN payments p ON p.id = e.source_id AND e.source_type IN ('receipt','payment')
+     LEFT JOIN expenses x ON x.id = e.source_id AND e.source_type = 'expense'
      WHERE e.company_id = ? AND e.status = 'posted' AND l.account_id = ? AND e.entry_date BETWEEN ? AND ?${extra}
-     ORDER BY e.entry_date, e.posted_at, l.line_no LIMIT 5000`, ...(contactId ? [company.id, accountId, from, to, contactId] : [company.id, accountId, from, to]));
+     ORDER BY e.entry_date, e.posted_at, l.line_no LIMIT 5000`, company.id, accountId, from, to, ...extraParams);
   let running = op?.b ?? 0;
   const withBal = lines.map((l) => { running += l.debit - l.credit; return { ...l, balance: running }; });
   return {

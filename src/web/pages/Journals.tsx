@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { journalSourcePath, sourceName } from "../lib/links";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
@@ -209,9 +210,7 @@ export function JournalView() {
   const e = data.entry;
   const lines = data.lines as any[];
   const df = settings?.company.date_format;
-  const sourceLink = e.source_type && e.source_id ? (["invoice", "credit_note", "bill", "debit_note"].includes(e.source_type)
-    ? `/app/${id}/${["invoice", "credit_note"].includes(e.source_type) ? "sales" : "purchases"}/${e.source_type}/${e.source_id}`
-    : ["receipt", "payment"].includes(e.source_type) ? `/app/${id}/payments/view/${e.source_id}` : e.source_type === "expense" ? `/app/${id}/expenses?open=${e.source_id}` : null) : null;
+  const sourceLink = journalSourcePath(id, e.source_type, e.source_id);
   return (
     <>
       <PageHeader title={e.entry_number ?? "Draft journal"} subtitle={e.memo} back={{ to: `/app/${id}/journals`, label: "Journals" }}
@@ -240,7 +239,7 @@ export function JournalView() {
           {e.reference && <div><p className="muted">Reference</p><p>{e.reference}</p></div>}
           {e.reversal_of_id && <div><p className="muted">Reverses</p><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${e.reversal_of_id}`}>Original entry</Link></div>}
           {e.reversed_by_id && <div><p className="muted">Reversed by</p><Link className="text-brand-700 hover:underline dark:text-brand-300" to={`/app/${id}/journals/${e.reversed_by_id}`}>Reversal entry</Link></div>}
-          {sourceLink && <div><p className="muted">Source</p><Link className="text-brand-700 hover:underline dark:text-brand-300" to={sourceLink}>{e.source_type.replace(/_/g, " ")}</Link></div>}
+          {sourceLink && <div><p className="muted">Source</p><Link className="text-brand-700 hover:underline dark:text-brand-300" to={sourceLink}>{sourceName(e.source_type)}</Link></div>}
         </div>
         <TableWrap>
           <table className="table mt-5">
