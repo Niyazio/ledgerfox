@@ -15,9 +15,10 @@ import { regionsFor, regionLabel, regionProblem } from "@shared/regions";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
+import { CollectionTab } from "./Collect";
 import { TwoFactorCard } from "../components/TwoFactor";
 
-type Tab = "billing" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
+type Tab = "billing" | "collect" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -380,7 +381,7 @@ export default function Settings() {
     <>
       <PageHeader title="Settings" subtitle={`${settings.company.name} · your role: ${ROLE_LABELS[settings.role as Role]}`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, { value: "dimensions", label: "Branches & dimensions" },
+        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
         { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
@@ -398,6 +399,7 @@ export default function Settings() {
       {tab === "account" && <AccountTab />}
       {tab === "backup" && <CloudBackupTab />}
       {tab === "billing" && <PlanBillingTab />}
+      {tab === "collect" && <CollectionTab />}
     </>
   );
 }

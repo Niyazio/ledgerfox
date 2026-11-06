@@ -50,6 +50,8 @@ const ReportRouter = lazy(() => named(import("./pages/Reports"), "ReportRouter")
 const Statement = lazy(() => named(import("./pages/Reports"), "Statement"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Download = lazy(() => import("./pages/Download"));
+const PayInvoice = lazy(() => named(import("./pages/Collect"), "PayInvoice"));
+const CustomerPortal = lazy(() => named(import("./pages/Collect"), "CustomerPortal"));
 const Verify = lazy(() => import("./pages/Verify"));
 const PrintPage = lazy(() => import("./pages/Print"));
 const Payroll = lazy(() => import("./pages/Payroll"));
@@ -88,6 +90,8 @@ function App() {
       <Route path="/scan" element={<ScanOpen />} />
       <Route path="/security" element={<SecurityPage />} />
       <Route path="/verify/:token" element={<Verify />} />
+      <Route path="/pay/:token" element={<PayInvoice />} />
+      <Route path="/portal/:token" element={<CustomerPortal />} />
       <Route path="/billing/:orgId/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/billing/:orgId/invoice/:paymentId" element={<RequireAuth><BillingInvoice /></RequireAuth>} />
       <Route path="/vendor" element={<RequireAuth><VendorPanel /></RequireAuth>} />
