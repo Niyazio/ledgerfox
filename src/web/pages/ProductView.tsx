@@ -5,6 +5,7 @@ import { useApi } from "../lib/hooks";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, PageHeader, Spinner, Stat, TableWrap, Tabs } from "../components/ui";
 import { DOC_LABELS, fmtDate, pct, qty } from "../lib/format";
 import { contactPath, docPath, sourcePath } from "../lib/links";
+import { CustomValuesList } from "../components/CustomFields";
 
 type Tab = "overview" | "stock" | "batches" | "production" | "sales" | "deliveries" | "purchases" | "payments";
 
@@ -110,6 +111,7 @@ export function ProductView() {
       <Tabs value={tab} onChange={setTab} tabs={tabs} />
       <div className="mt-4 space-y-4">
         {tab === "overview" && <>
+          <CustomValuesList entity="item" entityId={it.id} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Sale price" value={money(it.sale_price)} sub={cost && it.purchase_price != null ? `Purchase price ${money(it.purchase_price)}` : undefined} />
             {it.track_inventory ? <Stat label="In stock" value={q(data.stock.qty_milli)} sub={cost ? `Value ${money(data.stock.value)} · average cost ${money(data.stock.avg_cost)}` : undefined} tone={it.reorder_level_milli > 0 && data.stock.qty_milli <= it.reorder_level_milli ? "bad" : "neutral"} /> : <Stat label="Type" value={it.kind === "service" ? "Service" : "Not tracked in stock"} />}

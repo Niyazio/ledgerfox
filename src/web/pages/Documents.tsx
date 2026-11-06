@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer } from "lucide-react";
 import { productPath } from "../lib/links";
+import { CustomFieldInputs, CustomValuesList, saveCustomValues } from "../components/CustomFields";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, ApiError, errorMessage } from "../lib/api";
@@ -120,6 +121,7 @@ export function DocumentForm() {
   const [contactId, setContactId] = useState(params.get("contact") ?? "");
   const [h, setH] = useState({ issue_date: today(), due_date: "", currency: "", fx_rate: "", place_of_supply: "", reference: "", notes: "", terms: settings?.company.invoice_terms ?? "", warehouse_id: "", branch_id: branch, related_doc_id: "" });
   const [rcm, setRcm] = useState(false);
+  const [custom, setCustom] = useState<Record<string, string>>({});
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [addingContact, setAddingContact] = useState(false);
   const [contactsKey, setContactsKey] = useState(0);
@@ -213,6 +215,7 @@ export function DocumentForm() {
     const r = await run(async () => {
       const saved = docId ? await api.put(path(`/documents/${docId}`), body) : await postOrQueue(path("/documents"), body, { label: `${label.one}${h.reference ? ` ${h.reference}` : ""} (${h.issue_date})`, then: issue ? "/issue" : undefined });
       if (isQueued(saved)) return saved;
+      await saveCustomValues(path, sales ? "sales" : "purchase", saved.id, custom);
       for (const w of saved.warnings ?? []) toast("info", w);
       if (issue) await api.post(path(`/documents/${saved.id}/issue`));
       return saved;
@@ -239,6 +242,7 @@ export function DocumentForm() {
           )}</Field>
           <Field label="Date" required>{(fid) => <Input id={fid} type="date" value={h.issue_date} onChange={(e) => setH({ ...h, issue_date: e.target.value })} />}</Field>
           {(docType === "invoice" || docType === "bill") && <Field label="Due date" hint={contact ? `Default: ${contact.payment_terms_days} days` : undefined}>{(fid) => <Input id={fid} type="date" value={h.due_date} onChange={(e) => setH({ ...h, due_date: e.target.value })} />}</Field>}
+          <CustomFieldInputs entity={sales ? "sales" : "purchase"} entityId={docId} values={custom} onChange={setCustom} />
           <Field label={docType === "bill" ? "Supplier invoice no." : "Reference / PO no."}>{(fid) => <Input id={fid} value={h.reference} onChange={(e) => setH({ ...h, reference: e.target.value })} />}</Field>
           {india && sales && <Field label="Place of supply" hint={mode === "inter" ? "Inter-state → IGST" : "Intra-state → CGST + SGST"}>{(fid) => (
             <Select id={fid} value={h.place_of_supply} onChange={(e) => setH({ ...h, place_of_supply: e.target.value })}>
@@ -459,6 +463,7 @@ export function DocumentView() {
             <p className="text-sm"><span className="muted">Date</span> {fmtDate(d.issue_date, df)}</p>
             {d.due_date && <p className="text-sm"><span className="muted">Due</span> {fmtDate(d.due_date, df)}</p>}
             {d.reference && <p className="text-sm"><span className="muted">Ref</span> {d.reference}</p>}
+            <CustomValuesList entity={SALES_DOCS.includes(d.doc_type) ? "sales" : "purchase"} entityId={d.id} className="mt-1" />
             {d.related_number && <p className="text-sm"><span className="muted">Against</span> {d.related_number}</p>}
             {data.gst_refs?.irn && <p className="text-xs"><span className="muted">IRN</span> <span className="font-mono">{data.gst_refs.irn.slice(0, 12)}…</span> {data.gst_refs.irn_cancelled ? <Badge color="red">cancelled</Badge> : <span className="muted">Ack {data.gst_refs.ack_no}</span>}</p>}
             {data.gst_refs?.ewb_no && <p className="text-xs"><span className="muted">E-way bill</span> <span className="font-mono">{data.gst_refs.ewb_no}</span>{data.gst_refs.ewb_valid_until ? <span className="muted"> · valid until {data.gst_refs.ewb_valid_until.slice(0, 10)}</span> : null}</p>}

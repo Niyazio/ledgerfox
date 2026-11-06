@@ -10,6 +10,7 @@ import {
   payableInvoice, portalToken, secretsReady, settleOnlineOrder,
 } from "../services/collect";
 import { emailOn, siteUrl } from "../services/email";
+import { paymentAutomation, trigger } from "../services/customise";
 
 // ── Company: settings for online payments and reminders; portal links ──
 
@@ -118,6 +119,7 @@ payPublic.post("/:token/confirm", async (c) => {
   if (!op || op.document_id !== doc.id) throw badRequest("This payment is not for this invoice");
   if (!(await checkCheckoutSignature(c.env, doc.company_id, input.razorpay_order_id, input.razorpay_payment_id, input.razorpay_signature))) throw badRequest("Payment could not be verified");
   const r = await settleOnlineOrder(c, input.razorpay_order_id, input.razorpay_payment_id);
+  if (!r.already) { await paymentAutomation(c, r.payment_id, "invoice.paid_online"); await paymentAutomation(c, r.payment_id); }
   return c.json({ ok: true, already: r.already });
 });
 
@@ -131,7 +133,10 @@ payPublic.post("/webhook/:companyId", async (c) => {
   const p = evt.payload?.payment?.entity;
   if ((evt.event === "payment.captured" || evt.event === "order.paid") && p?.order_id) {
     const op = await first<{ company_id: string }>(c.env.DB, `SELECT company_id FROM online_payments WHERE provider_order_id = ?`, p.order_id);
-    if (op && op.company_id === companyId) await settleOnlineOrder(c, p.order_id, p.id);
+    if (op && op.company_id === companyId) {
+      const r = await settleOnlineOrder(c, p.order_id, p.id);
+      if (!r.already) { await paymentAutomation(c, r.payment_id, "invoice.paid_online"); await paymentAutomation(c, r.payment_id); }
+    }
   }
   return c.json({ ok: true });
 });
@@ -192,6 +197,9 @@ portalPublic.post("/:token/quotes/:docId/:action{accept|decline}", async (c) => 
     c.env.DB.prepare(`UPDATE documents SET status = ?, updated_at = ? WHERE id = ? AND status = 'open'`).bind(status, new Date().toISOString(), c.req.param("docId")),
     audit(c, `document.${status}_by_customer`, "document", c.req.param("docId"), { number: d.number, via: "portal" }),
   ]);
+  const x = await first<{ total: number; total_base: number; currency: string; contact_name: string }>(c.env.DB,
+    `SELECT d.total, d.total_base, d.currency, ct.name AS contact_name FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE d.id = ?`, c.req.param("docId"));
+  await trigger(c, status === "accepted" ? "quote.accepted" : "quote.declined", { id: c.req.param("docId"), number: d.number, contact_id: l.contact_id, ...x });
   return c.json({ status });
 });
 

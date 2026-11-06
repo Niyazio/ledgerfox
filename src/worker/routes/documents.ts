@@ -1,3 +1,4 @@
+import { trigger } from "../services/customise";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -272,6 +273,12 @@ documents.post("/:id/issue", async (c) => {
     }
   }
   const number = await issueDocument(c, id);
+  // Automations: "when an invoice is issued / a supplier bill is entered…".
+  if (d.doc_type === "invoice" || d.doc_type === "bill") {
+    const x = await first<{ number: string; issue_date: string; total: number; total_base: number; currency: string; contact_id: string; contact_name: string }>(c.env.DB,
+      `SELECT d.number, d.issue_date, d.total, d.total_base, d.currency, d.contact_id, ct.name AS contact_name FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE d.id = ?`, id);
+    if (x) await trigger(c, d.doc_type === "invoice" ? "invoice.issued" : "bill.issued", { id, number: x.number, amount: x.total, amount_base: x.total_base, currency: x.currency, contact_id: x.contact_id, contact_name: x.contact_name, date: x.issue_date });
+  }
   return c.json({ ok: true, number });
 });
 
@@ -324,6 +331,11 @@ documents.post("/:id/status", async (c) => {
     stmt(c.env.DB, `UPDATE documents SET status = ? WHERE id = ? AND company_id = ?`, input.status, c.req.param("id"), company.id),
     audit(c, `${d.doc_type}.status`, "document", c.req.param("id"), input),
   ]);
+  if (d.doc_type === "quote" && (input.status === "accepted" || input.status === "declined")) {
+    const x = await first<{ number: string; total: number; total_base: number; currency: string; contact_id: string; contact_name: string }>(c.env.DB,
+      `SELECT d.number, d.total, d.total_base, d.currency, d.contact_id, ct.name AS contact_name FROM documents d JOIN contacts ct ON ct.id = d.contact_id WHERE d.id = ?`, c.req.param("id"));
+    if (x) await trigger(c, input.status === "accepted" ? "quote.accepted" : "quote.declined", { id: c.req.param("id"), ...x });
+  }
   return c.json({ ok: true });
 });
 

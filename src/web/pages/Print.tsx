@@ -17,6 +17,7 @@ import { amountInWords } from "@shared/words";
 import { currencyExponent } from "@shared/currencies";
 import { printPage, saveFile, shareFile } from "../lib/download";
 import { elementToPdf } from "../lib/pdf";
+import { showValue, type CustomValue } from "../components/CustomFields";
 
 /** Paper formats. Thermal formats suit 80 mm and 58 mm receipt printers (POS, restaurant, retail counters). */
 export const FORMATS = {
@@ -151,6 +152,9 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
   const { path, money, settings } = useCompany();
   const { data, error } = useApi<any>(path(`/documents/${id}`));
   const d = data?.document;
+  // Custom fields chosen to appear on printed documents (Settings → Customise).
+  const cv = useApi<{ values: CustomValue[] }>(d ? path(`/custom-values/${SALES_DOCS.includes(d.doc_type) ? "sales" : "purchase"}/${id}`) : null);
+  const printFields = (cv.data?.values ?? []).filter((v) => v.show_on_print);
   const co = settings!.company;
   const india = co.country === "IN";
   const cur = d?.currency ?? co.base_currency;
@@ -249,6 +253,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
                 {co.country === "SA" && <Meta k="Hijri / الهجري" v={hijri(d.issue_date)} />}
                 {d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}
                 {d.reference && <Meta k={L("Reference")} v={d.reference} />}
+                {printFields.map((f) => <Meta key={f.field_id} k={f.label} v={showValue(f, df)} />)}
               </dl>
             </div>
           </header>
