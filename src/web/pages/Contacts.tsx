@@ -12,6 +12,8 @@ import { countryPack } from "@shared/countries";
 import { DOC_LABELS, fmtDate, pct, qty, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
 import { docPath, paymentPath, productPath } from "../lib/links";
+import { PortalLinkButton } from "./Collect";
+import { useSession } from "../lib/session";
 
 export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "supplier"; initial?: any; onClose: (id?: string) => void }) {
   const { path, settings, can } = useCompany();
@@ -130,6 +132,7 @@ type ContactTab = "summary" | "documents" | "products" | "payments";
 export function ContactView() {
   const { path, money, id, settings, can } = useCompany();
   const { contactId } = useParams();
+  const { me } = useSession();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as ContactTab) || "summary";
   const { data, error, loading, reload } = useApi<any>(path(`/contacts/${contactId}`));
@@ -171,6 +174,7 @@ export function ContactView() {
       <PageHeader title={c.name} subtitle={[c.email, c.phone, c.tax_id].filter(Boolean).join(" · ")} back={{ to: `/app/${id}/${isCustomer ? "customers" : "suppliers"}`, label: isCustomer ? "Customers" : "Suppliers" }}
         actions={<>
           <LinkButton variant="secondary" to={`/app/${id}/reports/statement/${c.id}`}>Statement</LinkButton>
+          {isCustomer && me?.edition === "cloud" && <PortalLinkButton contactId={c.id} name={c.name} phone={c.phone} email={c.email} />}
           {can(isCustomer ? "customers.write" : "suppliers.write") && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
           {isCustomer && can("sales.create") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
           {c.kind !== "customer" && can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}

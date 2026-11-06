@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import QRCode from "qrcode";
-import { BadgeCheck, Printer, ShieldX, Smartphone } from "lucide-react";
+import { BadgeCheck, CreditCard, Printer, ShieldX, Smartphone } from "lucide-react";
 import { upiLink } from "@shared/share";
 import { useApi } from "../lib/hooks";
 import { ProductCredit, Wordmark } from "../components/Layout";
@@ -17,6 +17,7 @@ interface Result {
   due_date?: string | null; balance?: number; subtotal?: number; tax_total?: number; round_off?: number; notes?: string | null; terms?: string | null;
   party_address?: string | null; party_tax_id?: string | null;
   pay?: { upi_id: string; payee: string; amount: number } | null;
+  online_pay?: boolean;
 }
 
 /** Full document view for customers who received a shared link: items, totals, balance and UPI payment. */
@@ -54,6 +55,14 @@ function SharedDocument({ data }: { data: Result }) {
         {data.kind === "Invoice" && <><div className="flex justify-between"><dt className="muted">Paid</dt><dd>{m(data.settled)}</dd></div>
           <div className="flex justify-between font-semibold"><dt>Balance due</dt><dd>{m(data.balance)}</dd></div></>}
       </dl>
+      {data.online_pay && (
+        <div className="no-print mt-5 rounded-lg border border-brand-600 bg-brand-50/40 p-4 text-center dark:bg-brand-900/20">
+          <p className="font-medium">Pay {m(data.balance)} online</p>
+          {/* A full page load: only /pay/* pages may load the payment window's script. */}
+          <a href={`${window.location.pathname.replace("/verify/", "/pay/")}`} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-800"><CreditCard className="h-4 w-4" />Pay now — UPI, card, net banking</a>
+          <p className="mt-2 text-xs muted">Secure payment by Razorpay, straight to {data.issuer.name}. It is recorded against this invoice automatically.</p>
+        </div>
+      )}
       {pay && (
         <div className="no-print mt-5 rounded-lg border border-[var(--border)] p-4 text-center">
           <p className="font-medium">Pay {m(data.pay!.amount)} by UPI</p>
