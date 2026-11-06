@@ -1,3 +1,4 @@
+import { paymentAutomation } from "../services/customise";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -100,6 +101,7 @@ payments.post("/", async (c) => {
     allocations: input.allocations.filter((a) => a.amount !== "" && a.amount !== 0 && a.amount !== "0").map((a) => ({ document_id: a.document_id, amount: minor(a.amount, exp, "allocation") })),
     tds_amount: input.tds_amount ? minor(input.tds_amount, exp, "TDS") : 0, tds_section: input.tds_section?.toUpperCase() || null,
   });
+  if (!result.duplicate) await paymentAutomation(c, result.id);
   return c.json(result, result.duplicate ? 200 : 201);
 });
 

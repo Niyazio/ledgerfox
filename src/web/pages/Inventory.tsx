@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, QrCode } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { productPath } from "../lib/links";
+import { CustomFieldInputs, saveCustomValues } from "../components/CustomFields";
 import QRCode from "qrcode";
 import { code128Svg, productQrPayload } from "@shared/barcode";
 import { saveFile } from "../lib/download";
@@ -54,15 +55,21 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
     code: initial?.code ?? "", barcode: initial?.barcode ?? "",
   });
   const { busy, error, run } = useAction();
+  const [custom, setCustom] = useState<Record<string, string>>({});
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   return (
     <Modal open wide onClose={() => onClose(false)} title={initial ? `Edit ${initial.name}` : "New product or service"}
       footer={<><Button variant="secondary" onClick={() => onClose(false)}>Cancel</Button><Button loading={busy} onClick={async () => {
         const body = { ...v, sku: v.sku || null, hsn_sac: v.hsn_sac || null, tax_code_id: v.tax_code_id || null, income_account_id: v.income_account_id || null, expense_account_id: v.expense_account_id || null, sale_price: v.sale_price || "0", purchase_price: costEditable ? v.purchase_price || "0" : undefined, code: v.code || null, barcode: v.barcode || null };
-        if (await run(() => (initial ? api.put(path(`/items/${initial.id}`), body) : api.post(path("/items"), body)))) { toast("success", "Saved"); onClose(true); }
+        if (await run(async () => {
+          const r = initial ? await api.put(path(`/items/${initial.id}`), body) : await api.post<{ id: string }>(path("/items"), body);
+          await saveCustomValues(path, "item", initial?.id ?? r.id, custom);
+          return r;
+        })) { toast("success", "Saved"); onClose(true); }
       }}>Save</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
         {error && <Alert className="sm:col-span-2">{error}</Alert>}
+        <CustomFieldInputs entity="item" entityId={initial?.id} values={custom} onChange={setCustom} />
         <Field label="Type">{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value, track_inventory: e.target.value === "goods" && v.track_inventory })}><option value="goods">Goods</option><option value="service">Service</option></Select>}</Field>
         <Field label="Name" required>{(id) => <Input id={id} value={v.name} onChange={(e) => set("name", e.target.value)} />}</Field>
         <Field label="SKU">{(id) => <Input id={id} value={v.sku} onChange={(e) => set("sku", e.target.value)} />}</Field>

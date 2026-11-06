@@ -1,5 +1,7 @@
 import { checkPracticeAccess } from "./services/education";
 import { education } from "./routes/education";
+import { collect, payPublic, portalPublic } from "./routes/collect";
+import { customise } from "./routes/customise";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { first } from "./lib/db";
@@ -62,7 +64,7 @@ app.use("*", async (c, next) => {
 app.use("/api/*", async (c, next) => {
   const m = c.req.method;
   // Razorpay's webhook carries no cookies and is authenticated by its HMAC signature instead.
-  if (c.req.path === "/api/billing/webhook") return next();
+  if (c.req.path === "/api/billing/webhook" || c.req.path.startsWith("/api/pay/webhook/")) return next();
   if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") {
     if (c.req.header("x-requested-with") !== "ledgerfox") throw new AppError(403, "CSRF", "Missing request header");
     const origin = c.req.header("origin");
@@ -106,6 +108,8 @@ app.route("/api/invitations", invitations);
 app.route("/api/verify", verifyPublic);
 app.route("/api/backups", backups);
 app.route("/api/billing", billing);
+app.route("/api/pay", payPublic);
+app.route("/api/portal", portalPublic);
 app.route("/api/education", education);
 app.route("/api/licence", licenceCloud);
 app.route("/api/desktop/licence", licenceDesktop);
@@ -193,6 +197,8 @@ company.route("/attachments", files);
 company.route("/export", exportdata);
 company.route("/payroll", payroll);
 company.route("/verify", verifyToken);
+company.route("/collection", collect);
+company.route("/", customise);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

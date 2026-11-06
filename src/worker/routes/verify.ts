@@ -11,6 +11,7 @@ import { AppError, notFound } from "../lib/errors";
 import { body } from "../lib/validate";
 import { randomToken } from "../lib/crypto";
 import { assertBranchVisible, clientIp, rateLimit, requirePerm } from "../lib/auth";
+import { onlineReady } from "../services/collect";
 import { docFamily, SALES_DOC_TYPES } from "@shared/permissions";
 
 /** Company-scoped: get (or create) the token for a document, payment or payslip. */
@@ -72,6 +73,7 @@ verifyPublic.get("/:token", async (c) => {
       ...base, due_date: d.due_date, balance, subtotal: d.subtotal, discount_total: d.discount_total, tax_total: d.tax_total, round_off: d.round_off,
       notes: d.notes, terms: d.terms, party_address: d.party_address, party_tax_id: d.party_tax_id, lines,
       issuer: { ...issuer, address: [co?.address, co?.city].filter(Boolean).join(", ") || null, phone: co?.phone ?? null, email: co?.email ?? null },
+      online_pay: d.doc_type === "invoice" && d.status === "posted" && balance > 0 && (await onlineReady(c.env, v.company_id)),
       pay: d.doc_type === "invoice" && d.status === "posted" && balance > 0 && co?.upi_id && d.currency === "INR" ? { upi_id: co.upi_id, payee: issuer.name, amount: balance } : null,
     });
   }

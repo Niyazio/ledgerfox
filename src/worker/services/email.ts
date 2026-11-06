@@ -10,7 +10,7 @@ export const emailOn = (env: Env) => Boolean(env.RESEND_API_KEY && env.EMAIL_FRO
 /** Addresses made up for username-only staff accounts cannot receive mail. */
 export const deliverable = (to: string | null | undefined) => !!to && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to) && !to.endsWith(".ledgerfox.local");
 
-export interface Mail { to: string; subject: string; text: string; html?: string }
+export interface Mail { to: string; subject: string; text: string; html?: string; replyTo?: string }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 
@@ -26,7 +26,7 @@ export async function sendMail(env: Env, mail: Mail): Promise<boolean> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html ?? textToHtml(mail.text), reply_to: env.EMAIL_REPLY_TO || undefined }),
+      body: JSON.stringify({ from: env.EMAIL_FROM, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html ?? textToHtml(mail.text), reply_to: mail.replyTo || env.EMAIL_REPLY_TO || undefined }),
     });
     if (!res.ok) console.error(JSON.stringify({ level: "error", code: "EMAIL_FAILED", status: res.status }));
     return res.ok;
