@@ -42,6 +42,7 @@ const BillingInvoice = lazy(() => named(import("./pages/Billing"), "BillingInvoi
 const VendorPanel = lazy(() => named(import("./pages/Vendor"), "VendorPanel"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const ProjectsPage = lazy(() => named(import("./pages/Extras"), "ProjectsPage"));
 const ProductView = lazy(() => named(import("./pages/ProductView"), "ProductView"));
 const Assets = lazy(() => import("./pages/Assets"));
 const Insights = lazy(() => named(import("./pages/Reports"), "Insights"));
@@ -50,6 +51,8 @@ const ReportRouter = lazy(() => named(import("./pages/Reports"), "ReportRouter")
 const Statement = lazy(() => named(import("./pages/Reports"), "Statement"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Download = lazy(() => import("./pages/Download"));
+const PayInvoice = lazy(() => named(import("./pages/Collect"), "PayInvoice"));
+const CustomerPortal = lazy(() => named(import("./pages/Collect"), "CustomerPortal"));
 const Verify = lazy(() => import("./pages/Verify"));
 const PrintPage = lazy(() => import("./pages/Print"));
 const Payroll = lazy(() => import("./pages/Payroll"));
@@ -88,6 +91,8 @@ function App() {
       <Route path="/scan" element={<ScanOpen />} />
       <Route path="/security" element={<SecurityPage />} />
       <Route path="/verify/:token" element={<Verify />} />
+      <Route path="/pay/:token" element={<PayInvoice />} />
+      <Route path="/portal/:token" element={<CustomerPortal />} />
       <Route path="/billing/:orgId/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
       <Route path="/billing/:orgId/invoice/:paymentId" element={<RequireAuth><BillingInvoice /></RequireAuth>} />
       <Route path="/vendor" element={<RequireAuth><VendorPanel /></RequireAuth>} />
@@ -109,6 +114,7 @@ function App() {
         <Route path="production" element={<Production />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="recurring" element={<Recurring />} />
+        <Route path="projects" element={<ProjectsPage />} />
         <Route path="pos" element={<Pos />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<JournalList />} />

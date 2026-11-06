@@ -1,3 +1,4 @@
+import { refreshRates } from "../services/extras";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -207,6 +208,12 @@ settings.post("/exchange-rates", async (c) => {
     audit(c, "exchange_rate.set", "exchange_rate", `${input.currency}:${input.rate_date}`, input),
   ]);
   return c.json({ ok: true }, 201);
+});
+
+/** Today's rates for the currencies this company uses, from a free public source (a rate typed today is kept). */
+settings.post("/exchange-rates/fetch", async (c) => {
+  requirePerm(c, "accounts.write");
+  return c.json(await refreshRates(c.env.DB, c.get("company")));
 });
 
 settings.get("/exchange-rates/lookup", async (c) => {

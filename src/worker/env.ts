@@ -43,6 +43,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_REPLY_TO?: string;
+  /** Worker secret (any long random text) that encrypts businesses' own payment-gateway keys stored in the database. */
+  DATA_KEY?: string;
   /** Public https address used in links inside emails, e.g. https://ledgerfox.niyazio.com */
   APP_URL?: string;
 }

@@ -12,6 +12,9 @@ import { countryPack } from "@shared/countries";
 import { DOC_LABELS, fmtDate, pct, qty, toInput } from "../lib/format";
 import { downloadCsv } from "../lib/csv";
 import { docPath, paymentPath, productPath } from "../lib/links";
+import { PortalLinkButton } from "./Collect";
+import { CustomFieldInputs, CustomValuesList, saveCustomValues } from "../components/CustomFields";
+import { useSession } from "../lib/session";
 
 export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "supplier"; initial?: any; onClose: (id?: string) => void }) {
   const { path, settings, can } = useCompany();
@@ -26,6 +29,7 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
   const priceLists = useApi<{ price_lists: { id: string; name: string; is_active: number }[] }>(can("inventory.view") ? path("/price-lists") : null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [custom, setCustom] = useState<Record<string, string>>({});
   const set = (k: string, val: unknown) => setV((p) => ({ ...p, [k]: val }));
   const save = async () => {
     setBusy(true); setError(null);
@@ -33,6 +37,7 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
       const body = { ...v, payment_terms_days: Number(v.payment_terms_days), currency: v.currency || null, state_code: v.state_code || null, tax_id: v.tax_id || null, credit_limit: v.credit_limit || null, price_list_id: priceLists.data ? v.price_list_id || null : undefined };
       const r = initial ? await api.put(path(`/contacts/${initial.id}`), body) : await postOrQueue(path("/contacts"), body, { label: `${v.kind === "supplier" ? "Supplier" : "Customer"}: ${v.name}` });
       if (isQueued(r)) { toast("info", "Saved on this device — it will be sent when you're back online"); onClose(); return; }
+      await saveCustomValues(path, "contact", initial?.id ?? r.id, custom);
       toast("success", initial ? "Saved" : `${v.kind === "supplier" ? "Supplier" : "Customer"} added`);
       onClose(initial?.id ?? r.id);
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
@@ -70,6 +75,7 @@ export function ContactForm({ kind, initial, onClose }: { kind: "customer" | "su
         <Field label="Payment terms (days)">{(id) => <Input id={id} type="number" min={0} max={365} value={v.payment_terms_days} onChange={(e) => set("payment_terms_days", e.target.value)} />}</Field>
         <Field label="Credit limit">{(id) => <Input id={id} inputMode="decimal" value={v.credit_limit} onChange={(e) => set("credit_limit", e.target.value)} />}</Field>
         {v.kind !== "supplier" && Boolean(priceLists.data?.price_lists.length) && <Field label="Price list" hint="Sets this customer's rates on invoices and at the counter">{(id) => <Select id={id} value={v.price_list_id} onChange={(e) => set("price_list_id", e.target.value)}><option value="">Normal selling prices</option>{priceLists.data!.price_lists.filter((l) => l.is_active || l.id === v.price_list_id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</Select>}</Field>}
+        <CustomFieldInputs entity="contact" entityId={initial?.id} values={custom} onChange={setCustom} />
         <Field label="Billing address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.billing_address} onChange={(e) => set("billing_address", e.target.value)} />}</Field>
         <Field label="Shipping address" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.shipping_address} onChange={(e) => set("shipping_address", e.target.value)} />}</Field>
         <Field label="Notes" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>
@@ -130,6 +136,7 @@ type ContactTab = "summary" | "documents" | "products" | "payments";
 export function ContactView() {
   const { path, money, id, settings, can } = useCompany();
   const { contactId } = useParams();
+  const { me } = useSession();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as ContactTab) || "summary";
   const { data, error, loading, reload } = useApi<any>(path(`/contacts/${contactId}`));
@@ -171,6 +178,7 @@ export function ContactView() {
       <PageHeader title={c.name} subtitle={[c.email, c.phone, c.tax_id].filter(Boolean).join(" · ")} back={{ to: `/app/${id}/${isCustomer ? "customers" : "suppliers"}`, label: isCustomer ? "Customers" : "Suppliers" }}
         actions={<>
           <LinkButton variant="secondary" to={`/app/${id}/reports/statement/${c.id}`}>Statement</LinkButton>
+          {isCustomer && me?.edition === "cloud" && <PortalLinkButton contactId={c.id} name={c.name} phone={c.phone} email={c.email} />}
           {can(isCustomer ? "customers.write" : "suppliers.write") && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
           {isCustomer && can("sales.create") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
           {c.kind !== "customer" && can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}
@@ -194,6 +202,7 @@ export function ContactView() {
               <div><dt className="muted">Payment terms</dt><dd>{c.payment_terms_days} days{c.credit_limit ? ` · credit limit ${money(c.credit_limit, c.currency ?? undefined)}` : ""}</dd></div>
               {c.notes && <div className="sm:col-span-2"><dt className="muted">Notes</dt><dd className="whitespace-pre-line">{c.notes}</dd></div>}
             </dl>
+            <CustomValuesList entity="contact" entityId={c.id} className="mt-3" />
           </Card>
         </>}
         {tab === "documents" && <Card padded={false}>

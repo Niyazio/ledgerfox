@@ -1,3 +1,4 @@
+import { Gstr2bMatch } from "./Extras";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { FileJson, Printer } from "lucide-react";
@@ -32,7 +33,7 @@ export default function GstReturns() {
   const [params, setParams] = useSearchParams();
   const period = params.get("period") ?? lastMonth();
   const gstin = params.get("gstin") ?? "";
-  const [tab, setTab] = useState<"gstr1" | "gstr3b">("gstr1");
+  const [tab, setTab] = useState<"gstr1" | "gstr3b" | "gstr2b">("gstr1");
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
   const q = `period=${period}${gstin ? `&gstin=${gstin}` : ""}`;
   const g1 = useApi<any>(path(`/reports/gstr1?${q}`));
@@ -52,7 +53,8 @@ export default function GstReturns() {
         {(g1.data?.gstins?.length ?? 0) > 1 && <Field label="GSTIN">{(fid) => (
           <Select id={fid} value={gstin || g1.data.gstin} onChange={(e) => set("gstin", e.target.value)}>{g1.data.gstins.map((g: string) => <option key={g}>{g}</option>)}</Select>)}</Field>}
       </div>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "gstr1", label: "GSTR-1 (outward supplies)" }, { value: "gstr3b", label: "GSTR-3B (summary & tax)" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "gstr1", label: "GSTR-1 (outward supplies)" }, { value: "gstr3b", label: "GSTR-3B (summary & tax)" }, { value: "gstr2b", label: "GSTR-2B matching" }]} />
+      {tab === "gstr2b" && <div className="mt-4"><Gstr2bMatch /></div>}
       {err && <Alert className="mb-3">{err}</Alert>}
       {(g1.data?.warnings ?? []).map((w: string) => <Alert key={w} kind="info" className="mb-2">{w}</Alert>)}
       {tab === "gstr1" && (g1.loading && !g1.data ? <Spinner /> : g1.data && (
