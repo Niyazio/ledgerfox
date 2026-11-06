@@ -3,6 +3,7 @@ import { Plus, QrCode } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { productPath } from "../lib/links";
 import { CustomFieldInputs, saveCustomValues } from "../components/CustomFields";
+import { SerialFinder } from "./Extras";
 import QRCode from "qrcode";
 import { code128Svg, productQrPayload } from "@shared/barcode";
 import { saveFile } from "../lib/download";
@@ -50,7 +51,7 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
   const [v, setV] = useState({
     kind: initial?.kind ?? "goods", name: initial?.name ?? "", sku: initial?.sku ?? "", unit: initial?.unit ?? "nos", hsn_sac: initial?.hsn_sac ?? "", description: initial?.description ?? "",
     sale_price: initial ? toInput(initial.sale_price, base) : "", purchase_price: initial ? toInput(initial.purchase_price, base) : "", tax_code_id: initial?.tax_code_id ?? "",
-    income_account_id: initial?.income_account_id ?? "", expense_account_id: initial?.expense_account_id ?? "", track_inventory: initial ? Boolean(initial.track_inventory) : false, track_batches: initial ? Boolean(initial.track_batches) : false,
+    income_account_id: initial?.income_account_id ?? "", expense_account_id: initial?.expense_account_id ?? "", track_inventory: initial ? Boolean(initial.track_inventory) : false, track_batches: initial ? Boolean(initial.track_batches) : false, track_serials: initial ? Boolean(initial.track_serials) : false,
     reorder_level: initial ? qty(initial.reorder_level_milli) : "0", is_active: initial ? Boolean(initial.is_active) : true,
     code: initial?.code ?? "", barcode: initial?.barcode ?? "",
   });
@@ -83,6 +84,7 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
         <Field label="Income account" hint="Default: Sales / Service income">{(id) => <AccountSelect id={id} value={v.income_account_id} onChange={(a) => set("income_account_id", a)} filter={(a) => a.type === "income"} placeholder="Default" />}</Field>
         {!v.track_inventory && <Field label="Expense account" hint="Default: Purchases">{(id) => <AccountSelect id={id} value={v.expense_account_id} onChange={(a) => set("expense_account_id", a)} filter={(a) => a.type === "expense" || a.type === "asset"} placeholder="Default" />}</Field>}
         {v.kind === "goods" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_inventory} disabled={Boolean(initial)} onChange={(e) => set("track_inventory", e.target.checked)} /> Track stock (perpetual inventory, moving average cost){initial && <span className="muted"> — fixed after creation</span>}</label>}
+        {v.track_inventory && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_serials} onChange={(e) => set("track_serials", e.target.checked)} /> Track serial / IMEI numbers (phones, appliances, machines: one number per unit)</label>}
         {v.track_inventory && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_batches} onChange={(e) => set("track_batches", e.target.checked)} /> Track batch numbers &amp; expiry dates (medicines, food){initial && <span className="muted"> — can only change while stock is zero</span>}</label>}
         {v.track_inventory && <Field label="Reorder level">{(id) => <Input id={id} inputMode="decimal" value={v.reorder_level} onChange={(e) => set("reorder_level", e.target.value)} />}</Field>}
         <Field label="Description" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.description} onChange={(e) => set("description", e.target.value)} />}</Field>
@@ -267,6 +269,7 @@ export default function Inventory() {
         <Card padded={false}>
           <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
             <Input placeholder="Search name, SKU, HSN, code, barcode…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" aria-label="Search items" />
+            <SerialFinder />
             <div className="w-full max-w-xs"><ScanInput label="Scan to find" onItem={setFound} onError={(m) => toast("error", m)} /></div>
           </div>
           {found && <Alert kind="info" className="m-3">Scanned: <Link className="font-bold text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, found.id)}>{found.name}</Link> · code {found.code}{found.barcode ? ` · barcode ${found.barcode}` : ""} · {money(found.sale_price)}
@@ -278,6 +281,7 @@ export default function Inventory() {
                 <tr key={i.id} className={i.is_active ? "" : "opacity-60"}>
                   <td className="font-medium"><Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, i.id)}>{i.name}</Link> {i.kind === "service" ? <Badge color="blue">service</Badge> : i.track_inventory ? <Badge color="green">stock</Badge> : <Badge>non-stock</Badge>}
                     {i.track_batches ? <span className="ml-1"><Badge color="blue">batches</Badge></span> : null}
+                    {i.track_serials ? <span className="ml-1"><Badge color="blue">serials</Badge></span> : null}
                     {i.track_inventory && i.reorder_level_milli > 0 && i.stock_qty_milli <= i.reorder_level_milli && <span className="ml-1"><Badge color="amber">reorder</Badge></span>}</td>
                   <td className="font-mono text-xs">{i.code}</td><td className="font-mono text-xs">{i.sku}{i.sku && i.barcode ? <br /> : null}{i.barcode}</td><td className="font-mono text-xs">{i.hsn_sac}</td>
                   <td className="num">{money(i.sale_price)}</td>

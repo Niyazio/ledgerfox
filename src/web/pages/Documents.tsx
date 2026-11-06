@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { Plus, Trash2, Printer } from "lucide-react";
 import { productPath } from "../lib/links";
+import { AdvancesCard } from "./Extras";
 import { CustomFieldInputs, CustomValuesList, saveCustomValues } from "../components/CustomFields";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
@@ -101,9 +102,9 @@ export function DocumentList() {
   );
 }
 
-interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string; batch_no: string; expiry_date: string; auto_price?: boolean }
+interface Line { key: number; item_id: string; description: string; hsn_sac: string; quantity: string; unit_price: string; discount_percent: string; account_id: string; tax_code_id: string; department_id: string; project_id: string; cost_centre_id: string; batch_no: string; expiry_date: string; serials: string; auto_price?: boolean }
 let lk = 0;
-const blankLine = (): Line => ({ key: ++lk, item_id: "", description: "", hsn_sac: "", quantity: "1", unit_price: "", discount_percent: "", account_id: "", tax_code_id: "", department_id: "", project_id: "", cost_centre_id: "", batch_no: "", expiry_date: "" });
+const blankLine = (): Line => ({ key: ++lk, item_id: "", description: "", hsn_sac: "", quantity: "1", unit_price: "", discount_percent: "", account_id: "", tax_code_id: "", department_id: "", project_id: "", cost_centre_id: "", batch_no: "", expiry_date: "", serials: "" });
 
 function tryParse<T>(fn: () => T, fallback: T) { try { return fn(); } catch { return fallback; } }
 
@@ -153,7 +154,7 @@ export function DocumentForm() {
     setContactId(doc.contact_id);
     setH({ issue_date: doc.issue_date, due_date: doc.due_date ?? "", currency: doc.currency, fx_rate: doc.currency !== base ? String(doc.fx_rate_scaled / 1e9) : "", place_of_supply: doc.place_of_supply ?? "", reference: doc.reference ?? "", notes: doc.notes ?? "", terms: doc.terms ?? "", warehouse_id: doc.warehouse_id ?? "", branch_id: doc.branch_id ?? "", related_doc_id: doc.related_doc_id ?? "" });
     setRcm(Boolean(doc.reverse_charge));
-    setLines(d.lines.map((l: any) => ({ ...blankLine(), item_id: l.item_id ?? "", description: l.description, hsn_sac: l.hsn_sac ?? "", quantity: fmtQty(l.qty_milli), unit_price: toInput(l.unit_price, doc.currency).replace(new RegExp(`\\.0{${exp}}$`), ""), discount_percent: l.discount_bp ? String(l.discount_bp / 100) : "", account_id: l.account_id ?? "", tax_code_id: l.tax_code_id ?? "", department_id: l.department_id ?? "", project_id: l.project_id ?? "", cost_centre_id: l.cost_centre_id ?? "", batch_no: l.batch_no ?? "", expiry_date: l.expiry_date ?? "" })));
+    setLines(d.lines.map((l: any) => ({ ...blankLine(), serials: (() => { try { return (JSON.parse(l.serials ?? "[]") as string[]).join("\n"); } catch { return ""; } })(), item_id: l.item_id ?? "", description: l.description, hsn_sac: l.hsn_sac ?? "", quantity: fmtQty(l.qty_milli), unit_price: toInput(l.unit_price, doc.currency).replace(new RegExp(`\\.0{${exp}}$`), ""), discount_percent: l.discount_bp ? String(l.discount_bp / 100) : "", account_id: l.account_id ?? "", tax_code_id: l.tax_code_id ?? "", department_id: l.department_id ?? "", project_id: l.project_id ?? "", cost_centre_id: l.cost_centre_id ?? "", batch_no: l.batch_no ?? "", expiry_date: l.expiry_date ?? "" })));
   }, [existing.data, base]);
 
   const currency = h.currency || contact?.currency || base;
@@ -176,6 +177,7 @@ export function DocumentForm() {
 
   // Batch-tracked items: purchases and sales returns bring stock in, so they need a batch and expiry; sales may name one.
   const batchItems = useMemo(() => new Set((items.data?.items ?? []).filter((i) => i.track_batches).map((i) => i.id as string)), [items.data]);
+  const serialItems = useMemo(() => new Set((items.data?.items ?? []).filter((i) => i.track_serials).map((i) => i.id as string)), [items.data]);
   const inbound = docType === "bill" || docType === "credit_note";
   const setLine = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const pickItem = (key: number, itemId: string) => {
@@ -210,7 +212,7 @@ export function DocumentForm() {
       place_of_supply: h.place_of_supply || null, reference: h.reference || null, notes: h.notes || null, terms: h.terms || null,
       warehouse_id: h.warehouse_id || null, branch_id: h.branch_id || null, related_doc_id: h.related_doc_id || null,
       ...(rcmAllowed ? { reverse_charge: rcm } : {}),
-      lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null, batch_no: l.batch_no || null, expiry_date: l.expiry_date || null })),
+      lines: lines.filter((l) => l.description.trim()).map((l) => ({ item_id: l.item_id || null, description: l.description, hsn_sac: l.hsn_sac || null, quantity: l.quantity, unit_price: l.unit_price || "0", discount_percent: l.discount_percent || null, account_id: l.account_id || null, tax_code_id: l.tax_code_id || null, department_id: l.department_id || null, project_id: l.project_id || null, cost_centre_id: l.cost_centre_id || null, batch_no: l.batch_no || null, expiry_date: l.expiry_date || null, serials: serialItems.has(l.item_id) ? l.serials.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean) : null })),
     };
     const r = await run(async () => {
       const saved = docId ? await api.put(path(`/documents/${docId}`), body) : await postOrQueue(path("/documents"), body, { label: `${label.one}${h.reference ? ` ${h.reference}` : ""} (${h.issue_date})`, then: issue ? "/issue" : undefined });
@@ -283,6 +285,12 @@ export function DocumentForm() {
                           <Input type="date" value={l.expiry_date} onChange={(e) => setLine(l.key, { expiry_date: e.target.value })} aria-label="Expiry date" title="Expiry date" />
                         </div>
                       : <Input value={l.batch_no} placeholder="Batch (blank = earliest expiry first)" className="uppercase" onChange={(e) => setLine(l.key, { batch_no: e.target.value })} aria-label="Batch number" />)}
+                    {serialItems.has(l.item_id) && (() => {
+                      const n = l.serials.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
+                      const want = Number(l.quantity) || 0;
+                      return <div><Textarea rows={Math.min(6, Math.max(2, want))} value={l.serials} placeholder="Serial / IMEI numbers, one per line (or scan them)" className="font-mono uppercase" onChange={(e) => setLine(l.key, { serials: e.target.value })} aria-label="Serial numbers" />
+                        <p className={`text-xs ${n === want ? "muted" : "text-amber-700 dark:text-amber-300"}`}>{n} of {want} serial numbers</p></div>;
+                    })()}
                     {!l.item_id && <AccountSelect value={l.account_id} onChange={(v) => setLine(l.key, { account_id: v })} placeholder={sales ? "Income account (default: Sales)" : "Expense account (default: Purchases)"} filter={(a) => (sales ? a.type === "income" : ["expense", "asset"].includes(a.type))} />}
                     <div className="grid grid-cols-3 gap-2">
                       <DimensionSelect kind="departments" value={l.department_id} onChange={(v) => setLine(l.key, { department_id: v })} />
@@ -485,7 +493,7 @@ export function DocumentView() {
               {lines.map((l) => (
                 <tr key={l.id}>
                   <td className="muted">{l.line_no}</td>
-                  <td>{l.item_id && can("inventory.view") ? <Link className="hover:underline" to={productPath(id, l.item_id)}>{l.description}</Link> : l.description}{l.batch_no && <span className="block text-xs muted">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date}` : ""}</span>}</td>
+                  <td>{l.item_id && can("inventory.view") ? <Link className="hover:underline" to={productPath(id, l.item_id)}>{l.description}</Link> : l.description}{l.serials && JSON.parse(l.serials).length > 0 && <span className="block font-mono text-xs muted">S/N {JSON.parse(l.serials).join(", ")}</span>}{l.batch_no && <span className="block text-xs muted">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date}` : ""}</span>}</td>
                   {india && <td className="font-mono text-xs">{l.hsn_sac}</td>}
                   <td className="num">{fmtQty(l.qty_milli)} {l.unit ?? ""}</td>
                   <td className="num">{money(l.unit_price, cur)}</td>
@@ -539,6 +547,7 @@ export function DocumentView() {
           </table></TableWrap>
         </Card>
       )}
+      {(d.doc_type === "quote" || d.doc_type === "sales_order") && ["open", "accepted", "converted"].includes(d.status) && <AdvancesCard docId={d.id} currency={d.currency} contactId={d.contact_id} />}
       {applying && <ApplyCreditModal note={d} onClose={() => { setApplying(false); reload(); }} />}
     </>
   );

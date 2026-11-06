@@ -38,6 +38,11 @@ const billLang = (co: { country: string; print_language?: string | null }): Prin
   co.country === "SA" && (!co.print_language || co.print_language === "en") ? "ar" : ((co.print_language ?? "en") as PrintLang);
 
 /** The Umm al-Qura (Hijri) date used in Saudi Arabia, e.g. ١٠ جمادى الأولى ١٤٤٨ هـ. */
+/** A line's serial numbers (stored as a JSON list). */
+function serialsOf(l: { serials?: string | null }): string[] {
+  try { return l.serials ? (JSON.parse(l.serials) as string[]) : []; } catch { return []; }
+}
+
 function hijri(isoDate: string) {
   try { return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${isoDate}T12:00:00Z`)); }
   catch { return ""; }
@@ -210,6 +215,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
         {lines.map((l) => (
           <div key={l.id} className="mb-1">
             <p className="font-semibold">{l.description}</p>
+            {serialsOf(l).length > 0 && <p>S/N {serialsOf(l).join(", ")}</p>}
             {l.batch_no && <p>Batch {l.batch_no}{l.expiry_date ? ` Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</p>}
             <p className="flex justify-between"><span>{fmtQty(l.qty_milli)} × {money(l.unit_price, cur)}</span><span>{money(l.line_total, cur)}</span></p>
           </div>
@@ -294,7 +300,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
             {lines.map((l, i) => (
               <tr key={l.id} className={classic ? "" : i % 2 ? "bg-slate-50" : ""}>
                 <Td c={classic}>{l.line_no}</Td>
-                <Td c={classic}><span className="font-medium">{l.description}</span>{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
+                <Td c={classic}><span className="font-medium">{l.description}</span>{serialsOf(l).length > 0 && <span className="block font-mono text-[11px] text-slate-500">S/N {serialsOf(l).join(", ")}</span>}{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
                 {india && <Td c={classic}><span className="font-mono text-[11px]">{l.hsn_sac}</span></Td>}
                 <Td c={classic} r>{fmtQty(l.qty_milli)} {l.unit ?? ""}</Td>
                 <Td c={classic} r>{money(l.unit_price, cur)}</Td>

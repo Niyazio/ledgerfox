@@ -1,4 +1,7 @@
 import { trigger } from "../services/customise";
+import { applyAdvances } from "../services/extras";
+import { recordPayment } from "../services/payments";
+import { parseSerials } from "../services/serials";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -52,6 +55,7 @@ const lineSchema = z.object({
   project_id: optId,
   cost_centre_id: optId,
   batch_no: z.string().trim().max(40).nullish(),
+  serials: z.array(z.string().trim().max(60)).max(1000).nullish(),
   expiry_date: isoDate.nullish().or(z.literal("")),
 });
 
@@ -108,7 +112,7 @@ async function toDraftInput(db: D1Database, companyBase: string, companyId: stri
         item_id: l.item_id ?? null, description: l.description, hsn_sac: l.hsn_sac || null, qty_milli: q, unit_price: price, discount_bp: disc,
         account_id: l.account_id ?? null, tax_code_id: l.tax_code_id ?? null, department_id: l.department_id ?? null,
         project_id: l.project_id ?? null, cost_centre_id: l.cost_centre_id ?? null,
-        batch_no: l.batch_no?.toUpperCase() || null, expiry_date: l.expiry_date || null,
+        batch_no: l.batch_no?.toUpperCase() || null, expiry_date: l.expiry_date || null, serials: l.serials ?? null,
       };
     }),
   };
@@ -273,6 +277,8 @@ documents.post("/:id/issue", async (c) => {
     }
   }
   const number = await issueDocument(c, id);
+  // Advances taken on the quotation / order this invoice came from are applied to it now.
+  if (d.doc_type === "invoice") await applyAdvances(c, id);
   // Automations: "when an invoice is issued / a supplier bill is entered…".
   if (d.doc_type === "invoice" || d.doc_type === "bill") {
     const x = await first<{ number: string; issue_date: string; total: number; total_base: number; currency: string; contact_id: string; contact_name: string }>(c.env.DB,
@@ -308,7 +314,8 @@ documents.post("/:id/convert", async (c) => {
     doc_type: input.to, contact_id: doc.contact_id, issue_date: todayIso(), currency: doc.currency,
     fx_rate_scaled: doc.currency === company.base_currency ? null : doc.fx_rate_scaled,
     reference: doc.number, related_doc_id: doc.id, branch_id: doc.branch_id, warehouse_id: doc.warehouse_id,
-    lines: full.map((l) => ({ ...l })),
+    // A credit/debit note copies the original's serial numbers (the returned units).
+    lines: full.map((l) => ({ ...l, serials: parseSerials((l as { serials?: string | null }).serials) })),
   });
   const stmts = [...prepared.stmts];
   if (!POSTING_TYPES.includes(doc.doc_type)) {
@@ -436,3 +443,30 @@ documents.put("/:id/gst/refs", async (c) => {
 });
 
 export default documents;
+
+/** An advance (retainer) taken against a quotation, proforma or sales order; applied to its invoice when issued. */
+documents.post("/:id/advance", async (c) => {
+  const id = c.req.param("id");
+  const d = await access(c, id, "view");
+  requirePerm(c, "sales.post");
+  if (!["quote", "sales_order"].includes(d.doc_type)) throw badRequest("Advances are taken on quotations, proformas and sales orders");
+  const company = c.get("company");
+  const doc = await first<{ contact_id: string; currency: string; status: string; number: string | null; branch_id: string | null }>(c.env.DB, `SELECT contact_id, currency, status, number, branch_id FROM documents WHERE id = ?`, id);
+  if (!doc || !["open", "accepted"].includes(doc.status)) throw conflict("NOT_OPEN", "Issue the document first (it must be open or accepted)");
+  const input = await body(c, z.object({ amount: z.union([z.string(), z.number()]), payment_date: isoDate, account_id: z.string().max(64), method: shortText(40).nullish(), reference: shortText(120).nullish() }));
+  const r = await recordPayment(c, {
+    direction: "in", contact_id: doc.contact_id, payment_date: input.payment_date, account_id: input.account_id, currency: doc.currency,
+    amount: minor(input.amount, currencyExponent(doc.currency), "amount"), method: input.method ?? null, reference: input.reference ?? null,
+    notes: `Advance for ${doc.number ?? "quotation"}`, branch_id: doc.branch_id, allocations: [],
+  });
+  await batch(c.env.DB, [stmt(c.env.DB, `INSERT INTO advance_links (payment_id, company_id, document_id) VALUES (?,?,?)`, r.id, company.id, id)]);
+  return c.json({ payment_id: r.id }, 201);
+});
+
+documents.get("/:id/advances", async (c) => {
+  await access(c, c.req.param("id"), "view");
+  const rows = await all(c.env.DB,
+    `SELECT p.id, p.number, p.payment_date, p.amount, p.currency, p.status, COALESCE((SELECT SUM(a.amount) FROM allocations a WHERE a.payment_id = p.id), 0) AS applied
+       FROM advance_links l JOIN payments p ON p.id = l.payment_id WHERE l.company_id = ? AND l.document_id = ? ORDER BY p.payment_date`, c.get("company").id, c.req.param("id"));
+  return c.json({ advances: rows });
+});

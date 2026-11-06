@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { dailyBillingReminders } from "./services/notices";
 import { sendPaymentReminders } from "./services/collect";
 import { sendScheduledReports } from "./services/customise";
+import { dailyRates } from "./services/extras";
 
 /** Cloudflare entry point: the HTTP app plus the daily job (cron in wrangler.jsonc) that sends billing and payment reminders. */
 export default {
@@ -15,5 +16,8 @@ export default {
     // Reports the businesses asked to receive by email.
     ctx.waitUntil(sendScheduledReports(env).then((n) => console.log(JSON.stringify({ level: "info", job: "scheduled-reports", sent: n })))
       .catch((e) => console.error(JSON.stringify({ level: "error", job: "scheduled-reports", message: (e as Error).message }))));
+    // Today's exchange rates for companies that deal in other currencies.
+    ctx.waitUntil(dailyRates(env).then((n) => console.log(JSON.stringify({ level: "info", job: "exchange-rates", saved: n })))
+      .catch((e) => console.error(JSON.stringify({ level: "error", job: "exchange-rates", message: (e as Error).message }))));
   },
 } satisfies ExportedHandler<Env>;

@@ -2,6 +2,7 @@ import { checkPracticeAccess } from "./services/education";
 import { education } from "./routes/education";
 import { collect, payPublic, portalPublic } from "./routes/collect";
 import { customise } from "./routes/customise";
+import { projects } from "./routes/projects";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { first } from "./lib/db";
@@ -199,6 +200,7 @@ company.route("/payroll", payroll);
 company.route("/verify", verifyToken);
 company.route("/collection", collect);
 company.route("/", customise);
+company.route("/projects", projects);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

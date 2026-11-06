@@ -17,6 +17,7 @@ import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
 import { CollectionTab } from "./Collect";
 import { CustomiseTab } from "./Customise";
+import { FetchRatesButton } from "./Extras";
 import { TwoFactorCard } from "../components/TwoFactor";
 
 type Tab = "billing" | "collect" | "customise" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
@@ -250,7 +251,8 @@ function CurrencyTab() {
   const [v, setV] = useState({ currency: "USD", rate_date: today(), rate: "" });
   return (
     <Card title={`Exchange rates (to ${base})`}>
-      <p className="mb-3 text-sm muted">Enter rates manually from your bank or the reserve bank's reference rate. No paid rate feed is used. Documents use the latest rate on or before their date unless overridden.</p>
+      <p className="mb-3 text-sm muted">Enter rates from your bank, or get today's reference rates. Documents use the latest rate on or before their date unless overridden.</p>
+      <div className="mb-3"><FetchRatesButton onDone={reload} /> <span className="text-xs muted">Free public reference rates, also fetched automatically every morning for the currencies you use. A rate you type for a day is kept.</span></div>
       {can("accounts.write") && <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Currency">{(id) => <Select id={id} value={v.currency} onChange={(e) => setV({ ...v, currency: e.target.value })}>{CURRENCY_OPTIONS.filter((c) => c !== base).map((c) => <option key={c}>{c}</option>)}</Select>}</Field>
         <Field label="Date">{(id) => <Input id={id} type="date" value={v.rate_date} onChange={(e) => setV({ ...v, rate_date: e.target.value })} />}</Field>

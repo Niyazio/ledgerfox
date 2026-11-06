@@ -42,6 +42,7 @@ const BillingInvoice = lazy(() => named(import("./pages/Billing"), "BillingInvoi
 const VendorPanel = lazy(() => named(import("./pages/Vendor"), "VendorPanel"));
 const Banking = lazy(() => import("./pages/Banking"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const ProjectsPage = lazy(() => named(import("./pages/Extras"), "ProjectsPage"));
 const ProductView = lazy(() => named(import("./pages/ProductView"), "ProductView"));
 const Assets = lazy(() => import("./pages/Assets"));
 const Insights = lazy(() => named(import("./pages/Reports"), "Insights"));
@@ -113,6 +114,7 @@ function App() {
         <Route path="production" element={<Production />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="recurring" element={<Recurring />} />
+        <Route path="projects" element={<ProjectsPage />} />
         <Route path="pos" element={<Pos />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="journals" element={<JournalList />} />
