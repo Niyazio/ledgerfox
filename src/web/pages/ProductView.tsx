@@ -5,8 +5,10 @@ import { useApi } from "../lib/hooks";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, LinkButton, PageHeader, Spinner, Stat, TableWrap, Tabs } from "../components/ui";
 import { DOC_LABELS, fmtDate, pct, qty } from "../lib/format";
 import { contactPath, docPath, sourcePath } from "../lib/links";
+import { CustomValuesList } from "../components/CustomFields";
+import { SerialsTab } from "./Extras";
 
-type Tab = "overview" | "stock" | "batches" | "production" | "sales" | "deliveries" | "purchases" | "payments";
+type Tab = "overview" | "stock" | "serials" | "batches" | "production" | "sales" | "deliveries" | "purchases" | "payments";
 
 interface PaidVia { kind: "cash" | "bank" | "other" | "note"; account: string; amount: number }
 interface DocRow {
@@ -49,6 +51,7 @@ export function ProductView() {
   const tabs: { value: Tab; label: string }[] = [
     { value: "overview", label: "Overview" },
     ...(it.track_inventory ? [{ value: "stock" as Tab, label: "Stock by branch" }] : []),
+    ...(it.track_serials ? [{ value: "serials" as Tab, label: "Serial numbers" }] : []),
     ...(hasBatches ? [{ value: "batches" as Tab, label: "Batches & expiry" }] : []),
     ...(hasProduction ? [{ value: "production" as Tab, label: "Production" }] : []),
     ...(s ? [{ value: "sales" as Tab, label: "Sales" }] : []),
@@ -110,6 +113,7 @@ export function ProductView() {
       <Tabs value={tab} onChange={setTab} tabs={tabs} />
       <div className="mt-4 space-y-4">
         {tab === "overview" && <>
+          <CustomValuesList entity="item" entityId={it.id} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="Sale price" value={money(it.sale_price)} sub={cost && it.purchase_price != null ? `Purchase price ${money(it.purchase_price)}` : undefined} />
             {it.track_inventory ? <Stat label="In stock" value={q(data.stock.qty_milli)} sub={cost ? `Value ${money(data.stock.value)} · average cost ${money(data.stock.avg_cost)}` : undefined} tone={it.reorder_level_milli > 0 && data.stock.qty_milli <= it.reorder_level_milli ? "bad" : "neutral"} /> : <Stat label="Type" value={it.kind === "service" ? "Service" : "Not tracked in stock"} />}
@@ -141,6 +145,8 @@ export function ProductView() {
           <tbody>{data.warehouses.map((w: any) => <tr key={w.warehouse_id}><td>{w.branch ?? "—"}</td><td>{w.warehouse}</td><td className="num font-medium">{q(w.qty_milli)}</td>{cost && <td className="num">{money(w.value)}</td>}<td className="num">{q(w.bought_milli)}</td><td className="num">{q(w.produced_milli)}</td><td className="num">{q(w.sold_milli)}</td><td className="num">{q(w.transferred_milli)}</td></tr>)}</tbody>
           <tfoot><tr className="font-semibold"><td colSpan={2}>Total</td><td className="num">{q(data.stock.qty_milli)}</td>{cost && <td className="num">{money(data.stock.value)}</td>}<td colSpan={4} /></tr></tfoot>
         </table></TableWrap> : <EmptyState title="No stock yet" body="Stock arrives through bills, production or an opening-stock adjustment." />}</Card>}
+
+        {tab === "serials" && <SerialsTab itemId={it.id} />}
 
         {tab === "batches" && <Card padded={false}>{data.batches.length ? <TableWrap><table className="table">
           <thead><tr><th>Batch</th><th>Warehouse</th><th>Received / made</th><th>From</th><th>Expiry</th><th className="num">Left</th></tr></thead>

@@ -15,9 +15,12 @@ import { regionsFor, regionLabel, regionProblem } from "@shared/regions";
 import { fmtDate, fmtDateTime, pct, toInput, today } from "../lib/format";
 import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
+import { CollectionTab } from "./Collect";
+import { CustomiseTab } from "./Customise";
+import { FetchRatesButton } from "./Extras";
 import { TwoFactorCard } from "../components/TwoFactor";
 
-type Tab = "billing" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
+type Tab = "billing" | "collect" | "customise" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -248,7 +251,8 @@ function CurrencyTab() {
   const [v, setV] = useState({ currency: "USD", rate_date: today(), rate: "" });
   return (
     <Card title={`Exchange rates (to ${base})`}>
-      <p className="mb-3 text-sm muted">Enter rates manually from your bank or the reserve bank's reference rate. No paid rate feed is used. Documents use the latest rate on or before their date unless overridden.</p>
+      <p className="mb-3 text-sm muted">Enter rates from your bank, or get today's reference rates. Documents use the latest rate on or before their date unless overridden.</p>
+      <div className="mb-3"><FetchRatesButton onDone={reload} /> <span className="text-xs muted">Free public reference rates, also fetched automatically every morning for the currencies you use. A rate you type for a day is kept.</span></div>
       {can("accounts.write") && <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Currency">{(id) => <Select id={id} value={v.currency} onChange={(e) => setV({ ...v, currency: e.target.value })}>{CURRENCY_OPTIONS.filter((c) => c !== base).map((c) => <option key={c}>{c}</option>)}</Select>}</Field>
         <Field label="Date">{(id) => <Input id={id} type="date" value={v.rate_date} onChange={(e) => setV({ ...v, rate_date: e.target.value })} />}</Field>
@@ -380,8 +384,8 @@ export default function Settings() {
     <>
       <PageHeader title="Settings" subtitle={`${settings.company.name} · your role: ${ROLE_LABELS[settings.role as Role]}`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, { value: "dimensions", label: "Branches & dimensions" },
-        { value: "numbering", label: "Numbering" }, { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
+        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
+        { value: "numbering", label: "Numbering" }, ...(me?.edition === "cloud" ? [{ value: "customise" as Tab, label: "Customise" }] : []), { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
         ...(me?.edition === "cloud" || me?.edition === "desktop" ? [{ value: "billing" as Tab, label: "Plan & billing" }] : []),
@@ -398,6 +402,8 @@ export default function Settings() {
       {tab === "account" && <AccountTab />}
       {tab === "backup" && <CloudBackupTab />}
       {tab === "billing" && <PlanBillingTab />}
+      {tab === "collect" && <CollectionTab />}
+      {tab === "customise" && <CustomiseTab />}
     </>
   );
 }

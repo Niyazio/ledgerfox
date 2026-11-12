@@ -11,6 +11,7 @@
  */
 import type { Context } from "hono";
 import type { AppEnv, CompanyRow } from "../env";
+import { cleanSerials, serialStatements, serialVoidStatements } from "./serials";
 import { all, batch, bumpSequence, first, nowIso, seqNumberExpr, stmt } from "../lib/db";
 import { newId } from "../lib/crypto";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
@@ -44,6 +45,7 @@ export interface DraftLine {
   cost_centre_id?: string | null;
   batch_no?: string | null;
   expiry_date?: string | null;
+  serials?: string[] | null;
 }
 
 export interface DraftInput {
@@ -167,11 +169,12 @@ export async function prepareDraft(c: Context<AppEnv>, input: DraftInput, existi
     const t = totals.lines[i];
     stmts.push(stmt(db,
       `INSERT INTO document_lines (id, document_id, company_id, line_no, item_id, description, hsn_sac, qty_milli, unit_price, discount_bp, account_id,
-         tax_code_id, taxable, cgst, sgst, igst, other_tax, line_total, department_id, project_id, cost_centre_id, batch_no, expiry_date)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         tax_code_id, taxable, cgst, sgst, igst, other_tax, line_total, department_id, project_id, cost_centre_id, batch_no, expiry_date, serials)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       newId(), id, company.id, i + 1, l.item_id ?? null, l.description, l.hsn_sac ?? null, l.qty_milli, l.unit_price, l.discount_bp,
       l.account_id ?? null, l.tax_code_id ?? null, t.taxable, t.cgst, t.sgst, t.igst, t.other_tax, t.line_total,
-      l.department_id ?? null, l.project_id ?? null, l.cost_centre_id ?? null, l.batch_no || null, l.expiry_date || null));
+      l.department_id ?? null, l.project_id ?? null, l.cost_centre_id ?? null, l.batch_no || null, l.expiry_date || null,
+      l.serials?.length ? JSON.stringify(cleanSerials(l.serials)) : null));
   });
   return { id, stmts, totals: { ...totals, round_off: roundOff, total, total_base: totalBase }, mode, currency, fx };
 }
@@ -189,13 +192,14 @@ interface DocLineRow {
   item_kind: string | null; track_inventory: number | null; item_name: string | null;
   income_account_id: string | null; expense_account_id: string | null; purchase_price: number | null;
   batch_no: string | null; expiry_date: string | null; track_batches: number | null;
+  serials: string | null; track_serials: number | null;
 }
 
 export async function loadDoc(db: D1Database, companyId: string, id: string) {
   const doc = await first<DocRow>(db, `SELECT * FROM documents WHERE id = ? AND company_id = ?`, id, companyId);
   if (!doc) throw notFound("Document");
   const lines = await all<DocLineRow>(db,
-    `SELECT l.*, i.kind AS item_kind, i.track_inventory, i.track_batches, i.name AS item_name, i.income_account_id, i.expense_account_id, i.purchase_price
+    `SELECT l.*, i.kind AS item_kind, i.track_inventory, i.track_batches, i.track_serials, i.name AS item_name, i.income_account_id, i.expense_account_id, i.purchase_price
      FROM document_lines l LEFT JOIN items i ON i.id = l.item_id WHERE l.document_id = ? ORDER BY l.line_no`, id);
   return { doc, lines };
 }
@@ -392,6 +396,8 @@ export async function issueDocument(c: Context<AppEnv>, id: string) {
       }
     }
   }
+  // Serial numbers move in the same transaction (checked first).
+  stmts.push(...(await serialStatements(db, company.id, doc, lines)));
   stmts.push(audit(c, `${doc.doc_type}.post`, "document", id, { total: doc.total, currency: doc.currency }));
   await batch(db, stmts);
   return (await first<{ number: string }>(db, `SELECT number FROM documents WHERE id = ?`, id))?.number;
@@ -441,6 +447,7 @@ export async function voidDocument(c: Context<AppEnv>, id: string, date: string,
     stmts.push(stmt(db, `INSERT INTO allocations (id, company_id, source_kind, note_id, document_id, amount, reverses_id, allocation_date, created_by) VALUES (?,?,?,?,?,?,?,?,?)`,
       newId(), company.id, doc.doc_type, id, a.document_id, -a.amount, a.id, date, user.id));
   }
+  stmts.push(...(await serialVoidStatements(db, company.id, doc)));
   stmts.push(stmt(db, `UPDATE documents SET status = 'void', updated_at = ? WHERE id = ? AND company_id = ?`, nowIso(), id, company.id));
   stmts.push(audit(c, `${doc.doc_type}.void`, "document", id, { reason, reversal_id: rev.id }));
   await batch(db, stmts);

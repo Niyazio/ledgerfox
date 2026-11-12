@@ -30,6 +30,7 @@ const itemSchema = z.object({
   expense_account_id: optId,
   track_inventory: z.boolean().default(false),
   track_batches: z.boolean().optional(),
+  track_serials: z.boolean().optional(),
   reorder_level: z.union([z.string(), z.number()]).default("0"),
   is_active: z.boolean().optional(),
   // Internal product code (encoded in the product QR) and the manufacturer's barcode (EAN/UPC/Code 128).
@@ -148,6 +149,30 @@ items.get("/:id", async (c) => {
   return c.json({ item: hideCost(c, item as Record<string, unknown>), position: cost ? pos : { qty_milli: pos.qty_milli } });
 });
 
+/** Find a serial number: which product, in stock or not, and the documents it came in and went out on. */
+items.get("/serials/find", async (c) => {
+  requirePerm(c, "inventory.view");
+  const q = (c.req.query("q") ?? "").trim().toUpperCase();
+  if (q.length < 2) return c.json({ serials: [] });
+  const rows = await all(c.env.DB,
+    `SELECT s.serial, s.status, s.item_id, i.name AS item_name, s.in_doc_id, din.doc_type AS in_type, din.number AS in_number, din.issue_date AS in_date,
+            s.out_doc_id, dout.doc_type AS out_type, dout.number AS out_number, dout.issue_date AS out_date, ct.name AS customer
+       FROM item_serials s JOIN items i ON i.id = s.item_id
+       LEFT JOIN documents din ON din.id = s.in_doc_id LEFT JOIN documents dout ON dout.id = s.out_doc_id LEFT JOIN contacts ct ON ct.id = dout.contact_id
+      WHERE s.company_id = ? AND s.serial LIKE ? ORDER BY s.serial LIMIT 50`, c.get("company").id, `%${q.replace(/[%_]/g, "")}%`);
+  return c.json({ serials: rows });
+});
+
+items.get("/:id/serials", async (c) => {
+  requirePerm(c, "inventory.view");
+  const rows = await all(c.env.DB,
+    `SELECT s.serial, s.status, s.in_doc_id, din.doc_type AS in_type, din.number AS in_number, din.issue_date AS in_date,
+            s.out_doc_id, dout.doc_type AS out_type, dout.number AS out_number, dout.issue_date AS out_date, ct.name AS customer, ct.id AS customer_id
+       FROM item_serials s LEFT JOIN documents din ON din.id = s.in_doc_id LEFT JOIN documents dout ON dout.id = s.out_doc_id LEFT JOIN contacts ct ON ct.id = dout.contact_id
+      WHERE s.company_id = ? AND s.item_id = ? ORDER BY s.status = 'out', s.serial LIMIT 1000`, c.get("company").id, c.req.param("id"));
+  return c.json({ serials: rows });
+});
+
 /** The product page: stock, batches, production, sales, purchases, payments and profit (see services/product360). */
 items.get("/:id/insights", async (c) => {
   requirePerm(c, "inventory.view");
@@ -171,11 +196,11 @@ items.post("/", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id,
-         income_account_id, expense_account_id, track_inventory, reorder_level_milli, code, barcode, track_batches) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         income_account_id, expense_account_id, track_inventory, reorder_level_milli, code, barcode, track_batches, track_serials) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, input.kind, input.name, input.sku || null, input.unit, input.hsn_sac || null, input.description ?? null,
       minor(input.sale_price, exp, "sale price"), minor(input.purchase_price ?? "0", exp, "purchase price"), input.tax_code_id ?? null,
       input.income_account_id ?? null, input.expense_account_id ?? null, input.track_inventory ? 1 : 0, qty(input.reorder_level, "reorder level"),
-      code, input.barcode || null, input.track_inventory && input.track_batches ? 1 : 0),
+      code, input.barcode || null, input.track_inventory && input.track_batches ? 1 : 0, input.track_inventory && input.track_serials ? 1 : 0),
     audit(c, "item.create", "item", id, { name: input.name, code }),
   ]);
   return c.json({ id, code }, 201);
@@ -186,14 +211,20 @@ items.put("/:id", async (c) => {
   const input = await body(c, itemSchema);
   const company = c.get("company");
   const id = c.req.param("id");
-  const existing = await first<{ track_inventory: number; kind: string; purchase_price: number; code: string | null; barcode: string | null; name: string; sale_price: number; track_batches: number }>(
-    c.env.DB, `SELECT track_inventory, kind, purchase_price, code, barcode, name, sale_price, track_batches FROM items WHERE id = ? AND company_id = ?`, id, company.id);
+  const existing = await first<{ track_inventory: number; kind: string; purchase_price: number; code: string | null; barcode: string | null; name: string; sale_price: number; track_batches: number; track_serials: number }>(
+    c.env.DB, `SELECT track_inventory, kind, purchase_price, code, barcode, name, sale_price, track_batches, track_serials FROM items WHERE id = ? AND company_id = ?`, id, company.id);
   if (!existing) throw notFound("Item");
   const batches = input.track_batches === undefined ? Boolean(existing.track_batches) : input.track_batches && input.track_inventory;
   if (batches !== Boolean(existing.track_batches)) {
     // Batch tracking can only be switched while the item has no stock, so every unit on hand has a batch (or none).
     const onHand = await first<{ q: number }>(c.env.DB, `SELECT COALESCE(SUM(qty_milli),0) AS q FROM stock_moves WHERE item_id = ?`, id);
     if (onHand?.q) throw conflict("ITEM_HAS_STOCK", "Batch tracking can be switched on or off only when the item has no stock");
+  }
+  const serials = input.track_serials === undefined ? Boolean(existing.track_serials) : input.track_serials && input.track_inventory;
+  if (serials !== Boolean(existing.track_serials)) {
+    // Like batches: only while there is no stock, so every unit on hand has a serial (or none does).
+    const onHand = await first<{ q: number }>(c.env.DB, `SELECT COALESCE(SUM(qty_milli),0) AS q FROM stock_moves WHERE item_id = ?`, id);
+    if (onHand?.q) throw conflict("ITEM_HAS_STOCK", "Serial-number tracking can be switched on or off only when the item has no stock");
   }
   if (Boolean(existing.track_inventory) !== input.track_inventory || existing.kind !== input.kind) {
     const moved = await first(c.env.DB, `SELECT 1 FROM stock_moves WHERE item_id = ? UNION ALL SELECT 1 FROM document_lines WHERE item_id = ? LIMIT 1`, id, id);
@@ -211,11 +242,11 @@ items.put("/:id", async (c) => {
   await batch(c.env.DB, [
     stmt(c.env.DB,
       `UPDATE items SET kind = ?, name = ?, sku = ?, unit = ?, hsn_sac = ?, description = ?, sale_price = ?, purchase_price = ?, tax_code_id = ?,
-         income_account_id = ?, expense_account_id = ?, track_inventory = ?, reorder_level_milli = ?, is_active = ?, code = ?, barcode = ?, track_batches = ? WHERE id = ? AND company_id = ?`,
+         income_account_id = ?, expense_account_id = ?, track_inventory = ?, reorder_level_milli = ?, is_active = ?, code = ?, barcode = ?, track_batches = ?, track_serials = ? WHERE id = ? AND company_id = ?`,
       input.kind, input.name, input.sku || null, input.unit, input.hsn_sac || null, input.description ?? null,
       salePrice, purchasePrice, input.tax_code_id ?? null,
       input.income_account_id ?? null, input.expense_account_id ?? null, input.track_inventory ? 1 : 0, qty(input.reorder_level, "reorder level"),
-      input.is_active === false ? 0 : 1, code, barcode, batches ? 1 : 0, id, company.id),
+      input.is_active === false ? 0 : 1, code, barcode, batches ? 1 : 0, serials ? 1 : 0, id, company.id),
     audit(c, "item.update", "item", id, {
       name: input.name,
       changes: Object.fromEntries(Object.entries({ name: [existing.name, input.name], sale_price: [existing.sale_price, salePrice], purchase_price: [existing.purchase_price, purchasePrice], code: [existing.code, code], barcode: [existing.barcode, barcode] })

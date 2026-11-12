@@ -1,3 +1,4 @@
+import { matchGstr2b, parseGstr2b } from "../services/extras";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
@@ -6,7 +7,7 @@ import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { body, dateParam, minor, reqText } from "../lib/validate";
 import { newId } from "../lib/crypto";
-import { audit, requirePerm, resolveBranch } from "../lib/auth";
+import { audit, requirePerm, requireAnyPerm, resolveBranch } from "../lib/auth";
 import { formatMoney, currencyExponent } from "@shared/currencies";
 import { fiscalYearFor } from "../services/setup";
 import * as R from "../services/reports";
@@ -312,3 +313,11 @@ reports.get("/budgets/:id", async (c) => {
 });
 
 export default reports;
+
+/** GSTR-2B matching: the JSON file from the GST portal against the bills in the books. */
+reports.post("/gstr2b-match", async (c) => {
+  requireAnyPerm(c, "purchase.view", "reports.read");
+  const raw = await c.req.json().catch(() => null) as { file?: unknown } | null;
+  if (!raw?.file) throw badRequest("Choose the GSTR-2B JSON file");
+  return c.json(await matchGstr2b(c.env.DB, c.get("company").id, parseGstr2b(raw.file)));
+});

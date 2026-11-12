@@ -17,6 +17,7 @@ import { amountInWords } from "@shared/words";
 import { currencyExponent } from "@shared/currencies";
 import { printPage, saveFile, shareFile } from "../lib/download";
 import { elementToPdf } from "../lib/pdf";
+import { showValue, type CustomValue } from "../components/CustomFields";
 
 /** Paper formats. Thermal formats suit 80 mm and 58 mm receipt printers (POS, restaurant, retail counters). */
 export const FORMATS = {
@@ -37,6 +38,11 @@ const billLang = (co: { country: string; print_language?: string | null }): Prin
   co.country === "SA" && (!co.print_language || co.print_language === "en") ? "ar" : ((co.print_language ?? "en") as PrintLang);
 
 /** The Umm al-Qura (Hijri) date used in Saudi Arabia, e.g. ١٠ جمادى الأولى ١٤٤٨ هـ. */
+/** A line's serial numbers (stored as a JSON list). */
+function serialsOf(l: { serials?: string | null }): string[] {
+  try { return l.serials ? (JSON.parse(l.serials) as string[]) : []; } catch { return []; }
+}
+
 function hijri(isoDate: string) {
   try { return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${isoDate}T12:00:00Z`)); }
   catch { return ""; }
@@ -151,6 +157,9 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
   const { path, money, settings } = useCompany();
   const { data, error } = useApi<any>(path(`/documents/${id}`));
   const d = data?.document;
+  // Custom fields chosen to appear on printed documents (Settings → Customise).
+  const cv = useApi<{ values: CustomValue[] }>(d ? path(`/custom-values/${SALES_DOCS.includes(d.doc_type) ? "sales" : "purchase"}/${id}`) : null);
+  const printFields = (cv.data?.values ?? []).filter((v) => v.show_on_print);
   const co = settings!.company;
   const india = co.country === "IN";
   const cur = d?.currency ?? co.base_currency;
@@ -206,6 +215,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
         {lines.map((l) => (
           <div key={l.id} className="mb-1">
             <p className="font-semibold">{l.description}</p>
+            {serialsOf(l).length > 0 && <p>S/N {serialsOf(l).join(", ")}</p>}
             {l.batch_no && <p>Batch {l.batch_no}{l.expiry_date ? ` Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</p>}
             <p className="flex justify-between"><span>{fmtQty(l.qty_milli)} × {money(l.unit_price, cur)}</span><span>{money(l.line_total, cur)}</span></p>
           </div>
@@ -249,6 +259,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
                 {co.country === "SA" && <Meta k="Hijri / الهجري" v={hijri(d.issue_date)} />}
                 {d.due_date && <Meta k={L("Due date")} v={fmtDate(d.due_date, df)} />}
                 {d.reference && <Meta k={L("Reference")} v={d.reference} />}
+                {printFields.map((f) => <Meta key={f.field_id} k={f.label} v={showValue(f, df)} />)}
               </dl>
             </div>
           </header>
@@ -289,7 +300,7 @@ function DocumentPrint({ id, format, showQr, showUpi }: { id: string; format: Fo
             {lines.map((l, i) => (
               <tr key={l.id} className={classic ? "" : i % 2 ? "bg-slate-50" : ""}>
                 <Td c={classic}>{l.line_no}</Td>
-                <Td c={classic}><span className="font-medium">{l.description}</span>{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
+                <Td c={classic}><span className="font-medium">{l.description}</span>{serialsOf(l).length > 0 && <span className="block font-mono text-[11px] text-slate-500">S/N {serialsOf(l).join(", ")}</span>}{l.batch_no && <span className="block text-[11px] text-slate-500">Batch {l.batch_no}{l.expiry_date ? ` · Exp ${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)}` : ""}</span>}</Td>
                 {india && <Td c={classic}><span className="font-mono text-[11px]">{l.hsn_sac}</span></Td>}
                 <Td c={classic} r>{fmtQty(l.qty_milli)} {l.unit ?? ""}</Td>
                 <Td c={classic} r>{money(l.unit_price, cur)}</Td>

@@ -67,6 +67,7 @@ export const UI_WORDS: Dict = {
   "Delivery challans": { hi: "डिलीवरी चालान", ta: "டெலிவரி சலான்கள்", ml: "ഡെലിവറി ചലാനുകൾ", kn: "ಡೆಲಿವರಿ ಚಲನ್‌ಗಳು" },
   "Invoices / bills": { hi: "बीजक / बिल", ta: "விலைப்பட்டியல்கள் / பில்கள்", ml: "ഇൻവോയ്സുകൾ / ബില്ലുകൾ", kn: "ಸರಕುಪಟ್ಟಿಗಳು / ಬಿಲ್‌ಗಳು" },
   "Recurring invoices": { hi: "आवर्ती बीजक", ta: "தொடர் விலைப்பட்டியல்கள்", ml: "ആവർത്തന ഇൻവോയ്സുകൾ", kn: "ಪುನರಾವರ್ತಿತ ಸರಕುಪಟ್ಟಿಗಳು" },
+  "Projects & time": { hi: "प्रोजेक्ट और समय", ta: "திட்டங்கள் & நேரம்", ml: "പ്രോജക്ടുകളും സമയവും", kn: "ಯೋಜನೆಗಳು ಮತ್ತು ಸಮಯ" },
   "Sales returns": { hi: "बिक्री वापसी", ta: "விற்பனை திருப்பம்", ml: "വിൽപ്പന റിട്ടേൺ", kn: "ಮಾರಾಟ ಹಿಂತಿರುಗಿಸುವಿಕೆ" },
   "Receipts": { hi: "प्राप्तियाँ", ta: "வரவுகள்", ml: "രസീതുകൾ", kn: "ಸ್ವೀಕೃತಿಗಳು" },
   "Purchases": { hi: "खरीद", ta: "கொள்முதல்", ml: "വാങ്ങലുകൾ", kn: "ಖರೀದಿಗಳು" },
@@ -148,7 +149,7 @@ export function bilingual(en: string, lang: PrintLang | null | undefined): strin
 const UI_AR: Record<string, string> = {
   "Dashboard": "لوحة التحكم", "Daybook": "دفتر اليومية", "Sales & billing": "المبيعات والفواتير", "POS / counter billing": "نقطة البيع", "Customers": "العملاء",
   "Quotations": "عروض الأسعار", "Proforma invoices": "الفواتير المبدئية", "Sales orders": "أوامر البيع", "Delivery challans": "إذونات التسليم", "Invoices / bills": "الفواتير",
-  "Recurring invoices": "الفواتير المتكررة", "Sales returns": "مرتجعات المبيعات", "Receipts": "المقبوضات", "Purchases": "المشتريات", "Suppliers": "الموردون",
+  "Recurring invoices": "الفواتير المتكررة", "Projects & time": "المشاريع والوقت", "Sales returns": "مرتجعات المبيعات", "Receipts": "المقبوضات", "Purchases": "المشتريات", "Suppliers": "الموردون",
   "Purchase orders": "أوامر الشراء", "Supplier bills": "فواتير الموردين", "Purchase returns": "مرتجعات المشتريات", "Supplier payments": "مدفوعات الموردين",
   "Inventory": "المخزون", "Products & stock": "المنتجات والمخزون", "Stock transfers": "تحويلات المخزون", "Product labels / QR": "ملصقات المنتجات / QR",
   "Manufacturing": "التصنيع", "Accounting": "المحاسبة", "Reports": "التقارير", "Settings": "الإعدادات", "Users": "المستخدمون", "Payroll": "الرواتب",
