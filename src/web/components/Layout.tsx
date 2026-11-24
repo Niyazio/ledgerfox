@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
-import { Banknote,
+import { ClipboardCheck, Banknote,
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
   CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory, Clock,
@@ -97,6 +97,7 @@ const NAV: NavGroup[] = [
   { label: "Purchases", items: [
     { to: "suppliers", label: "Suppliers", icon: <Users className="h-4 w-4" />, perm: "purchase.view" },
     { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" , module: "purchase_orders" },
+    { to: "purchasing", label: "RFQ, receipts & matching", icon: <ClipboardCheck className="h-4 w-4" />, perm: "purchase.view", module: "purchase_orders" },
     { to: "purchases/bill", label: "Supplier bills", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "purchases/debit_note", label: "Purchase returns", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "payments/out", label: "Supplier payments", icon: <Wallet className="h-4 w-4" />, perm: "purchase.view" },

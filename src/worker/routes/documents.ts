@@ -214,7 +214,9 @@ documents.put("/:id", async (c) => {
   const existing = await access(c, id, "create");
   if (existing.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be edited");
   if (existing.doc_type !== stored(input.doc_type).doc_type) throw badRequest("Document type cannot change");
-  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
+  // An edit that does not mention the source document (e.g. the purchase order of a bill) keeps the link.
+  const keepRelated = input.related_doc_id === undefined ? (await first<{ related_doc_id: string | null }>(c.env.DB, `SELECT related_doc_id FROM documents WHERE id = ?`, id))?.related_doc_id ?? null : input.related_doc_id;
+  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, related_doc_id: keepRelated, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
   checkDiscounts(c, input.doc_type, draft.lines);
   const before = await first<Record<string, unknown>>(c.env.DB, `SELECT contact_id, issue_date, due_date, reference, currency, total, branch_id FROM documents WHERE id = ?`, id);
   const prepared = await prepareDraft(c, draft, id);
