@@ -8,6 +8,7 @@ import { taxcheck } from "./routes/taxcheck";
 import { cheques } from "./routes/cheques";
 import { interest } from "./routes/interest";
 import { purchasing } from "./routes/purchasing";
+import { crm } from "./routes/crm";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { TRIAL_DAYS } from "@shared/plans";
@@ -219,6 +220,7 @@ company.route("/tax-check", taxcheck);
 company.route("/cheques", cheques);
 company.route("/interest", interest);
 company.route("/purchasing", purchasing);
+company.route("/crm", crm);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

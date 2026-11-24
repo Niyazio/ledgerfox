@@ -57,6 +57,7 @@ const Verify = lazy(() => import("./pages/Verify"));
 const PrintPage = lazy(() => import("./pages/Print"));
 const ChequesPage = lazy(() => import("./pages/Cheques"));
 const PurchasingPage = lazy(() => import("./pages/Purchasing"));
+const CrmPage = lazy(() => import("./pages/Crm"));
 const ChequePrintPage = lazy(() => named(import("./pages/Cheques"), "ChequePrintPage"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -142,6 +143,7 @@ function App() {
         <Route path="banking" element={<Banking />} />
         <Route path="cheques" element={<ChequesPage />} />
         <Route path="purchasing" element={<PurchasingPage />} />
+        <Route path="crm" element={<CrmPage />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory/:itemId" element={<Keyed>{(k) => <ProductView key={k} />}</Keyed>} />
         <Route path="assets" element={<Assets />} />
