@@ -1,4 +1,5 @@
 import { checkPracticeAccess } from "./services/education";
+import { parseModulesOff, type ModuleKey } from "@shared/modules";
 import { education } from "./routes/education";
 import { collect, payPublic, portalPublic } from "./routes/collect";
 import { customise } from "./routes/customise";
@@ -162,6 +163,21 @@ company.use("*", async (c, next) => {
 company.use("*", async (c, next) => {
   if (c.get("company").is_practice && c.req.method !== "GET" && /\/(documents\/[^/]+\/gst\/(einvoice|eway)|verify)$/.test(c.req.path)) {
     throw new AppError(403, "PRACTICE_MODE", "Not available in a practice company (education mode): it is for learning, not for real business documents.");
+  }
+  await next();
+});
+// Features the company switched off (Settings → Features) are closed on the server too, with a clear message.
+const MODULE_PATHS: [RegExp, ModuleKey, string][] = [
+  [/^\/api\/c\/[^/]+\/pos(\/|$)/, "pos", "POS / counter billing"],
+  [/^\/api\/c\/[^/]+\/production(\/|$)/, "manufacturing", "Manufacturing"],
+  [/^\/api\/c\/[^/]+\/projects(\/|$)/, "projects", "Projects & time billing"],
+  [/^\/api\/c\/[^/]+\/payroll(\/|$)/, "payroll", "Payroll"],
+];
+company.use("*", async (c, next) => {
+  const off = parseModulesOff((c.get("company") as { modules_off?: string | null }).modules_off);
+  if (off.length) {
+    const hit = MODULE_PATHS.find(([re, key]) => off.includes(key) && re.test(c.req.path));
+    if (hit) throw new AppError(403, "MODULE_OFF", `${hit[2]} is switched off for this company. Switch it on in Settings → Features.`);
   }
   await next();
 });

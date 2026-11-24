@@ -17,10 +17,11 @@ import { MembersTab } from "./Users";
 import { PlanBillingTab } from "./Billing";
 import { CollectionTab } from "./Collect";
 import { CustomiseTab } from "./Customise";
+import { FeaturesTab } from "./Control";
 import { FetchRatesButton } from "./Extras";
 import { TwoFactorCard } from "../components/TwoFactor";
 
-type Tab = "billing" | "collect" | "customise" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
+type Tab = "billing" | "collect" | "customise" | "features" | "company" | "members" | "tax" | "dimensions" | "numbering" | "currency" | "periods" | "audit" | "data" | "account" | "backup";
 
 function CompanyTab() {
   const { settings, path, reload, can } = useCompany();
@@ -384,7 +385,7 @@ export default function Settings() {
     <>
       <PageHeader title="Settings" subtitle={`${settings.company.name} · your role: ${ROLE_LABELS[settings.role as Role]}`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: "company", label: "Company" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
+        { value: "company", label: "Company" }, { value: "features", label: "Features" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
         { value: "numbering", label: "Numbering" }, ...(me?.edition === "cloud" ? [{ value: "customise" as Tab, label: "Customise" }] : []), { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
@@ -403,6 +404,7 @@ export default function Settings() {
       {tab === "backup" && <CloudBackupTab />}
       {tab === "billing" && <PlanBillingTab />}
       {tab === "collect" && <CollectionTab />}
+      {tab === "features" && <FeaturesTab />}
       {tab === "customise" && <CustomiseTab />}
     </>
   );

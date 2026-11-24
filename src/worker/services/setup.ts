@@ -1,3 +1,4 @@
+import { defaultModulesOff } from "@shared/modules";
 import { stmt } from "../lib/db";
 import { countryPack } from "@shared/countries";
 import { newId } from "../lib/crypto";
@@ -92,12 +93,14 @@ export function companySetupStatements(db: D1Database, input: CompanyInput, toda
     stmt(
       db,
       `INSERT INTO companies (id, org_id, name, legal_name, country, base_currency, fiscal_year_start_month, tax_id, state_code,
-         address, city, postal_code, phone, email, number_locale, business_type, is_demo, upi_id, is_practice)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         address, city, postal_code, phone, email, number_locale, business_type, is_demo, upi_id, is_practice, modules_off)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       companyId, input.org_id, input.name, input.legal_name ?? null, input.country, input.base_currency,
       input.fiscal_year_start_month, input.tax_id ?? null, input.state_code ?? null, input.address ?? null,
       input.city ?? null, input.postal_code ?? null, input.phone ?? null, input.email ?? null,
       input.number_locale ?? (input.country === "IN" ? "en-IN" : "en-US"), businessType(input.business_type).key, input.is_demo ? 1 : 0, input.upi_id || null, input.is_practice ? 1 : 0,
+      // Students learn everything, so practice companies start with every feature; others with what their trade uses.
+      JSON.stringify(input.is_practice ? [] : defaultModulesOff(businessType(input.business_type).key)),
     ),
   ];
   const biz = businessType(input.business_type);

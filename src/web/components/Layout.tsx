@@ -18,6 +18,7 @@ import { Assistant } from "./Assistant";
 import { LANGS, type Lang } from "@shared/i18n";
 import { PlanBanner, RenewGate, TrialGate, VerifyEmailBanner } from "../pages/Billing";
 import { ThemePicker } from "./ThemePicker";
+import type { ModuleKey } from "@shared/modules";
 import { InstallAppButton } from "./InstallApp";
 import { DesktopLicenceBanner } from "../pages/DesktopPlan";
 import { setPracticeExports } from "../lib/csv";
@@ -72,7 +73,7 @@ export function useTheme() {
   return { dark, toggle };
 }
 
-interface NavItem { to: string; label: string; icon: ReactNode; perm?: Permission | Permission[] }
+interface NavItem { to: string; label: string; icon: ReactNode; perm?: Permission | Permission[]; module?: ModuleKey }
 interface NavGroup { label: string; items: NavItem[] }
 
 const NAV: NavGroup[] = [
@@ -81,40 +82,40 @@ const NAV: NavGroup[] = [
     { to: "daybook", label: "Daybook", icon: <CalendarDays className="h-4 w-4" />, perm: "daybook.read" },
   ] },
   { label: "Sales & billing", items: [
-    { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" },
+    { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" , module: "pos" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
-    { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
-    { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
-    { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
-    { to: "sales/delivery_challan", label: "Delivery challans", icon: <Truck className="h-4 w-4" />, perm: "sales.view" },
+    { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
+    { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
+    { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
+    { to: "sales/delivery_challan", label: "Delivery challans", icon: <Truck className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
     { to: "sales/invoice", label: "Invoices / bills", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
-    { to: "recurring", label: "Recurring invoices", icon: <Repeat className="h-4 w-4" />, perm: "sales.create" },
-    { to: "projects", label: "Projects & time", icon: <Clock className="h-4 w-4" />, perm: "sales.view" },
+    { to: "recurring", label: "Recurring invoices", icon: <Repeat className="h-4 w-4" />, perm: "sales.create" , module: "recurring" },
+    { to: "projects", label: "Projects & time", icon: <Clock className="h-4 w-4" />, perm: "sales.view" , module: "projects" },
     { to: "sales/credit_note", label: "Sales returns", icon: <FileText className="h-4 w-4" />, perm: "sales.view" },
     { to: "payments/in", label: "Receipts", icon: <Wallet className="h-4 w-4" />, perm: "sales.view" },
   ] },
   { label: "Purchases", items: [
     { to: "suppliers", label: "Suppliers", icon: <Users className="h-4 w-4" />, perm: "purchase.view" },
-    { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
+    { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" , module: "purchase_orders" },
     { to: "purchases/bill", label: "Supplier bills", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "purchases/debit_note", label: "Purchase returns", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "payments/out", label: "Supplier payments", icon: <Wallet className="h-4 w-4" />, perm: "purchase.view" },
   ] },
   { label: "Inventory", items: [
     { to: "inventory", label: "Products & stock", icon: <Package className="h-4 w-4" />, perm: "inventory.view" },
-    { to: "inventory?tab=transfers", label: "Stock transfers", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "inventory.transfer" },
-    { to: "labels", label: "Product labels / QR", icon: <QrCode className="h-4 w-4" />, perm: "labels.print" },
-    { to: "production", label: "Manufacturing", icon: <Factory className="h-4 w-4" />, perm: "inventory.view" },
+    { to: "inventory?tab=transfers", label: "Stock transfers", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "inventory.transfer", module: "stock" },
+    { to: "labels", label: "Product labels / QR", icon: <QrCode className="h-4 w-4" />, perm: "labels.print" , module: "labels" },
+    { to: "production", label: "Manufacturing", icon: <Factory className="h-4 w-4" />, perm: "inventory.view" , module: "manufacturing" },
   ] },
   { label: "Accounting", items: [
     { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
     { to: "banking", label: "Banking", icon: <Landmark className="h-4 w-4" />, perm: "bank.reconcile" },
     { to: "journals", label: "Journals & ledgers", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
     { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
-    { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" />, perm: "assets.manage" },
+    { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" />, perm: "assets.manage" , module: "fixed_assets" },
   ] },
   { label: "People", items: [
-    { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" },
+    { to: "payroll", label: "Payroll & timesheets", icon: <Briefcase className="h-4 w-4" />, perm: "payroll.read" , module: "payroll" },
   ] },
   { label: "Reports & control", items: [
     { to: "reports/cash-book", label: "Cash / bank book", icon: <BookOpen className="h-4 w-4" />, perm: "reports.read" },
@@ -150,10 +151,10 @@ const GOTO_ITEMS = NAV.flatMap((g) => g.items.map((i) => ({ to: i.to, label: i.l
 /** Modules the member may use; the server enforces the same permissions on every request. */
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { companyId } = useParams();
-  const { can, settings } = useCompany();
+  const { can, settings, on } = useCompany();
   const { t } = useLang();
   const location = useLocation();
-  const allowed = (it: NavItem) => !it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm));
+  const allowed = (it: NavItem) => (!it.module || on(it.module)) && (!it.perm || !settings || (Array.isArray(it.perm) ? it.perm.some(can) : can(it.perm)));
   // Outside India the tax-return link opens the VAT return.
   const india = (settings?.company.country ?? "IN") === "IN";
   const localise = (i: (typeof NAV)[number]["items"][number]) => (!india && i.to === "reports/gst-returns" ? { ...i, to: "reports/vat-return", label: "VAT return" } : i);
@@ -305,7 +306,7 @@ function RecurringRunner() { useRecurringAutoRun(); return null; }
 
 function Shell() {
   const { me, logout } = useSession();
-  const { settings, id: companyId } = useCompany();
+  const { settings, id: companyId, on } = useCompany();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nav = useNavigate();
@@ -361,7 +362,7 @@ function Shell() {
           </div>
         </header>
         {me?.edition === "offline" && <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">View-only copy saved on this phone — no internet needed. Changes are made on the office computer.</div>}
-        {settings && me?.edition !== "offline" && <RecurringRunner />}
+        {settings && me?.edition !== "offline" && on("recurring") && <RecurringRunner />}
         {settings && me?.edition === "cloud" && <PlanBanner />}
         {settings && me?.edition === "cloud" && <TrialGate />}
         {settings && (me?.edition === "cloud" || me?.edition === "desktop") && <RenewGate />}

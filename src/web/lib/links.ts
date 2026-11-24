@@ -27,7 +27,7 @@ export function journalSourcePath(companyId: string, sourceType: string | null, 
   if (t === "production") return `/app/${companyId}/production`;
   if (t === "payroll" || t === "payroll_payment") return `/app/${companyId}/payroll`;
   if (t.startsWith("asset") || t === "depreciation_run") return `/app/${companyId}/assets`;
-  if (t === "bank_line") return `/app/${companyId}/banking`;
+  if (t === "bank_line" || t === "contra") return `/app/${companyId}/banking`;
   if (["transfer", "stock_adjustment", "stock_import"].includes(t)) return `/app/${companyId}/inventory?tab=movements`;
   return null;
 }
@@ -35,7 +35,7 @@ export function journalSourcePath(companyId: string, sourceType: string | null, 
 const SOURCE_NAMES: Record<string, string> = {
   invoice: "Invoice", credit_note: "Credit note", bill: "Bill", debit_note: "Debit note", receipt: "Receipt", payment: "Payment", expense: "Expense",
   production: "Production", payroll: "Payroll", payroll_payment: "Salary payment", asset_acquisition: "Asset bought", asset_disposal: "Asset sold",
-  depreciation_run: "Depreciation", bank_line: "Bank statement", transfer: "Stock transfer", stock_adjustment: "Stock adjustment", stock_import: "Opening stock", fx_settlement: "Exchange difference",
+  depreciation_run: "Depreciation", bank_line: "Bank statement", contra: "Contra (cash ↔ bank)", transfer: "Stock transfer", stock_adjustment: "Stock adjustment", stock_import: "Opening stock", fx_settlement: "Exchange difference",
 };
 export const sourceName = (t: string | null | undefined) => (t ? `${SOURCE_NAMES[t.replace(/_void$/, "")] ?? t.replace(/_/g, " ")}${t.endsWith("_void") ? " (cancelled)" : ""}` : "Journal");
 

@@ -13,6 +13,7 @@ import { api } from "../lib/api";
 import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
 import { printPage } from "../lib/download";
+import { AuditChecksReport } from "./Control";
 import { contactPath, journalSourcePath, ledgerPath, productPath, sourceName } from "../lib/links";
 
 const REPORTS = [
@@ -23,6 +24,7 @@ const REPORTS = [
   { key: "cash-flow", title: "Cash flow statement", group: "Financial statements", desc: "Indirect method; reconciles to the change in cash & bank balances." },
   { key: "trial-balance", title: "Trial balance", group: "Financial statements", desc: "Opening, movement and closing balance for every account." },
   { key: "general-ledger", title: "General ledger", group: "Ledgers", desc: "Every posting to an account with running balance." },
+  { key: "audit-checks", title: "Audit checks", group: "Ledgers", desc: "Cash limits, negative cash, duplicate bills, late entries, missing numbers, manual journals — what auditors check first." },
   { key: "aging-receivable", title: "Aged receivables", group: "Customers & suppliers", desc: "Outstanding invoices by days overdue, reconciled to the AR account." },
   { key: "aging-payable", title: "Aged payables", group: "Customers & suppliers", desc: "Outstanding bills by days overdue, reconciled to the AP account." },
   { key: "sales-by-customer", title: "Sales by customer", group: "Customers & suppliers", desc: "Invoiced amounts less credit notes, in base currency." },
@@ -653,6 +655,7 @@ export function ReportRouter() {
     case "balance-sheet": return <BalanceSheet />;
     case "cash-flow": return <CashFlow />;
     case "general-ledger": return <GeneralLedger />;
+    case "audit-checks": return <AuditChecksReport />;
     case "aging-receivable": return <Aging kind="receivable" />;
     case "aging-payable": return <Aging kind="payable" />;
     case "sales-by-customer": return <SimpleTotals kind="sales-by-customer" />;

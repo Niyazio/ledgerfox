@@ -374,7 +374,7 @@ function ApplyCreditModal({ note, onClose }: { note: any; onClose: () => void })
 
 export function DocumentView() {
   const { docType = "invoice", docId } = useParams();
-  const { path, money, id, settings, can } = useCompany();
+  const { path, money, id, settings, can, on } = useCompany();
   const fam = docFamily(docType);
   const nav = useNavigate();
   const toast = useToast();
@@ -547,7 +547,7 @@ export function DocumentView() {
           </table></TableWrap>
         </Card>
       )}
-      {(d.doc_type === "quote" || d.doc_type === "sales_order") && ["open", "accepted", "converted"].includes(d.status) && <AdvancesCard docId={d.id} currency={d.currency} contactId={d.contact_id} />}
+      {(d.doc_type === "quote" || d.doc_type === "sales_order") && ["open", "accepted", "converted"].includes(d.status) && on("quotations") && <AdvancesCard docId={d.id} currency={d.currency} contactId={d.contact_id} />}
       {applying && <ApplyCreditModal note={d} onClose={() => { setApplying(false); reload(); }} />}
     </>
   );

@@ -105,7 +105,13 @@ function CameraScan({ onCode, onClose, continuous = false, status }: { onCode: (
  * Scan box for billing, purchases, stock and labels. Works with a USB/Bluetooth barcode scanner (it types the code
  * and presses Enter), the device camera where the browser supports it, or typing the code by hand.
  */
-export function ScanInput({ label = "Scan product", onItem, onError, autoFocus, continuous = false }: { label?: string; onItem: (item: any) => void; onError?: (msg: string) => void; autoFocus?: boolean; continuous?: boolean }) {
+/** Barcode / QR scanning (hidden when the company switched scanning off in Settings → Features). */
+export function ScanInput(props: { label?: string; onItem: (item: any) => void; onError?: (msg: string) => void; autoFocus?: boolean; continuous?: boolean }) {
+  const { on } = useCompany();
+  return on("scanning") ? <ScanInputBox {...props} /> : null;
+}
+
+function ScanInputBox({ label = "Scan product", onItem, onError, autoFocus, continuous = false }: { label?: string; onItem: (item: any) => void; onError?: (msg: string) => void; autoFocus?: boolean; continuous?: boolean }) {
   const { path } = useCompany();
   const [v, setV] = useState("");
   const [busy, setBusy] = useState(false);
