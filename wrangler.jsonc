@@ -22,6 +22,9 @@
   // Requires niyazio.com to be an active zone in the same Cloudflare account.
   "routes": [{ "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
+  // Smart Placement (free): runs the Worker close to the D1 database instead of close to the visitor, because one
+  // screen makes several database queries and each one would otherwise cross the world and back.
+  "placement": { "mode": "smart" },
   // Daily at 03:17 UTC (08:47 IST): trial and renewal reminder emails (only when billing and email are switched on).
   "triggers": { "crons": ["17 3 * * *"] },
   // Keep variables added in the Cloudflare dashboard (e.g. VENDOR_ADMIN_EMAILS) when CI deploys; values below still win.

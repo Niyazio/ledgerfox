@@ -178,7 +178,7 @@ export function ContactView() {
       <PageHeader title={c.name} subtitle={[c.email, c.phone, c.tax_id].filter(Boolean).join(" · ")} back={{ to: `/app/${id}/${isCustomer ? "customers" : "suppliers"}`, label: isCustomer ? "Customers" : "Suppliers" }}
         actions={<>
           <LinkButton variant="secondary" to={`/app/${id}/reports/statement/${c.id}`}>Statement</LinkButton>
-          {isCustomer && me?.edition === "cloud" && <PortalLinkButton contactId={c.id} name={c.name} phone={c.phone} email={c.email} />}
+          {me?.edition === "cloud" && <PortalLinkButton contactId={c.id} name={c.name} phone={c.phone} email={c.email} supplier={!isCustomer} />}
           {can(isCustomer ? "customers.write" : "suppliers.write") && <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>}
           {isCustomer && can("sales.create") && <LinkButton to={`/app/${id}/sales/invoice/new?contact=${c.id}`}>New invoice</LinkButton>}
           {c.kind !== "customer" && can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?contact=${c.id}`}>New bill</LinkButton>}

@@ -79,13 +79,13 @@ export function EducationCard({ orgId }: { orgId: string }) {
 /** Admin panel: which emails may use education mode, their devices and packs, and the pack requests. */
 export function EducationAdmin() {
   const { data, error, reload } = useApi<{
-    access: (Access & { revoked_at: string | null; orgs: number; used: number })[];
+    access: (Access & { revoked_at: string | null; orgs: number; used: number; practice_companies: number; max_companies: number })[];
     unapproved: { email: string; name: string; org_name: string; company: string }[];
     requests: { created_at: string; org_name: string | null; owner_email: string | null; details: { pack: string; students: number; email: string; note?: string } }[];
     packs: Pack[]; free_devices: number; pack_months: number;
   }>("/api/education/admin");
   const toast = useToast();
-  const [form, setForm] = useState({ email: "", devices: "", pack: "", note: "" });
+  const [form, setForm] = useState({ email: "", devices: "", companies: "", pack: "", note: "" });
   const [busy, setBusy] = useState(false);
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
@@ -97,16 +97,17 @@ export function EducationAdmin() {
   return (
     <div className="space-y-4">
       <Card title="Give education mode to an email">
-        <p className="mb-3 text-sm muted">Only these emails can create and open practice companies (education mode). Free: {data.free_devices} devices. A student pack raises it to 25, 50 or 100 devices for {data.pack_months} months. One demo or practice company per organisation.</p>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <p className="mb-3 text-sm muted">Only these emails can create and open practice companies (education mode). Free: {data.free_devices} devices. A student pack raises it to 25, 50 or 100 devices for {data.pack_months} months. Each email may create 1 practice company unless you allow more.</p>
+        <div className="grid gap-3 sm:grid-cols-5">
           <Field label="Email">{(id) => <Input id={id} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="teacher@school.edu" />}</Field>
           <Field label="Devices (free)" hint={`Default ${data.free_devices}`}>{(id) => <Input id={id} inputMode="numeric" value={form.devices} onChange={(e) => setForm({ ...form, devices: e.target.value })} />}</Field>
+          <Field label="Practice companies" hint="How many they may create (default 1)">{(id) => <Input id={id} inputMode="numeric" value={form.companies} placeholder="1" onChange={(e) => setForm({ ...form, companies: e.target.value.replace(/\D/g, "") })} />}</Field>
           <Field label="Student pack">{(id) => <Select id={id} value={form.pack} onChange={(e) => setForm({ ...form, pack: e.target.value })}><option value="">None</option>{data.packs.map((p) => <option key={p.id} value={p.id}>{p.students} students · {data.pack_months} months</option>)}</Select>}</Field>
           <Field label="Note">{(id) => <Input id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="e.g. ABC College, paid UPI" />}</Field>
         </div>
         <Button className="mt-3" loading={busy} disabled={!form.email.includes("@")} onClick={() => void save(form.email, {
-          ...(form.devices ? { devices: Number(form.devices) } : {}), ...(form.pack ? { pack: form.pack } : {}), ...(form.note ? { note: form.note } : {}),
-        }, "Education mode switched on").then(() => setForm({ email: "", devices: "", pack: "", note: "" }))}>Save</Button>
+          ...(form.devices ? { devices: Number(form.devices) } : {}), ...(form.companies ? { max_companies: Number(form.companies) } : {}), ...(form.pack ? { pack: form.pack } : {}), ...(form.note ? { note: form.note } : {}),
+        }, "Education mode switched on").then(() => setForm({ email: "", devices: "", companies: "", pack: "", note: "" }))}>Save</Button>
       </Card>
 
       {data.requests.length > 0 && <Card title="Student pack requests" padded={false}><TableWrap><table className="table">
@@ -118,13 +119,18 @@ export function EducationAdmin() {
       </table></TableWrap></Card>}
 
       <Card title="Approved emails" padded={false}><TableWrap><table className="table">
-        <thead><tr><th>Email</th><th>Devices</th><th>Pack</th><th>Practice orgs</th><th>Note</th><th /></tr></thead>
+        <thead><tr><th>Email</th><th>Devices</th><th>Practice companies</th><th>Pack</th><th>Note</th><th /></tr></thead>
         <tbody>{data.access.map((a) => (
           <tr key={a.email} className={a.revoked_at ? "opacity-60" : ""}>
             <td>{a.email}{a.revoked_at && <span className="block text-xs text-red-600">removed {day(a.revoked_at)}</span>}</td>
             <td>{a.used} used / {a.devices}</td>
+            <td className="whitespace-nowrap">{a.practice_companies ?? 0} of {a.max_companies ?? 1}
+              {!a.revoked_at && <Button size="sm" variant="ghost" loading={busy} onClick={() => {
+                const v = prompt(`How many practice companies may ${a.email} create? (now ${a.max_companies ?? 1})`, String(a.max_companies ?? 1));
+                if (v && /^\d+$/.test(v) && Number(v) >= 1) void save(a.email, { max_companies: Number(v) }, "Limit changed");
+              }}>Change</Button>}</td>
             <td>{a.pack ? `${a.pack.replace("edu", "")} students · ${a.pack_active ? "until" : "ended"} ${day(a.pack_until)}` : "—"}</td>
-            <td>{a.orgs}</td><td className="text-xs">{a.note ?? ""}</td>
+            <td className="text-xs">{a.note ?? ""}</td>
             <td className="whitespace-nowrap text-right">
               {a.revoked_at ? <Button size="sm" variant="secondary" loading={busy} onClick={() => void save(a.email, {}, "Education mode switched on again")}>Give back</Button> : <>
                 {a.pack && <Button size="sm" variant="ghost" loading={busy} onClick={() => { if (confirm("End the student pack now? The free device limit applies again.")) void save(a.email, { pack: null }, "Pack ended"); }}>End pack</Button>}

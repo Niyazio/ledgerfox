@@ -76,7 +76,7 @@ export function CollectionTab() {
 
 // ── The customer's portal link (customer page) ──
 
-export function PortalLinkButton({ contactId, name, phone, email }: { contactId: string; name: string; phone?: string | null; email?: string | null }) {
+export function PortalLinkButton({ contactId, name, phone, email, supplier = false }: { contactId: string; name: string; phone?: string | null; email?: string | null; supplier?: boolean }) {
   const { path, can, settings } = useCompany();
   const toast = useToast();
   const [link, setLink] = useState<string | null>(null);
@@ -86,20 +86,25 @@ export function PortalLinkButton({ contactId, name, phone, email }: { contactId:
     catch (e) { toast("error", errorMessage(e)); }
   };
   const seller = settings?.company.legal_name || settings?.company.name;
-  const msg = link ? `Dear ${name}, you can see all your invoices from ${seller}, download them and pay online here: ${link}` : "";
+  const msg = !link ? "" : supplier
+    ? `Dear ${name}, you can see the purchase orders from ${seller}, accept them, and check your bills and our payments here: ${link}`
+    : `Dear ${name}, you can see all your invoices from ${seller}, download them and pay online here: ${link}`;
+  const title = supplier ? "Supplier portal" : "Customer portal";
   const digits = (phone ?? "").replace(/\D/g, "");
   return (
     <>
-      <Button variant="secondary" onClick={() => void get()}><ExternalLink className="h-4 w-4" />Customer portal</Button>
-      {open && link && <Modal open title="Customer portal" onClose={() => setOpen(false)}>
-        <p className="text-sm muted">Send this private link to {name}. They see their invoices, quotations and receipts, download them, accept quotations and pay online. Anyone with the link can see these, so share it only with the customer.</p>
+      <Button variant="secondary" onClick={() => void get()}><ExternalLink className="h-4 w-4" />{title}</Button>
+      {open && link && <Modal open title={title} onClose={() => setOpen(false)}>
+        <p className="text-sm muted">{supplier
+          ? `Send this private link to ${name}. They see your purchase orders and accept or decline them, and see their bills in your books, your payments to them and what you still owe. Anyone with the link can see these, so share it only with the supplier.`
+          : `Send this private link to ${name}. They see their invoices, quotations and receipts, download them, accept quotations and pay online. Anyone with the link can see these, so share it only with the customer.`}</p>
         <div className="mt-3 flex gap-2"><Input readOnly value={link} className="font-mono text-xs" onFocus={(e) => e.target.select()} aria-label="Portal link" />
           <Button variant="secondary" onClick={() => { void navigator.clipboard?.writeText(link); toast("success", "Link copied"); }} aria-label="Copy link"><Copy className="h-4 w-4" /></Button></div>
         <div className="mt-3 flex flex-wrap gap-2">
           <a className="btn-secondary inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm" target="_blank" rel="noreferrer" href={`https://wa.me/${digits.length === 10 ? `91${digits}` : digits}?text=${encodeURIComponent(msg)}`}><MessageCircle className="h-4 w-4" />WhatsApp</a>
-          <a className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm" href={`mailto:${email ?? ""}?subject=${encodeURIComponent(`Your invoices from ${seller}`)}&body=${encodeURIComponent(msg)}`}><Mail className="h-4 w-4" />Email</a>
+          <a className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm" href={`mailto:${email ?? ""}?subject=${encodeURIComponent(supplier ? `Purchase orders from ${seller}` : `Your invoices from ${seller}`)}&body=${encodeURIComponent(msg)}`}><Mail className="h-4 w-4" />Email</a>
           <a className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm" href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />Open</a>
-          {can("customers.write") && <Button variant="ghost" onClick={() => { if (confirm("Make a new link? The current link stops working.")) void get(true); }}><RefreshCw className="h-4 w-4" />New link</Button>}
+          {can(supplier ? "suppliers.write" : "customers.write") && <Button variant="ghost" onClick={() => { if (confirm("Make a new link? The current link stops working.")) void get(true); }}><RefreshCw className="h-4 w-4" />New link</Button>}
         </div>
       </Modal>}
     </>
@@ -179,14 +184,48 @@ export function CustomerPortal() {
     try { await api.post(`/api/portal/${token}/quotes/${id}/${action}`); setMsg(action === "accept" ? `Quotation accepted. ${data.business.name} sees it in their books.` : "Quotation declined."); reload(); }
     catch (e) { setMsg(errorMessage(e)); } finally { setBusy(null); }
   };
+  const order = async (id: string, action: "accept" | "decline") => {
+    setBusy(id);
+    try { await api.post(`/api/portal/${token}/orders/${id}/${action}`); setMsg(action === "accept" ? `Purchase order accepted. ${data.business.name} sees that you confirmed it.` : "Purchase order declined."); reload(); }
+    catch (e) { setMsg(errorMessage(e)); } finally { setBusy(null); }
+  };
+  const sup = data.supplier;
+  const isSupplier = data.customer.kind === "supplier";
   const label = (d: any) => DOC_LABELS[d.variant ?? d.doc_type]?.one ?? d.doc_type;
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-2"><Wordmark iconClass="h-7 w-7" /><span className="text-sm muted">Customer portal</span></div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2"><Wordmark iconClass="h-7 w-7" /><span className="text-sm muted">{isSupplier ? "Supplier portal" : "Customer portal"}</span></div>
       <h1 className="text-2xl font-semibold">{data.business.name}</h1>
       <p className="text-sm muted">{[data.business.address, data.business.phone, data.business.email].filter(Boolean).join(" · ")}</p>
       <p className="mt-4">Hello <b>{data.customer.name}</b>, here are your documents and payments.</p>
       {msg && <Alert kind="info" className="mt-3">{msg}</Alert>}
+      {sup && <>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">{data.business.name} owes you</p><p className="text-2xl font-semibold">{m(sup.owed)}</p></div>
+          <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">Past due date</p><p className={`text-2xl font-semibold ${sup.overdue > 0 ? "text-red-600" : ""}`}>{m(sup.overdue)}</p></div>
+        </div>
+        <Card title="Purchase orders" padded={false} className="mt-5">{sup.orders.length ? <TableWrap><table className="table">
+          <thead><tr><th>Order</th><th className="num">Amount</th><th>Status</th></tr></thead>
+          <tbody>{sup.orders.map((d: any) => <tr key={d.id}>
+            <td><a className="text-brand-700 hover:underline dark:text-brand-300" href={d.link}><FileText className="mr-1 inline h-4 w-4" />{label(d)} {d.number}</a><span className="block text-xs muted">{fmtDate(d.issue_date)}</span></td>
+            <td className="num whitespace-nowrap">{m(d.total, d.currency)}</td>
+            <td><Badge color={d.status === "accepted" || d.status === "closed" ? "green" : d.status === "declined" ? "red" : "gray"}>{d.status === "open" ? "waiting for you" : d.status}</Badge>
+              {d.status === "open" && <div className="mt-2 flex flex-wrap gap-1">
+                <Button size="sm" loading={busy === d.id} onClick={() => void order(d.id, "accept")}>Accept</Button>
+                <Button size="sm" variant="ghost" disabled={busy === d.id} onClick={() => { if (confirm("Decline this purchase order?")) void order(d.id, "decline"); }}>Decline</Button></div>}</td></tr>)}</tbody>
+        </table></TableWrap> : <EmptyState title="No purchase orders yet" />}</Card>
+        {sup.bills.length > 0 && <Card title="Your bills in our books" padded={false} className="mt-5"><TableWrap><table className="table">
+          <thead><tr><th>Date</th><th>Bill</th><th>Due</th><th className="num">Amount</th><th className="num">Unpaid</th></tr></thead>
+          <tbody>{sup.bills.map((d: any) => { const bal = d.doc_type === "bill" ? d.total - d.amount_settled : 0; return <tr key={d.id}><td>{fmtDate(d.issue_date)}</td><td>{label(d)} {d.number}</td>
+            <td>{d.due_date ? <>{fmtDate(d.due_date)} {bal > 0 && d.due_date < today && <Badge color="red">past due</Badge>}</> : "—"}</td>
+            <td className="num">{d.doc_type === "debit_note" ? "−" : ""}{m(d.total, d.currency)}</td><td className="num">{bal > 0 ? m(bal, d.currency) : d.doc_type === "bill" ? <Badge color="green">Paid</Badge> : ""}</td></tr>; })}</tbody>
+        </table></TableWrap></Card>}
+        {sup.payments.length > 0 && <Card title="Payments made to you" padded={false} className="mt-5"><TableWrap><table className="table">
+          <thead><tr><th>Date</th><th>Payment</th><th>Method</th><th className="num">Amount</th></tr></thead>
+          <tbody>{sup.payments.map((r: any, i: number) => <tr key={i}><td>{fmtDate(r.payment_date)}</td><td>{r.number}</td><td>{r.method ?? ""}{r.reference ? <span className="block text-xs muted">{r.reference}</span> : null}</td><td className="num">{m(r.amount, r.currency)}</td></tr>)}</tbody>
+        </table></TableWrap></Card>}
+      </>}
+      {!isSupplier && <>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">You owe</p><p className="text-2xl font-semibold">{data.summary.mixed ? "See below" : m(data.summary.outstanding)}</p></div>
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">Overdue</p><p className={`text-2xl font-semibold ${data.summary.overdue > 0 ? "text-red-600" : ""}`}>{data.summary.mixed ? "—" : m(data.summary.overdue)}</p></div>
@@ -215,6 +254,7 @@ export function CustomerPortal() {
         <thead><tr><th>Date</th><th>Receipt</th><th>Method</th><th className="num">Amount</th></tr></thead>
         <tbody>{data.receipts.map((r: any, i: number) => <tr key={i}><td>{fmtDate(r.payment_date)}</td><td>{r.number}</td><td>{r.method ?? ""}{r.reference ? <span className="block text-xs muted">{r.reference}</span> : null}</td><td className="num">{m(r.amount, r.currency)}</td></tr>)}</tbody>
       </table></TableWrap></Card>}
+      </>}
       <p className="mt-6 text-xs muted">This page is private to you. Questions about your account? Contact {data.business.name}{data.business.phone ? ` on ${data.business.phone}` : ""}.</p>
       <ProductCredit className="mt-4 text-center" />
       <Link to="/" className="sr-only">LedgerFox</Link>

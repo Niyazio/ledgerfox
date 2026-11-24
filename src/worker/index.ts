@@ -4,9 +4,9 @@ import { education } from "./routes/education";
 import { collect, payPublic, portalPublic } from "./routes/collect";
 import { customise } from "./routes/customise";
 import { projects } from "./routes/projects";
+import { taxcheck } from "./routes/taxcheck";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
-import { first } from "./lib/db";
 import { TRIAL_DAYS } from "@shared/plans";
 import { AppError, fromDbError } from "./lib/errors";
 import { requireAuth, requireCompany } from "./lib/auth";
@@ -136,25 +136,20 @@ company.use("*", async (c, next) => {
   }
   await next();
 });
-// Paused by LedgerFox (admin panel): nothing can be opened except the full export, so the owner keeps their data.
-company.use("*", async (c, next) => {
-  const o = await first<{ suspended_at: string | null; suspended_reason: string | null }>(c.env.DB, `SELECT suspended_at, suspended_reason FROM organisations WHERE id = ?`, c.get("company").org_id);
-  if (o?.suspended_at && !(c.req.method === "GET" && /\/export(\/|$)/.test(c.req.path))) {
-    throw new AppError(403, "ACCOUNT_SUSPENDED", "Access to this business has been paused by LedgerFox. Your data is safe. Please contact info@niyazio.com.");
-  }
-  await next();
-});
 // Education mode: only for organisations LedgerFox approved, on a limited number of devices.
 company.use("*", async (c, next) => { await checkPracticeAccess(c); await next(); });
 // Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
 company.use("*", async (c, next) => {
   // Company set-up (details, logo, payment QR, branches) is always allowed: it comes before the trial screen.
   const setup = /^\/api\/c\/[^/]+\/settings(\/|$)/.test(c.req.path) || c.req.path.endsWith("/recurring/run");
-  if (c.req.method !== "GET" && !setup && !c.get("company").is_practice && (await autopayRequired(c.env, c.get("company").org_id, c.get("user").email))) {
-    throw new AppError(402, "AUTOPAY_REQUIRED", "Start your free trial first: set up auto-pay in Settings → Plan & billing. Razorpay takes ₹5 to check your UPI or card and refunds it; nothing is charged until the trial ends.");
-  }
-  if (c.req.method !== "GET" && !setup && !c.get("company").is_practice && (await renewRequired(c.env, c.get("company").org_id, c.get("user").email))) {
-    throw new AppError(402, "RENEW_REQUIRED", await renewMessage(c.env));
+  if (c.req.method !== "GET" && !setup && !c.get("company").is_practice) {
+    // Both checks at once: a save waits for one database round trip instead of two.
+    const [autopay, renew] = await Promise.all([
+      autopayRequired(c.env, c.get("company").org_id, c.get("user").email),
+      renewRequired(c.env, c.get("company").org_id, c.get("user").email),
+    ]);
+    if (autopay) throw new AppError(402, "AUTOPAY_REQUIRED", "Start your free trial first: set up auto-pay in Settings → Plan & billing. Razorpay takes ₹5 to check your UPI or card and refunds it; nothing is charged until the trial ends.");
+    if (renew) throw new AppError(402, "RENEW_REQUIRED", await renewMessage(c.env));
   }
   await next();
 });
@@ -217,6 +212,7 @@ company.route("/verify", verifyToken);
 company.route("/collection", collect);
 company.route("/", customise);
 company.route("/projects", projects);
+company.route("/tax-check", taxcheck);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

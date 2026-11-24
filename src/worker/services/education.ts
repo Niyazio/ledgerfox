@@ -22,16 +22,17 @@ export interface EducationAccess {
   pack: EducationPackId | null;
   pack_until: string | null;
   pack_active: boolean;
+  max_companies: number;
   note: string | null;
   created_at: string;
 }
 
-interface Row { email: string; devices: number; pack: EducationPackId | null; pack_until: string | null; note: string | null; created_at: string; revoked_at: string | null }
+interface Row { email: string; devices: number; pack: EducationPackId | null; pack_until: string | null; note: string | null; created_at: string; revoked_at: string | null; max_companies: number }
 
 function shape(r: Row, now = Date.now()): EducationAccess {
   const active = Boolean(r.pack && r.pack_until && Date.parse(r.pack_until) > now);
   return {
-    email: r.email, base_devices: r.devices, pack: r.pack, pack_until: r.pack_until, pack_active: active, note: r.note, created_at: r.created_at,
+    email: r.email, base_devices: r.devices, pack: r.pack, pack_until: r.pack_until, pack_active: active, note: r.note, created_at: r.created_at, max_companies: r.max_companies ?? 1,
     devices: Math.max(r.devices, active ? EDUCATION_PACKS[r.pack!].students : 0),
   };
 }
@@ -39,18 +40,19 @@ function shape(r: Row, now = Date.now()): EducationAccess {
 /** The approved education access for an email, or null (none, or revoked). */
 export async function educationAccess(env: Env, email: string | null | undefined): Promise<EducationAccess | null> {
   if (!email) return null;
-  const r = await first<Row>(env.DB, `SELECT email, devices, pack, pack_until, note, created_at, revoked_at FROM education_access WHERE email = ?`, email.toLowerCase());
+  const r = await first<Row>(env.DB, `SELECT email, devices, pack, pack_until, note, created_at, revoked_at, max_companies FROM education_access WHERE email = ?`, email.toLowerCase());
   return r && !r.revoked_at ? shape(r) : null;
 }
 
 export async function listEducationAccess(env: Env) {
-  const rows = await all<Row & { orgs: number; used: number }>(env.DB,
-    `SELECT a.email, a.devices, a.pack, a.pack_until, a.note, a.created_at, a.revoked_at,
+  const rows = await all<Row & { orgs: number; used: number; practice_companies: number }>(env.DB,
+    `SELECT a.email, a.devices, a.pack, a.pack_until, a.note, a.created_at, a.revoked_at, a.max_companies,
+            (SELECT COUNT(*) FROM companies c JOIN organisations o ON o.id = c.org_id JOIN users u ON u.id = o.owner_user_id WHERE lower(u.email) = a.email AND c.is_practice = 1) AS practice_companies,
             (SELECT COUNT(*) FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE lower(u.email) = a.email
                AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = o.id AND c.is_practice = 1)) AS orgs,
             (SELECT COUNT(*) FROM education_devices d JOIN organisations o ON o.id = d.org_id JOIN users u ON u.id = o.owner_user_id WHERE lower(u.email) = a.email) AS used
        FROM education_access a ORDER BY a.revoked_at IS NOT NULL, a.updated_at DESC LIMIT 500`);
-  return rows.map((r) => ({ ...shape(r), revoked_at: r.revoked_at, orgs: r.orgs, used: r.used }));
+  return rows.map((r) => ({ ...shape(r), revoked_at: r.revoked_at, orgs: r.orgs, used: r.used, practice_companies: r.practice_companies }));
 }
 
 /** Owners of practice companies whose email is not approved (for the admin panel). */
@@ -65,16 +67,28 @@ export async function unapprovedPracticeOwners(env: Env) {
 const notApproved = () => new AppError(403, "EDUCATION_NOT_APPROVED",
   "Education mode is given by LedgerFox to approved teachers, institutes and trainers. Ask for access at info@niyazio.com with the email you sign in with.");
 
-/** Before a practice company is created: the person must be approved, and the organisation may not already hold a demo or practice company. */
+/**
+ * Before a practice company is created: the owner must be approved, may have only as many practice companies as
+ * LedgerFox allowed them (1 unless the admin panel says more), and an organisation with a demo company holds no practice one.
+ */
 export async function requirePracticeAllowed(c: Context<AppEnv>, orgId: string | null) {
   const user = c.get("user");
-  if (educationEnforced(c.env) && !isVendor(c.env, user.email) && !(await educationAccess(c.env, user.email))) throw notApproved();
-  if (orgId) await requireNoLearningCompany(c.env, orgId);
-  else {
-    const own = await first<{ name: string }>(c.env.DB,
-      `SELECT o.name FROM organisations o WHERE o.owner_user_id = ? AND EXISTS (SELECT 1 FROM companies c WHERE c.org_id = o.id AND c.is_practice = 1) LIMIT 1`, user.id);
-    if (own) throw new AppError(409, "LEARNING_COMPANY_EXISTS", `You already have a practice company (in “${own.name}”). Use that one: each account runs one education-mode organisation.`);
+  // The practice companies count against the organisation owner's allowance (the person who was approved).
+  const owner = orgId ? await first<{ id: string; email: string }>(c.env.DB, `SELECT u.id, u.email FROM organisations o JOIN users u ON u.id = o.owner_user_id WHERE o.id = ?`, orgId) : { id: user.id, email: user.email };
+  const vendor = isVendor(c.env, user.email) || isVendor(c.env, owner?.email);
+  const access = await educationAccess(c.env, owner?.email);
+  if (educationEnforced(c.env) && !vendor && !access) throw notApproved();
+  if (orgId) {
+    const demo = await first<{ name: string }>(c.env.DB, `SELECT name FROM companies WHERE org_id = ? AND is_demo = 1 LIMIT 1`, orgId);
+    if (demo) throw new AppError(409, "LEARNING_COMPANY_EXISTS", `This organisation has a demo company (“${demo.name}”). Delete it in its Settings first, or create the practice company in a new organisation.`);
   }
+  if (vendor) return;
+  const max = access?.max_companies ?? 1;
+  const n = (await first<{ n: number }>(c.env.DB,
+    `SELECT COUNT(*) AS n FROM companies c JOIN organisations o ON o.id = c.org_id WHERE o.owner_user_id = ? AND c.is_practice = 1`, owner!.id))?.n ?? 0;
+  if (n >= max) throw new AppError(409, "PRACTICE_LIMIT", max === 1
+    ? "Your education access includes one practice company, and it is already created. Use that one, or ask LedgerFox (info@niyazio.com) to allow more."
+    : `Your education access includes ${max} practice companies, and all are created. Ask LedgerFox (info@niyazio.com) to allow more.`);
 }
 
 /** One demo or practice company per organisation. */

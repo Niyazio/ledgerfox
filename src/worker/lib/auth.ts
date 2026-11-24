@@ -98,19 +98,29 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   const companyId = c.req.param("companyId");
   const user = c.get("user");
   if (!companyId) throw notFound("Company");
-  const row = await first<CompanyRow & { role: Role; all_branches: number; require_2fa: number }>(
+  // One query for the company, the member's role and the organisation flags (each D1 round trip costs time).
+  const row = await first<CompanyRow & { role: Role; all_branches: number; require_2fa: number; org_suspended_at: string | null }>(
     c.env.DB,
-    `SELECT co.*, m.role, m.all_branches, o.require_2fa FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? JOIN organisations o ON o.id = co.org_id WHERE co.id = ?`,
+    `SELECT co.*, m.role, m.all_branches, o.require_2fa, o.suspended_at AS org_suspended_at FROM companies co JOIN memberships m ON m.org_id = co.org_id AND m.user_id = ? JOIN organisations o ON o.id = co.org_id WHERE co.id = ?`,
     user.id, companyId,
   );
   if (!row) throw notFound("Company");
-  const { role, all_branches, require_2fa, ...company } = row;
+  const { role, all_branches, require_2fa, org_suspended_at, ...company } = row;
+  // Paused by LedgerFox (admin panel): nothing can be opened except the full export, so the owner keeps their data.
+  if (org_suspended_at && !(c.req.method === "GET" && /\/export(\/|$)/.test(c.req.path))) {
+    throw new AppError(403, "ACCOUNT_SUSPENDED", "Access to this business has been paused by LedgerFox. Your data is safe. Please contact info@niyazio.com.");
+  }
   // The owner can require two-factor sign-in for everyone; members without it are sent to set it up.
   if (require_2fa && !user.totp_enabled) throw new AppError(403, "TWO_FACTOR_REQUIRED", "Your organisation requires two-factor sign-in. Set it up under Settings → My account.");
   c.set("company", company as CompanyRow);
   c.set("role", role);
-  c.set("perms", await orgPermissions(c.env.DB, company.org_id, role));
-  c.set("branches", await branchScope(c.env.DB, company.org_id, company.id, user.id, role, Boolean(all_branches)));
+  // Both lookups at once instead of one after the other.
+  const [perms, branches] = await Promise.all([
+    orgPermissions(c.env.DB, company.org_id, role),
+    branchScope(c.env.DB, company.org_id, company.id, user.id, role, Boolean(all_branches)),
+  ]);
+  c.set("perms", perms);
+  c.set("branches", branches);
   await next();
 };
 

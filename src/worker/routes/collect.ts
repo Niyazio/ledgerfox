@@ -81,12 +81,12 @@ collect.put("/", async (c) => {
 
 /** A customer's private portal link (made on first use; `renew` replaces it, so the old link stops working). */
 collect.post("/portal/:contactId", async (c) => {
-  requireAnyPerm(c, "customers.write", "sales.view");
+  requireAnyPerm(c, "customers.write", "sales.view", "suppliers.write", "purchase.view");
   const company = c.get("company");
   const input = await body(c, z.object({ renew: z.boolean().optional() }));
   const ct = await first<{ kind: string }>(c.env.DB, `SELECT kind FROM contacts WHERE id = ? AND company_id = ?`, c.req.param("contactId"), company.id);
-  if (!ct || ct.kind === "supplier") throw notFound("Customer");
-  if (input.renew) requirePerm(c, "customers.write");
+  if (!ct) throw notFound("Contact");
+  if (input.renew) requireAnyPerm(c, ...(ct.kind === "supplier" ? ["suppliers.write"] : ["customers.write"]) as never[]);
   const token = await portalToken(c.env, company.id, c.req.param("contactId"), c.get("user").id, Boolean(input.renew));
   return c.json({ token, url: `${siteUrl(c.env, c.req.url)}/portal/${token}` });
 });
@@ -158,31 +158,56 @@ portalPublic.get("/:token", async (c) => {
   const l = await portalFor(c, token);
   const co = await first<{ name: string; legal_name: string | null; email: string | null; phone: string | null; address: string | null; city: string | null; base_currency: string; upi_id: string | null }>(c.env.DB,
     `SELECT name, legal_name, email, phone, address, city, base_currency, upi_id FROM companies WHERE id = ?`, l.company_id);
-  const ct = await first<{ name: string; email: string | null; currency: string | null }>(c.env.DB, `SELECT name, email, currency FROM contacts WHERE id = ?`, l.contact_id);
+  const ct = await first<{ name: string; email: string | null; currency: string | null; kind: string }>(c.env.DB, `SELECT name, email, currency, kind FROM contacts WHERE id = ?`, l.contact_id);
   const docs = await all<{ id: string; doc_type: string; variant: string | null; number: string; issue_date: string; due_date: string | null; status: string; currency: string; total: number; amount_settled: number }>(c.env.DB,
     `SELECT id, doc_type, variant, number, issue_date, due_date, status, currency, total, amount_settled FROM documents
-      WHERE company_id = ? AND contact_id = ? AND doc_type IN ('invoice','credit_note','quote','sales_order') AND status NOT IN ('draft','void')
+      WHERE company_id = ? AND contact_id = ? AND doc_type IN ('invoice','credit_note','quote','sales_order','purchase_order','bill','debit_note') AND status NOT IN ('draft','void')
       ORDER BY issue_date DESC LIMIT 200`, l.company_id, l.contact_id);
   const withLinks = await Promise.all(docs.map(async (d) => ({ ...d, link: `/verify/${await documentToken(c.env, l.company_id, d.id)}` })));
-  const receipts = await all(c.env.DB,
-    `SELECT number, payment_date, currency, amount, method, reference FROM payments WHERE company_id = ? AND contact_id = ? AND direction = 'in' AND status = 'posted' ORDER BY payment_date DESC LIMIT 100`,
+  const pays = await all<{ direction: string; number: string; payment_date: string; currency: string; amount: number; method: string | null; reference: string | null }>(c.env.DB,
+    `SELECT direction, number, payment_date, currency, amount, method, reference FROM payments WHERE company_id = ? AND contact_id = ? AND status = 'posted' ORDER BY payment_date DESC LIMIT 200`,
     l.company_id, l.contact_id);
+  const receipts = pays.filter((p) => p.direction === "in");
+  const bills = withLinks.filter((d) => d.doc_type === "bill" && d.status === "posted" && d.total > d.amount_settled);
   const today = new Date().toISOString().slice(0, 10);
   const open = withLinks.filter((d) => d.doc_type === "invoice" && d.status === "posted" && d.total > d.amount_settled);
   await run(c.env.DB, `UPDATE portal_links SET last_opened_at = ? WHERE token = ?`, new Date().toISOString(), token);
   return c.json({
     business: { name: co?.legal_name || co?.name, email: co?.email, phone: co?.phone, address: [co?.address, co?.city].filter(Boolean).join(", ") || null },
-    customer: { name: ct?.name },
+    customer: { name: ct?.name, kind: ct?.kind ?? "customer" },
     online_pay: await onlineReady(c.env, l.company_id),
     summary: {
       outstanding: open.reduce((s, d) => s + d.total - d.amount_settled, 0),
       overdue: open.filter((d) => d.due_date && d.due_date < today).reduce((s, d) => s + d.total - d.amount_settled, 0),
       currency: ct?.currency ?? co?.base_currency, mixed: new Set(open.map((d) => d.currency)).size > 1,
     },
-    invoices: withLinks.filter((d) => d.doc_type === "invoice" || d.doc_type === "credit_note"),
-    quotes: withLinks.filter((d) => d.doc_type === "quote" || d.doc_type === "sales_order"),
+    invoices: ct?.kind === "supplier" ? [] : withLinks.filter((d) => d.doc_type === "invoice" || d.doc_type === "credit_note"),
+    quotes: ct?.kind === "supplier" ? [] : withLinks.filter((d) => d.doc_type === "quote" || d.doc_type === "sales_order"),
     receipts,
+    // Supplier side (Ariba-style): orders sent to them, their bills in our books, our payments and what we still owe.
+    supplier: ct?.kind === "customer" ? null : {
+      orders: withLinks.filter((d) => d.doc_type === "purchase_order"),
+      bills: withLinks.filter((d) => d.doc_type === "bill" || d.doc_type === "debit_note").map(({ link: _l, ...d }) => d),
+      payments: pays.filter((p) => p.direction === "out"),
+      owed: bills.reduce((s, d) => s + d.total - d.amount_settled, 0),
+      overdue: bills.filter((d) => d.due_date && d.due_date < today).reduce((s, d) => s + d.total - d.amount_settled, 0),
+    },
   });
+});
+
+/** The supplier accepts (acknowledges) or declines an open purchase order from their portal. */
+portalPublic.post("/:token/orders/:docId/:action{accept|decline}", async (c) => {
+  const l = await portalFor(c, c.req.param("token"));
+  const d = await first<{ status: string; number: string; doc_type: string }>(c.env.DB, `SELECT status, number, doc_type FROM documents WHERE id = ? AND company_id = ? AND contact_id = ?`, c.req.param("docId"), l.company_id, l.contact_id);
+  if (!d || d.doc_type !== "purchase_order") throw notFound("Purchase order");
+  if (d.status !== "open") throw new AppError(409, "NOT_OPEN", "This purchase order can no longer be changed");
+  const status = c.req.param("action") === "accept" ? "accepted" : "declined";
+  c.set("company", (await first<CompanyRow>(c.env.DB, `SELECT * FROM companies WHERE id = ?`, l.company_id))!);
+  await batch(c.env.DB, [
+    c.env.DB.prepare(`UPDATE documents SET status = ?, updated_at = ? WHERE id = ? AND status = 'open'`).bind(status, new Date().toISOString(), c.req.param("docId")),
+    audit(c, `purchase_order.${status}_by_supplier`, "document", c.req.param("docId"), { number: d.number, via: "portal" }),
+  ]);
+  return c.json({ status });
 });
 
 /** The customer accepts or declines an open quotation from the portal. */

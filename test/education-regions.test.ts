@@ -55,7 +55,7 @@ async function school() {
 }
 
 describe("education mode by approval", () => {
-  it("needs LedgerFox's approval, and allows one practice or demo company per organisation", async () => {
+  it("needs LedgerFox's approval, and allows as many practice companies as LedgerFox set (1 by default)", async () => {
     const S = await school();
     const practice = company("IN", "INR", { name: "Class 11", is_practice: true, state_code: "29" });
     const refused = await S.teacher.post("/api/orgs", { name: "School", company: practice });
@@ -67,9 +67,17 @@ describe("education mode by approval", () => {
     expect((await S.teacher.get("/api/education/me")).json.approved).toBe(true);
     const ok = await S.teacher.post("/api/orgs", { name: "School", company: practice });
     expect(ok.status).toBe(201);
-    // A second practice organisation, or a second practice company in it, is refused.
-    expect((await S.teacher.post("/api/orgs", { name: "School 2", company: practice })).json.error.code).toBe("LEARNING_COMPANY_EXISTS");
-    expect((await S.teacher.post(`/api/orgs/${ok.json.org_id}/companies`, { ...practice, name: "Class 12" })).json.error.code).toBe("LEARNING_COMPANY_EXISTS");
+    // One practice company by default: a second one (in a new organisation or the same one) is refused...
+    const second = await S.teacher.post("/api/orgs", { name: "School 2", company: practice });
+    expect([second.status, second.json.error.code]).toEqual([409, "PRACTICE_LIMIT"]);
+    expect((await S.teacher.post(`/api/orgs/${ok.json.org_id}/companies`, { ...practice, name: "Class 12" })).json.error.code).toBe("PRACTICE_LIMIT");
+    // ...until LedgerFox allows more (here 3), keeping the devices as they were.
+    expect((await S.admin.put(`/api/education/admin/${encodeURIComponent(S.email)}`, { max_companies: 3 })).json.access).toMatchObject({ max_companies: 3, devices: 10 });
+    expect((await S.teacher.post(`/api/orgs/${ok.json.org_id}/companies`, { ...practice, name: "Class 12" })).status).toBe(201);
+    expect((await S.teacher.post("/api/orgs", { name: "School 2", company: practice })).status).toBe(201);
+    expect((await S.teacher.post("/api/orgs", { name: "School 3", company: practice })).json.error.code).toBe("PRACTICE_LIMIT");
+    expect((await S.admin.get("/api/education/admin")).json.access.find((a: any) => a.email === S.email)).toMatchObject({ max_companies: 3, practice_companies: 3 });
+    expect((await S.admin.put(`/api/education/admin/${encodeURIComponent(S.email)}`, { max_companies: 0 })).status).toBe(400);
   });
 
   it("opens on up to the allowed number of devices; the owner frees a device; a 25-student pack raises it for 6 months", async () => {
