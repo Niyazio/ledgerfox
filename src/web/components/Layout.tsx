@@ -130,7 +130,7 @@ const NAV: NavGroup[] = [
   { label: "Administration", items: [
     { to: "settings?tab=members", label: "Users & permissions", icon: <UserCog className="h-4 w-4" />, perm: "org.manage" },
     { to: "settings?tab=dimensions", label: "Branches", icon: <GitBranch className="h-4 w-4" />, perm: "branches.manage" },
-    { to: "import", label: "Import from Excel", icon: <FileUp className="h-4 w-4" />, perm: ["items.write", "customers.write", "suppliers.write"] },
+    { to: "import", label: "Import from Excel", icon: <FileUp className="h-4 w-4" />, perm: ["items.write", "customers.write", "suppliers.write", "accounts.write"] },
     { to: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
   ] },
 ];

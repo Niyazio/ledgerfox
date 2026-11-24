@@ -10,6 +10,7 @@ import { currencyExponent, isCurrency } from "@shared/currencies";
 import { INDIA_STATES, isValidGstin } from "@shared/tax";
 import { buildJournal, systemAccounts, assertOpenPeriod } from "../services/ledger";
 import { stockMoveStmt, defaultWarehouse } from "../services/inventory";
+import { isValidSubtype, type AccountType } from "@shared/coa";
 
 /**
  * Bulk import of customers/suppliers and products from a spreadsheet. The browser reads the Excel/CSV file and sends
@@ -137,13 +138,22 @@ imports.post("/items", async (c) => {
   const company = c.get("company");
   const asOf = input.as_of ?? todayIso();
   const exp = currencyExponent(company.base_currency);
-  const [existing, taxCodes, warehouses, units, codeMax] = await Promise.all([
+  const [existing, taxCodes, warehouses, units, codeMax, ledgers] = await Promise.all([
     all<{ id: string; name: string; sku: string | null; code: string | null; barcode: string | null }>(c.env.DB, `SELECT id, name, sku, code, barcode FROM items WHERE company_id = ?`, company.id),
     all<{ id: string; name: string; rate_bp: number; category: string; is_active: number }>(c.env.DB, `SELECT id, name, rate_bp, category, is_active FROM tax_codes WHERE company_id = ?`, company.id),
     all<{ id: string; code: string; name: string }>(c.env.DB, `SELECT id, code, name FROM warehouses WHERE company_id = ? AND is_active = 1`, company.id),
     all<{ code: string; name: string }>(c.env.DB, `SELECT code, name FROM units WHERE company_id = ?`, company.id),
     all<{ n: number | null }>(c.env.DB, `SELECT MAX(CAST(SUBSTR(code, 2) AS INTEGER)) AS n FROM items WHERE company_id = ? AND code GLOB 'P[0-9]*'`, company.id),
+    all<{ id: string; code: string; name: string; type: string }>(c.env.DB, `SELECT id, code, name, type FROM accounts WHERE company_id = ? AND is_group = 0 AND is_active = 1`, company.id),
   ]);
+  /** An account given by code ("4210"), name, or both ("4210 Website Income" / "4210 - Website Income"). */
+  const ledger = (raw: string, types: string[]) => {
+    const v = raw.trim().toLowerCase();
+    const pool = ledgers.filter((a) => types.includes(a.type));
+    const lead = v.split(/[\s:–]+/)[0];
+    return pool.find((a) => a.code.toLowerCase() === v || a.name.toLowerCase() === v) ?? pool.find((a) => a.code.toLowerCase() === lead);
+  };
+
   const taken = { name: new Set(existing.map((e) => e.name.toLowerCase())), sku: new Set(existing.map((e) => e.sku?.toLowerCase()).filter(Boolean)), code: new Set(existing.map((e) => e.code).filter(Boolean)), barcode: new Set(existing.map((e) => e.barcode).filter(Boolean)) };
   let nextCode = (codeMax[0]?.n ?? 0) + 1;
   const out: Outcome = { created: 0, updated: 0, skipped: [], errors: [] };
@@ -186,6 +196,13 @@ imports.post("/items", async (c) => {
       taxId = hit.id;
     }
     // Units are matched by code or name; a new unit (e.g. "bag") is added to the company's units.
+    // Income (sales) and expense (purchase) accounts, by code or name.
+    const incRaw = p("income account", "sales account", "revenue account", "income a/c", "sales ledger", "income ledger");
+    const expRaw = p("expense account", "purchase account", "cost account", "expense a/c", "purchase ledger");
+    const incAcc = incRaw ? ledger(incRaw, ["income"]) : undefined;
+    const expAcc = expRaw ? ledger(expRaw, ["expense", "asset"]) : undefined;
+    if (incRaw && !incAcc) return fail(`No income account "${incRaw}" in the chart of accounts`);
+    if (expRaw && !expAcc) return fail(`No expense account "${expRaw}" in the chart of accounts`);
     const salePrice = priceAndUnit(p("sale price", "selling price", "rate", "suggested rate", "mrp", "price", "amount"));
     const unitRaw = (p("unit", "uom", "units") || salePrice.unit).toLowerCase().replace(/\.$/, "");
     if (unitRaw && !/^[a-z0-9 ._-]{1,20}$/.test(unitRaw)) return fail(`Unit "${unitRaw}" is too long or has unsupported characters`);
@@ -224,10 +241,11 @@ imports.post("/items", async (c) => {
       const has = (...n: string[]) => p(...n) !== "";
       stmts.push(stmt(c.env.DB,
         `UPDATE items SET sale_price = CASE WHEN ? THEN ? ELSE sale_price END, purchase_price = CASE WHEN ? THEN ? ELSE purchase_price END,
-           tax_code_id = COALESCE(?, tax_code_id), hsn_sac = COALESCE(?, hsn_sac), unit = CASE WHEN ? THEN ? ELSE unit END, description = COALESCE(?, description)
+           tax_code_id = COALESCE(?, tax_code_id), hsn_sac = COALESCE(?, hsn_sac), unit = CASE WHEN ? THEN ? ELSE unit END, description = COALESCE(?, description),
+           income_account_id = COALESCE(?, income_account_id), expense_account_id = COALESCE(?, expense_account_id)
          WHERE id = ? AND company_id = ?`,
         salePrice.amount ? 1 : 0, sale, has("purchase price", "cost", "cost price", "purchase rate") ? 1 : 0, purchase,
-        taxId, hsn || null, unitRaw ? 1 : 0, unit, details || null, hit.id, company.id));
+        taxId, hsn || null, unitRaw ? 1 : 0, unit, details || null, incAcc?.id ?? null, expAcc?.id ?? null, hit.id, company.id));
       if (openQty > 0) out.skipped.push({ row, reason: `${name}: opening stock not added to an existing product (use Adjust stock)` });
       out.updated!++;
       return;
@@ -236,10 +254,10 @@ imports.post("/items", async (c) => {
     const itemCode = code || `P${String(nextCode++).padStart(6, "0")}`;
     taken.name.add(name.toLowerCase()); if (sku) taken.sku.add(sku.toLowerCase()); taken.code.add(itemCode); if (barcode) taken.barcode.add(barcode);
     stmts.push(stmt(c.env.DB,
-      `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id, track_inventory, reorder_level_milli, code, barcode, track_batches)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id, track_inventory, reorder_level_milli, code, barcode, track_batches, income_account_id, expense_account_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, company.id, kind, name.slice(0, 200), sku || null, unit, hsn || null, details || null,
-      sale, purchase, taxId, track ? 1 : 0, reorder, itemCode, barcode || null, batches ? 1 : 0));
+      sale, purchase, taxId, track ? 1 : 0, reorder, itemCode, barcode || null, batches ? 1 : 0, incAcc?.id ?? null, expAcc?.id ?? null));
     if (openQty > 0) opening.push({ item_id: id, warehouse_id: wh ?? "", qty_milli: openQty, value: openValue, batch_no: batches ? batchNo : null, expiry_date: batches ? expiry : null });
     out.created++;
   });
@@ -264,6 +282,83 @@ imports.post("/items", async (c) => {
   }
   if (out.errors.length) { out.created = 0; out.updated = 0; }
   return c.json({ dry_run: input.dry_run, ok: out.errors.length === 0, ...out, new_units: out.errors.length ? [] : newUnits });
+});
+
+/** Account types as people write them, to type + subtype. */
+export function accountKind(raw: string): { type: AccountType; subtype: string } | null {
+  const t = raw.toLowerCase().replace(/&/g, " and ").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  const table: [RegExp, AccountType, string][] = [
+    [/^(other|indirect|non operating) incomes?$/, "income", "other_income"],
+    [/^(income|incomes|revenue|sales|direct income|operating income|service income)$/, "income", "operating_income"],
+    [/^(cost of (goods )?sold|cogs|direct expenses?|purchases?|cost of sales)$/, "expense", "cogs"],
+    [/^depreciation$/, "expense", "depreciation"],
+    [/^(other|non operating) expenses?$/, "expense", "other_expense"],
+    [/^(expenses?|indirect expenses?|operating expenses?)$/, "expense", "operating_expense"],
+    [/^(fixed assets?|capital assets?|property plant and equipment|ppe|intangible assets?)$/, "asset", "fixed_asset"],
+    [/^(bank|bank accounts?)$/, "asset", "bank"],
+    [/^(cash|cash in hand)$/, "asset", "cash"],
+    [/^(current assets?|assets?|other current assets?|loans and advances|deposits?)$/, "asset", "current_asset"],
+    [/^(non current assets?|investments?|long term assets?)$/, "asset", "non_current_asset"],
+    [/^(current liabilit(y|ies)|liabilit(y|ies)|other current liabilit(y|ies)|provisions?|duties and taxes)$/, "liability", "current_liability"],
+    [/^(long term liabilit(y|ies)|loans?|secured loans?|unsecured loans?)$/, "liability", "long_term_liability"],
+    [/^(equity|capital|capital account|owner s equity|reserves?( and surplus)?)$/, "equity", "equity"],
+  ];
+  const hit = table.find(([re]) => re.test(t));
+  return hit ? { type: hit[1], subtype: hit[2] } : null;
+}
+
+/** Chart of accounts: new ledger accounts (and groups) from a sheet. Existing codes and names are skipped, never changed. */
+imports.post("/accounts", async (c) => {
+  requirePerm(c, "accounts.write");
+  const input = await body(c, payload);
+  const company = c.get("company");
+  const existing = await all<{ id: string; code: string; name: string; type: string; subtype: string; is_group: number; parent_id: string | null }>(c.env.DB,
+    `SELECT id, code, name, type, subtype, is_group, parent_id FROM accounts WHERE company_id = ?`, company.id);
+  const byCode = new Map(existing.map((a) => [a.code.toLowerCase(), a]));
+  const names = new Set(existing.map((a) => a.name.toLowerCase()));
+  const out: Outcome = { created: 0, skipped: [], errors: [] };
+  const stmts: D1PreparedStatement[] = [];
+  const made: { code: string; name: string }[] = [];
+  input.rows.forEach((raw, i) => {
+    const row = i + 1;
+    const p = picker(raw);
+    const fail = (message: string) => out.errors.push({ row, message });
+    const code = p("code", "account code", "ledger code", "a/c code", "gl code");
+    const name = p("account name", "name", "ledger name", "ledger", "account");
+    if (!name) return fail("Account name is missing");
+    if (!code) return fail(`${name}: code is missing`);
+    if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,19}$/.test(code)) return fail(`Code "${code}" may only have letters, digits, dots and dashes`);
+    if (byCode.has(code.toLowerCase())) { out.skipped.push({ row, reason: `Code ${code} already exists (${byCode.get(code.toLowerCase())!.name})` }); return; }
+    if (names.has(name.toLowerCase())) { out.skipped.push({ row, reason: `${name} already exists` }); return; }
+    const kind = accountKind(p("type", "account type", "nature", "group type", "category"));
+    if (!kind) return fail(`${name}: type "${p("type", "account type")}" is not one of Income, Other income, Expense, Cost of goods sold, Fixed asset, Current asset, Bank, Cash, Liability, Long-term liability, Equity`);
+    const sub = p("subtype");
+    const subtype = sub && isValidSubtype(kind.type, sub.toLowerCase().replace(/[^a-z]+/g, "_")) ? sub.toLowerCase().replace(/[^a-z]+/g, "_") : kind.subtype;
+    const isGroup = /^(y|yes|true|1|group)$/i.test(p("group", "is group"));
+    // Parent: the one named (code or name), else the group for this kind (e.g. 1200 Fixed Assets, 6000 Operating Expenses).
+    const parentRaw = p("parent", "parent code", "parent account", "under", "group under");
+    let parent: { id: string; type: string; is_group: number } | undefined;
+    if (parentRaw) {
+      const pc = parentRaw.toLowerCase();
+      parent = byCode.get(pc) ?? existing.find((a) => a.name.toLowerCase() === pc) ?? byCode.get(/^(\S+)/.exec(pc)![1]);
+      if (!parent) return fail(`${name}: parent "${parentRaw}" not found`);
+      if (!parent.is_group) return fail(`${name}: parent "${parentRaw}" is not a group`);
+      if (parent.type !== kind.type) return fail(`${name}: parent "${parentRaw}" is a different type of account`);
+    } else {
+      const groups = existing.filter((a) => a.is_group && a.type === kind.type).sort((a, b) => a.code.localeCompare(b.code));
+      parent = groups.find((g) => g.subtype === subtype && g.parent_id) ?? groups.find((g) => g.subtype === subtype) ?? groups[0];
+    }
+    const id = newId();
+    stmts.push(stmt(c.env.DB, `INSERT INTO accounts (id, company_id, code, name, type, subtype, parent_id, is_group, description) VALUES (?,?,?,?,?,?,?,?,?)`,
+      id, company.id, code, name.slice(0, 120), kind.type, subtype, parent?.id ?? null, isGroup ? 1 : 0, p("description", "notes").slice(0, 500) || null));
+    const rec = { id, code, name, type: kind.type, subtype, is_group: isGroup ? 1 : 0, parent_id: parent?.id ?? null };
+    existing.push(rec); byCode.set(code.toLowerCase(), rec); names.add(name.toLowerCase());
+    made.push({ code, name });
+    out.created++;
+  });
+  if (!input.dry_run && !out.errors.length && stmts.length) await batch(c.env.DB, [...stmts, audit(c, "account.import", "account", null, { created: made })]);
+  if (out.errors.length) out.created = 0;
+  return respond(c, out, input.dry_run);
 });
 
 export default imports;
