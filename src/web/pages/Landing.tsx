@@ -38,6 +38,7 @@ export default function Landing() {
           <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Toggle theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
           <InstallAppButton oneClickOnly className="hidden sm:inline-flex" />
           <Link to="/download" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] sm:inline-block">Get the app</Link>
+          <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] md:inline-block">User manual</a>
           <a href="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Sign in</a>
           <a href="/register" className="rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800">Create account</a>
         </nav>

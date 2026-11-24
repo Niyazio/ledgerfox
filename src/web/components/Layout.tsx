@@ -361,6 +361,7 @@ function Shell() {
               <Shortcuts items={GOTO_ITEMS} />
               <UpdateCenter />
             </div>
+            <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
             <LangPicker />
             <div className="hidden sm:block"><ThemePicker /></div>
             {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}

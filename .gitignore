@@ -13,3 +13,4 @@ release
 mobile/node_modules
 mobile/android
 mobile/www
+.manual-db/

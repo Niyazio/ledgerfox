@@ -215,10 +215,10 @@ function RfqQuote({ r, busy, money, onSend, onDecline }: { r: any; busy: boolean
         {r.respond_by && open && <span className="text-xs muted">Reply by {fmtDate(r.respond_by)}</span>}</div>
       {r.notes && <p className="mt-1 text-sm muted">{r.notes}</p>}
       <TableWrap><table className="table mt-2 text-sm">
-        <thead><tr><th>Item</th><th className="num">Quantity</th><th className="num">Your price per unit</th></tr></thead>
-        <tbody>{r.lines.map((l: any) => <tr key={l.id}><td>{l.description}</td><td className="num">{(l.qty_milli / 1000).toLocaleString("en-IN")} {l.unit ?? ""}</td>
+        <thead><tr><th>Item</th><th className="num">Price per unit</th></tr></thead>
+        <tbody>{r.lines.map((l: any) => <tr key={l.id}><td>{l.description}<span className="block text-xs muted">{(l.qty_milli / 1000).toLocaleString("en-IN")} {l.unit ?? ""}</span></td>
           <td className="num">{open ? <Input aria-label={`Price for ${l.description}`} className="ml-auto w-24 text-right" inputMode="decimal" value={prices[l.id] ?? ""} onChange={(e) => setPrices({ ...prices, [l.id]: e.target.value })} /> : l.my_price != null ? money(l.my_price) : "—"}</td></tr>)}
-          {open && <tr className="font-semibold"><td colSpan={2}>Total</td><td className="num">{money(total)}</td></tr>}</tbody>
+          {open && <tr className="font-semibold"><td>Total</td><td className="num">{money(total)}</td></tr>}</tbody>
       </table></TableWrap>
       {open && <div className="mt-2 grid gap-2 sm:grid-cols-[8rem_1fr_auto_auto] sm:items-end">
         <label className="text-xs">Delivery (days)<Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} /></label>

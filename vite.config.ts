@@ -14,7 +14,8 @@ function precacheManifest(): Plugin {
     name: "ledgerfox-precache-manifest",
     apply: "build",
     generateBundle(_opts, bundle) {
-      const built = Object.keys(bundle).filter((f) => !f.endsWith(".html") && !f.endsWith(".map")).map((f) => `/${f}`);
+      // The PDF reader (about 1.7 MB) is left out: it loads only when someone imports a PDF price list.
+      const built = Object.keys(bundle).filter((f) => !f.endsWith(".html") && !f.endsWith(".map") && !/^assets\/pdf(\.worker)?[.-]/.test(f)).map((f) => `/${f}`);
       const statics = ["/", "/favicon.svg", "/theme.js", "/manifest.webmanifest", "/brand/icon-192.png"];
       this.emitFile({ type: "asset", fileName: "precache-manifest.json", source: JSON.stringify({ version: BUILD_ID, files: [...statics, ...built] }) });
       // Open tabs compare this with their own build to offer "Reload to update".
