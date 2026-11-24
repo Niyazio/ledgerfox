@@ -4,6 +4,7 @@ import { Upload, Link2, Sparkles } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi, useAction } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
+import { ContraCard } from "./Control";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, MoneyInput, PageHeader, Select, Spinner, StatusBadge, TableWrap, Tabs, useToast } from "../components/ui";
 import { AccountSelect } from "../components/pickers";
 import { fmtDate, fmtDateTime, today } from "../lib/format";
@@ -133,6 +134,7 @@ export default function Banking() {
     <>
       <PageHeader title="Banking" subtitle="Import statements, match them to your books and reconcile."
         actions={can("bank.reconcile") && acct && <Button onClick={() => setImporting(true)}><Upload className="h-4 w-4" />Import statement</Button>} />
+      <div className="mb-4"><ContraCard /></div>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {accounts.data?.accounts.map((a) => (
           <button key={a.id} onClick={() => setAccountId(a.id)} className={`card p-4 text-left ${a.id === acct ? "ring-2 ring-brand-500" : ""}`}>

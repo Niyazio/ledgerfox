@@ -41,11 +41,14 @@ interface CompanyCtx {
   setBranch: (id: string) => void;
   /** `&branch_id=…` for list and report URLs when a branch is chosen. */
   branchQuery: string;
+  /** Whether an optional feature is switched on for this company (Settings → Features). */
+  on: (m: ModuleKey) => boolean;
 }
 
 const Ctx = createContext<CompanyCtx | null>(null);
 
 import { money as fmtMoney } from "./format";
+import { parseModulesOff, type ModuleKey } from "@shared/modules";
 
 export function CompanyProvider({ id, children }: { id: string; children: ReactNode }) {
   const [settings, setSettings] = useState<CompanySettings | null>(null);
@@ -80,6 +83,7 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
     money: (m, cur) => fmtMoney(m, cur ?? settings?.company.base_currency ?? "INR", settings?.company.number_locale ?? "en-IN"),
     branches, branch: chosen, setBranch,
     branchQuery: chosen ? `&branch_id=${encodeURIComponent(chosen)}` : "",
+    on: (m) => !parseModulesOff((settings?.company as { modules_off?: string | null } | undefined)?.modules_off).includes(m),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

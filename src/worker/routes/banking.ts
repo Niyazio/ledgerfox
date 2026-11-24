@@ -1,14 +1,14 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { all, batch, first, stmt } from "../lib/db";
+import { all, batch, first, stmt, todayIso } from "../lib/db";
 import { badRequest, conflict, notFound, unprocessable } from "../lib/errors";
 import { body, isoDate, shortText, optId, minor } from "../lib/validate";
 import { newId, sha256Hex } from "../lib/crypto";
 import { audit, requireAnyPerm, requirePerm } from "../lib/auth";
 import { parseCsv, parseBankDate } from "@shared/csv";
 import { currencyExponent } from "@shared/currencies";
-import { buildJournal, assertOpenPeriod } from "../services/ledger";
+import { buildJournal, buildReversal, assertOpenPeriod } from "../services/ledger";
 
 const banking = new Hono<AppEnv>();
 banking.use("*", async (c, next) => { if (c.req.method === "GET") requireAnyPerm(c, "bank.reconcile"); await next(); });
@@ -261,6 +261,63 @@ banking.post("/reconcile", async (c) => {
     audit(c, "bank.reconcile", "bank_reconciliation", id, { statement_date: input.statement_date, statement_balance: statementBalance }),
   ]);
   return c.json({ id }, 201);
+});
+
+
+// ── Contra entries: money moved between your own cash and bank accounts ──
+// Cash deposited in the bank, cash withdrawn, a transfer between two banks or two cash boxes. Posted as one journal
+// (Dr the account the money went to, Cr the one it came from), with its own number, shown in the cash and bank books.
+
+banking.get("/contra", async (c) => {
+  requireAnyPerm(c, "bank.reconcile", "journal.view");
+  const rows = await all(c.env.DB,
+    `SELECT e.id, e.entry_number, e.entry_date, e.memo, e.reference, e.total, e.reversed_by_id,
+            (SELECT a.name FROM journal_lines l JOIN accounts a ON a.id = l.account_id WHERE l.entry_id = e.id AND l.credit > 0 LIMIT 1) AS from_account,
+            (SELECT a.name FROM journal_lines l JOIN accounts a ON a.id = l.account_id WHERE l.entry_id = e.id AND l.debit > 0 LIMIT 1) AS to_account
+       FROM journal_entries e WHERE e.company_id = ? AND e.source_type = 'contra' AND e.status = 'posted' ORDER BY e.entry_date DESC, e.created_at DESC LIMIT 200`, c.get("company").id);
+  return c.json({ contras: rows });
+});
+
+banking.post("/contra", async (c) => {
+  requireAnyPerm(c, "bank.reconcile", "journal.post");
+  const company = c.get("company");
+  const input = await body(c, z.object({
+    entry_date: isoDate, from_account_id: z.string().max(64), to_account_id: z.string().max(64), amount: z.union([z.string(), z.number()]),
+    reference: shortText(120).nullish(), memo: shortText(300).nullish(), branch_id: optId,
+  }));
+  if (input.from_account_id === input.to_account_id) throw badRequest("Choose two different accounts");
+  const accs = await all<{ id: string; name: string; subtype: string; is_group: number; is_active: number }>(c.env.DB,
+    `SELECT id, name, subtype, is_group, is_active FROM accounts WHERE company_id = ? AND id IN (?, ?)`, company.id, input.from_account_id, input.to_account_id);
+  if (accs.length !== 2 || accs.some((a) => a.is_group || !a.is_active || !["cash", "bank"].includes(a.subtype))) throw badRequest("A contra entry moves money between active cash and bank accounts");
+  const amount = minor(input.amount, currencyExponent(company.base_currency), "amount");
+  if (amount <= 0) throw badRequest("Amount must be positive");
+  await assertOpenPeriod(c.env.DB, company.id, input.entry_date);
+  const from = accs.find((a) => a.id === input.from_account_id)!, to = accs.find((a) => a.id === input.to_account_id)!;
+  const kind = from.subtype === "cash" && to.subtype === "bank" ? "Cash deposited" : from.subtype === "bank" && to.subtype === "cash" ? "Cash withdrawn" : "Transfer";
+  const id = newId();
+  const built = buildJournal(c.env.DB, {
+    company_id: company.id, entry_date: input.entry_date, kind: "manual", memo: input.memo || `Contra: ${kind} — ${from.name} → ${to.name}`, reference: input.reference ?? null,
+    source_type: "contra", source_id: id, branch_id: input.branch_id ?? null, created_by: c.get("user").id, post: true,
+    lines: [
+      { account_id: to.id, debit: amount, description: `${kind} from ${from.name}` },
+      { account_id: from.id, credit: amount, description: `${kind} to ${to.name}` },
+    ],
+  });
+  await batch(c.env.DB, [...built.stmts, audit(c, "contra.post", "journal", built.id, { from: from.name, to: to.name, amount })]);
+  const e = await first<{ entry_number: string }>(c.env.DB, `SELECT entry_number FROM journal_entries WHERE id = ?`, built.id);
+  return c.json({ id: built.id, entry_number: e?.entry_number }, 201);
+});
+
+/** Cancelling a contra posts its reversal (the original stays, as auditors expect). */
+banking.post("/contra/:id/cancel", async (c) => {
+  requireAnyPerm(c, "bank.reconcile", "journal.reverse");
+  const company = c.get("company");
+  const e = await first<{ id: string }>(c.env.DB, `SELECT id FROM journal_entries WHERE id = ? AND company_id = ? AND source_type = 'contra'`, c.req.param("id"), company.id);
+  if (!e) throw notFound("Contra entry");
+  const input = await body(c, z.object({ date: isoDate.optional(), reason: shortText(300).nullish() }));
+  const built = await buildReversal(c.env.DB, company.id, e.id, input.date ?? todayIso(), c.get("user").id, input.reason ? `Cancelled: ${input.reason}` : null, { allowSourced: true });
+  await batch(c.env.DB, [...built.stmts, audit(c, "contra.cancel", "journal", e.id, { reversal_id: built.id, reason: input.reason ?? null })]);
+  return c.json({ id: built.id });
 });
 
 export default banking;

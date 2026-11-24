@@ -21,7 +21,7 @@ const A = ({ to, children }: { to: string | null; children: ReactNode }) => (to 
 
 /** /inventory/:itemId — everything about one product, each figure linked to where it comes from. */
 export function ProductView() {
-  const { path, money, id, settings, can } = useCompany();
+  const { path, money, id, settings, can, on } = useCompany();
   const { itemId } = useParams();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) || "overview";
@@ -99,7 +99,7 @@ export function ProductView() {
       <PageHeader title={it.name} subtitle={[it.code && `Code ${it.code}`, it.sku && `SKU ${it.sku}`, it.barcode && `Barcode ${it.barcode}`, it.hsn_sac && `HSN/SAC ${it.hsn_sac}`].filter(Boolean).join(" · ")}
         back={{ to: `/app/${id}/inventory`, label: "Products & inventory" }}
         actions={<>
-          {can("labels.print") && <LinkButton variant="secondary" to={`/app/${id}/labels?item=${it.id}`}>Labels</LinkButton>}
+          {can("labels.print") && on("labels") && <LinkButton variant="secondary" to={`/app/${id}/labels?item=${it.id}`}>Labels</LinkButton>}
           {can("sales.create") && <LinkButton variant="secondary" to={`/app/${id}/sales/invoice/new?item=${it.id}`}>Sell</LinkButton>}
           {can("purchase.create") && <LinkButton to={`/app/${id}/purchases/bill/new?item=${it.id}`}>Buy</LinkButton>}
         </>} />

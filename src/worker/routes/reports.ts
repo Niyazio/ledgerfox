@@ -1,4 +1,5 @@
 import { matchGstr2b, parseGstr2b } from "../services/extras";
+import { auditChecks } from "../services/auditchecks";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
@@ -320,4 +321,11 @@ reports.post("/gstr2b-match", async (c) => {
   const raw = await c.req.json().catch(() => null) as { file?: unknown } | null;
   if (!raw?.file) throw badRequest("Choose the GSTR-2B JSON file");
   return c.json(await matchGstr2b(c.env.DB, c.get("company").id, parseGstr2b(raw.file)));
+});
+
+/** Audit checks: the things auditors look at first, for a period. */
+reports.get("/audit-checks", async (c) => {
+  requireAnyPerm(c, "audit.read", "reports.read");
+  const { from, to } = range(c);
+  return c.json({ from, to, checks: await auditChecks(c.env.DB, c.get("company"), from, to) });
 });

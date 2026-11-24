@@ -1,4 +1,5 @@
 import { refreshRates } from "../services/extras";
+import { MODULE_KEYS, type ModuleKey } from "@shared/modules";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
@@ -214,6 +215,19 @@ settings.post("/exchange-rates", async (c) => {
 settings.post("/exchange-rates/fetch", async (c) => {
   requirePerm(c, "accounts.write");
   return c.json(await refreshRates(c.env.DB, c.get("company")));
+});
+
+/** Settings → Features: which optional features this company uses. */
+settings.put("/modules", async (c) => {
+  requirePerm(c, "company.manage");
+  const company = c.get("company");
+  const input = await body(c, z.object({ off: z.array(z.enum(MODULE_KEYS as [ModuleKey, ...ModuleKey[]])).max(MODULE_KEYS.length) }));
+  const off = [...new Set(input.off)];
+  await batch(c.env.DB, [
+    stmt(c.env.DB, `UPDATE companies SET modules_off = ? WHERE id = ?`, JSON.stringify(off), company.id),
+    audit(c, "company.modules", "company", company.id, { off }),
+  ]);
+  return c.json({ off });
 });
 
 settings.get("/exchange-rates/lookup", async (c) => {

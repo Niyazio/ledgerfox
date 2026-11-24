@@ -43,7 +43,7 @@ function ProductCodes({ item }: { item: { id: string; name: string; code: string
 }
 
 function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: boolean) => void }) {
-  const { path, settings, can } = useCompany();
+  const { path, settings, can, on } = useCompany();
   // Without cost access the purchase price is neither shown nor sent; the server keeps the stored value.
   const costEditable = !initial || can("items.cost");
   const base = settings?.company.base_currency ?? "INR";
@@ -83,13 +83,13 @@ function ItemForm({ initial, onClose }: { initial?: any; onClose: (changed: bool
         {costEditable && <Field label="Purchase price">{(id) => <MoneyInput id={id} value={v.purchase_price} onChange={(e) => set("purchase_price", e.target.value)} />}</Field>}
         <Field label="Income account" hint="Default: Sales / Service income">{(id) => <AccountSelect id={id} value={v.income_account_id} onChange={(a) => set("income_account_id", a)} filter={(a) => a.type === "income"} placeholder="Default" />}</Field>
         {!v.track_inventory && <Field label="Expense account" hint="Default: Purchases">{(id) => <AccountSelect id={id} value={v.expense_account_id} onChange={(a) => set("expense_account_id", a)} filter={(a) => a.type === "expense" || a.type === "asset"} placeholder="Default" />}</Field>}
-        {v.kind === "goods" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_inventory} disabled={Boolean(initial)} onChange={(e) => set("track_inventory", e.target.checked)} /> Track stock (perpetual inventory, moving average cost){initial && <span className="muted"> — fixed after creation</span>}</label>}
-        {v.track_inventory && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_serials} onChange={(e) => set("track_serials", e.target.checked)} /> Track serial / IMEI numbers (phones, appliances, machines: one number per unit)</label>}
-        {v.track_inventory && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_batches} onChange={(e) => set("track_batches", e.target.checked)} /> Track batch numbers &amp; expiry dates (medicines, food){initial && <span className="muted"> — can only change while stock is zero</span>}</label>}
+        {v.kind === "goods" && (on("stock") || v.track_inventory) && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_inventory} disabled={Boolean(initial)} onChange={(e) => set("track_inventory", e.target.checked)} /> Track stock (perpetual inventory, moving average cost){initial && <span className="muted"> — fixed after creation</span>}</label>}
+        {v.track_inventory && (on("serials") || v.track_serials) && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_serials} onChange={(e) => set("track_serials", e.target.checked)} /> Track serial / IMEI numbers (phones, appliances, machines: one number per unit)</label>}
+        {v.track_inventory && (on("batches") || v.track_batches) && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.track_batches} onChange={(e) => set("track_batches", e.target.checked)} /> Track batch numbers &amp; expiry dates (medicines, food){initial && <span className="muted"> — can only change while stock is zero</span>}</label>}
         {v.track_inventory && <Field label="Reorder level">{(id) => <Input id={id} inputMode="decimal" value={v.reorder_level} onChange={(e) => set("reorder_level", e.target.value)} />}</Field>}
         <Field label="Description" className="sm:col-span-2">{(id) => <Textarea id={id} rows={2} value={v.description} onChange={(e) => set("description", e.target.value)} />}</Field>
         {initial && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.is_active} onChange={(e) => set("is_active", e.target.checked)} /> Active</label>}
-        {initial?.code && <ProductCodes item={initial} />}
+        {initial?.code && on("labels") && <ProductCodes item={initial} />}
       </div>
     </Modal>
   );
@@ -239,7 +239,7 @@ function BatchesTab() {
 }
 
 export default function Inventory() {
-  const { path, money, settings, can, reload: reloadSettings, branchQuery } = useCompany();
+  const { path, money, settings, can, on, reload: reloadSettings, branchQuery } = useCompany();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as InvTab) || "items";
@@ -259,17 +259,23 @@ export default function Inventory() {
     <>
       <PageHeader title="Products & inventory" subtitle="Costing method: moving weighted average per item. Stock value reconciles to the Inventory account."
         actions={<>
-          {can("inventory.adjust") && <Button variant="secondary" onClick={() => setStockOp("adjust")}>Adjust stock</Button>}
-          {can("inventory.transfer") && <Button variant="secondary" onClick={() => setStockOp("transfer")}>Transfer</Button>}
-          {can("labels.print") && <LinkButton variant="secondary" to={`/app/${settings?.company.id}/labels`}><QrCode className="h-4 w-4" />Labels</LinkButton>}
+          {can("inventory.adjust") && on("stock") && <Button variant="secondary" onClick={() => setStockOp("adjust")}>Adjust stock</Button>}
+          {can("inventory.transfer") && on("stock") && <Button variant="secondary" onClick={() => setStockOp("transfer")}>Transfer</Button>}
+          {can("labels.print") && on("labels") && <LinkButton variant="secondary" to={`/app/${settings?.company.id}/labels`}><QrCode className="h-4 w-4" />Labels</LinkButton>}
           {can("items.write") && <Button onClick={() => setEdit("new")}><Plus className="h-4 w-4" />New item</Button>}
         </>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "items", label: "Items" }, { value: "stock", label: "Stock by warehouse" }, { value: "batches", label: "Batches & expiry" }, { value: "prices", label: "Price lists" }, { value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={([
+        { value: "items", label: "Items" },
+        ...(on("stock") ? [{ value: "stock", label: "Stock by warehouse" }] : []),
+        ...(on("batches") ? [{ value: "batches", label: "Batches & expiry" }] : []),
+        ...(on("price_lists") ? [{ value: "prices", label: "Price lists" }] : []),
+        ...(on("stock") ? [{ value: "movements", label: "Movements" }, { value: "transfers", label: "Branch transfers" }, { value: "warehouses", label: "Warehouses" }] : []),
+      ] as { value: InvTab; label: string }[])} />
       {tab === "items" && (
         <Card padded={false}>
           <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] p-3">
             <Input placeholder="Search name, SKU, HSN, code, barcode…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" aria-label="Search items" />
-            <SerialFinder />
+            {on("serials") && <SerialFinder />}
             <div className="w-full max-w-xs"><ScanInput label="Scan to find" onItem={setFound} onError={(m) => toast("error", m)} /></div>
           </div>
           {found && <Alert kind="info" className="m-3">Scanned: <Link className="font-bold text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, found.id)}>{found.name}</Link> · code {found.code}{found.barcode ? ` · barcode ${found.barcode}` : ""} · {money(found.sale_price)}
