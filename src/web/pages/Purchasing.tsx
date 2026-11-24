@@ -7,8 +7,9 @@ import { api, errorMessage } from "../lib/api";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, TableWrap, Tabs, useToast } from "../components/ui";
 import { fmtDate, today } from "../lib/format";
 import { docPath } from "../lib/links";
+import { LandedCost } from "./Advanced";
 
-type Tab = "rfq" | "grn" | "match";
+type Tab = "rfq" | "grn" | "match" | "landed";
 const qty = (m: number) => (m / 1000).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const ISSUE: Record<string, { label: string; color: "red" | "amber" | "gray" }> = {
   billed_more_than_received: { label: "Billed more than received", color: "red" },
@@ -26,8 +27,8 @@ export default function PurchasingPage() {
   return (
     <>
       <PageHeader title="Purchasing" subtitle="Ask several suppliers for prices, compare their quotes, receive goods against purchase orders, and check bills against what was ordered and received." />
-      <Tabs tabs={[{ value: "rfq", label: "Requests for quotation" }, { value: "grn", label: "Goods receipts (GRN)" }, { value: "match", label: "3-way match" }]} value={tab} onChange={setTab} />
-      <div className="mt-4">{tab === "rfq" ? <Rfqs /> : tab === "grn" ? <Grns /> : <Matching />}</div>
+      <Tabs tabs={[{ value: "rfq", label: "Requests for quotation" }, { value: "grn", label: "Goods receipts (GRN)" }, { value: "match", label: "3-way match" }, { value: "landed", label: "Landed cost" }]} value={tab} onChange={setTab} />
+      <div className="mt-4">{tab === "rfq" ? <Rfqs /> : tab === "grn" ? <Grns /> : tab === "match" ? <Matching /> : <LandedCost />}</div>
     </>
   );
 }

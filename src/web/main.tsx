@@ -59,6 +59,9 @@ const ChequesPage = lazy(() => import("./pages/Cheques"));
 const PurchasingPage = lazy(() => import("./pages/Purchasing"));
 const CrmPage = lazy(() => import("./pages/Crm"));
 const ServicePage = lazy(() => import("./pages/Service"));
+const ApprovalsPage = lazy(() => named(import("./pages/Advanced"), "ApprovalsPage"));
+const FxPage = lazy(() => named(import("./pages/Advanced"), "FxPage"));
+const ApiKeysPage = lazy(() => named(import("./pages/Advanced"), "ApiKeysPage"));
 const ChequePrintPage = lazy(() => named(import("./pages/Cheques"), "ChequePrintPage"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -146,6 +149,9 @@ function App() {
         <Route path="purchasing" element={<PurchasingPage />} />
         <Route path="crm" element={<CrmPage />} />
         <Route path="service" element={<ServicePage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="fx-revaluation" element={<FxPage />} />
+        <Route path="api-keys" element={<ApiKeysPage />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory/:itemId" element={<Keyed>{(k) => <ProductView key={k} />}</Keyed>} />
         <Route path="assets" element={<Assets />} />

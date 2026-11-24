@@ -3,6 +3,7 @@ import { applyAdvances } from "../services/extras";
 import { recordPayment } from "../services/payments";
 import { parseSerials } from "../services/serials";
 import { Hono } from "hono";
+import { requireRuleApprovals } from "./advanced";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
@@ -267,6 +268,8 @@ documents.post("/:id/issue", async (c) => {
     const ok = await first(c.env.DB, `SELECT 1 FROM document_approvals WHERE document_id = ? AND approved_at IS NOT NULL`, id);
     if (!ok) throw new AppError(403, "APPROVAL_REQUIRED", "This purchase is above the approval limit. Request approval first.");
   }
+  // Approval rules (Settings → Approvals): each step approved by its role before the document is issued.
+  await requireRuleApprovals(c, id);
   if (d.doc_type === "invoice") {
     const doc = await first<{ contact_id: string; total: number; currency: string }>(c.env.DB, `SELECT contact_id, total, currency FROM documents WHERE id = ?`, id);
     const problem = await creditLimitProblem(c, doc!.contact_id, id, doc!.total);
