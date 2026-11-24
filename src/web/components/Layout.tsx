@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
-import { Target, ClipboardCheck, Banknote,
+import { LifeBuoy, Target, ClipboardCheck, Banknote,
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
   CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory, Clock,
@@ -85,6 +85,7 @@ const NAV: NavGroup[] = [
     { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" , module: "pos" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
     { to: "crm", label: "Leads & CRM", icon: <Target className="h-4 w-4" />, perm: ["sales.view", "customers.write"] },
+    { to: "service", label: "Service desk & AMC", icon: <LifeBuoy className="h-4 w-4" />, perm: ["sales.view", "customers.write"] },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
     { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
     { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },

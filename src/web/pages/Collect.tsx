@@ -4,7 +4,7 @@ import { BadgeCheck, CheckCircle2, CreditCard, ExternalLink, MessageCircle, Mail
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner, TableWrap, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner, TableWrap, useToast, Textarea, Select } from "../components/ui";
 import { AccountSelect } from "../components/pickers";
 import { ProductCredit, Wordmark } from "../components/Layout";
 import { DOC_LABELS, fmtDate, money } from "../lib/format";
@@ -168,6 +168,38 @@ export function PayInvoice() {
   );
 }
 
+/** The customer's support tickets in their portal: raise a new one, see status and replies. */
+function SupportTickets({ token, tickets, onDone }: { token: string; tickets: any[]; onDone: (msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState({ subject: "", description: "", asset: "", priority: "normal" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label: Record<string, string> = { open: "Received", in_progress: "Being worked on", waiting: "Waiting for you", resolved: "Resolved", closed: "Closed" };
+  return (
+    <Card title="Support requests" className="mt-4" actions={<Button size="sm" variant="secondary" onClick={() => setOpen(!open)}>{open ? "Close" : "Raise a request"}</Button>}>
+      {open && <div className="mb-3 grid gap-2">
+        {error && <Alert>{error}</Alert>}
+        <Input aria-label="Subject" placeholder="What is the problem?" value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} />
+        <Textarea aria-label="Details" rows={3} placeholder="Details (since when, error message…)" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Input aria-label="Product or serial number" placeholder="Product / serial number (if any)" value={v.asset} onChange={(e) => setV({ ...v, asset: e.target.value })} />
+          <Select aria-label="How urgent" value={v.priority} onChange={(e) => setV({ ...v, priority: e.target.value })}><option value="low">Not urgent</option><option value="normal">Normal</option><option value="high">Urgent</option><option value="urgent">Work has stopped</option></Select>
+        </div>
+        <Button loading={busy} disabled={v.subject.trim().length < 3} onClick={async () => {
+          setBusy(true); setError(null);
+          try { const r = await api.post<{ number: string }>(`/api/portal/${token}/tickets`, { ...v, description: v.description || null, asset: v.asset || null }); setOpen(false); setV({ subject: "", description: "", asset: "", priority: "normal" }); onDone(`Request ${r.number} received. You will see updates here.`); }
+          catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+        }}>Send request</Button>
+      </div>}
+      {tickets.length ? <ul className="grid gap-2">{tickets.map((t) => <li key={t.id} className="rounded-lg border border-[var(--border)] p-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2"><b>{t.number}</b><span>{t.subject}</span><Badge color={t.status === "resolved" || t.status === "closed" ? "green" : t.status === "waiting" ? "amber" : "blue"}>{label[t.status] ?? t.status}</Badge></div>
+        {t.replies.map((r: any, i: number) => <p key={i} className="mt-1 text-xs"><span className="muted">{fmtDate(r.created_at.slice(0, 10))}:</span> {r.note}</p>)}
+        {t.resolution && <p className="mt-1 text-xs text-emerald-700">Resolved: {t.resolution}</p>}
+      </li>)}</ul> : !open && <p className="text-sm muted">No requests. Raise one if something needs fixing.</p>}
+    </Card>
+  );
+}
+
 /** One request for quotation in the supplier's portal: price per line, delivery days, notes. */
 function RfqQuote({ r, busy, money, onSend, onDecline }: { r: any; busy: boolean; money: (n: number) => string; onSend: (payload: unknown) => void; onDecline: () => void }) {
   const [prices, setPrices] = useState<Record<string, string>>(Object.fromEntries(r.lines.filter((l: any) => l.my_price != null).map((l: any) => [l.id, String(l.my_price / 100)])));
@@ -264,6 +296,7 @@ export function CustomerPortal() {
         </table></TableWrap></Card>}
       </>}
       {!isSupplier && <>
+      <SupportTickets token={token!} tickets={data.tickets ?? []} onDone={(m: string) => { setMsg(m); reload(); }} />
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">You owe</p><p className="text-2xl font-semibold">{data.summary.mixed ? "See below" : m(data.summary.outstanding)}</p></div>
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">Overdue</p><p className={`text-2xl font-semibold ${data.summary.overdue > 0 ? "text-red-600" : ""}`}>{data.summary.mixed ? "—" : m(data.summary.overdue)}</p></div>
