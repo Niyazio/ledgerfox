@@ -38,6 +38,7 @@
     "hono": "^4.13.16",
     "html-to-image": "1.11.13",
     "lucide-react": "^1.60.0",
+    "pdfjs-dist": "6.4.299",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -69,6 +70,10 @@
     "wrangler": "^4.151.3"
   },
   "main": "desktop-build/main.cjs",
-  "author": { "name": "Niyazio", "email": "info@niyazio.com", "url": "https://niyazio.com" },
+  "author": {
+    "name": "Niyazio",
+    "email": "info@niyazio.com",
+    "url": "https://niyazio.com"
+  },
   "homepage": "https://ledgerfox.niyazio.com"
 }

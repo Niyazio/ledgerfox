@@ -49,6 +49,7 @@ const Ctx = createContext<CompanyCtx | null>(null);
 
 import { money as fmtMoney } from "./format";
 import { CompanyUnavailable } from "../components/CompanyUnavailable";
+import { Spinner } from "../components/ui";
 import { parseModulesOff, type ModuleKey } from "@shared/modules";
 
 export function CompanyProvider({ id, children }: { id: string; children: ReactNode }) {
@@ -75,6 +76,8 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
   useEffect(() => { setSettings(null); reload(); reloadAccounts(); }, [reload, reloadAccounts]);
   if (error === TWO_FACTOR) return <div className="mx-auto max-w-lg p-6"><p className="mb-3 text-lg font-semibold">Set up two-factor sign-in to continue</p><p className="mb-4 text-sm muted">Your organisation's owner requires it for everyone.</p><TwoFactorCard onDone={() => void reload()} /></div>;
   if (error) return <CompanyUnavailable code={errorCode} message={error} onRetry={() => void reload()} />;
+  // Pages read the company's settings straight away, so they wait until the settings have arrived.
+  if (!settings) return <Spinner />;
   const scope = settings?.branch_scope ?? { all: true, ids: [] };
   const branches = (settings?.branches ?? []).filter((b) => scope.all || scope.ids.includes(b.id));
   // A member limited to some branches always works in one of them; a stale choice falls back to the first allowed.

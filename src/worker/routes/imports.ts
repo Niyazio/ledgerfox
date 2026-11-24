@@ -24,12 +24,20 @@ const payload = z.object({
   dry_run: z.boolean().default(false),
   kind: z.enum(["customer", "supplier"]).optional(),
   as_of: isoDate.optional(),
+  /** Products only: rows whose name or SKU already exists update that product's prices, tax, HSN, unit and description. */
+  update_existing: z.boolean().default(false),
 });
 
 /** Normalised header → canonical field. */
 const norm = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "");
 function picker(row: Record<string, unknown>) {
   const m = new Map(Object.entries(row).map(([k, v]) => [norm(k), v == null ? "" : String(v).trim()]));
+  // Combined columns such as "Service / SKU" = "SEO Basic / MNCG-DM-005" are split into "Service" and "SKU".
+  for (const [k, v] of Object.entries(row)) {
+    const heads = k.split("/").map((h) => h.trim()).filter(Boolean);
+    const vals = String(v ?? "").split(" / ").map((x) => x.trim());
+    if (heads.length > 1 && vals.length === heads.length) heads.forEach((h, i) => { if (!m.get(norm(h))) m.set(norm(h), vals[i]); });
+  }
   return (...names: string[]) => { for (const n of names) { const v = m.get(norm(n)); if (v) return v; } return ""; };
 }
 /** Spreadsheet dates: 2027-03-31, 31-03-2027, 31/03/2027, 03/2027 (end of month), or an Excel serial number. */
@@ -50,10 +58,15 @@ function valid(y: number, mo: number, d: number) {
 }
 
 const yes = (v: string) => /^(y|yes|true|1|track|stock)$/i.test(v);
-const money = (v: string) => v.replace(/[₹,\s]/g, "").replace(/^rs\.?/i, "");
+const money = (v: string) => v.replace(/[₹,\s]/g, "").replace(/^(rs|inr)\.?/i, "");
+/** "₹8,000/month", "Rs 1,000 per hour", "5,000 onwards" → the amount, and the unit when one is given. */
+export function priceAndUnit(v: string): { amount: string; unit: string } {
+  const m = /^([0-9]+(?:\.[0-9]+)?)(?:\/([a-z]{1,20}))?/i.exec(money(v.replace(/\bper\b/i, "/")));
+  return m ? { amount: m[1], unit: (m[2] ?? "").trim().toLowerCase() } : { amount: money(v), unit: "" };
+}
 
 interface RowError { row: number; message: string }
-interface Outcome { created: number; skipped: { row: number; reason: string }[]; errors: RowError[] }
+interface Outcome { created: number; updated?: number; skipped: { row: number; reason: string }[]; errors: RowError[] }
 
 function stateCode(v: string): string | null {
   if (!v) return null;
@@ -125,7 +138,7 @@ imports.post("/items", async (c) => {
   const asOf = input.as_of ?? todayIso();
   const exp = currencyExponent(company.base_currency);
   const [existing, taxCodes, warehouses, units, codeMax] = await Promise.all([
-    all<{ name: string; sku: string | null; code: string | null; barcode: string | null }>(c.env.DB, `SELECT name, sku, code, barcode FROM items WHERE company_id = ?`, company.id),
+    all<{ id: string; name: string; sku: string | null; code: string | null; barcode: string | null }>(c.env.DB, `SELECT id, name, sku, code, barcode FROM items WHERE company_id = ?`, company.id),
     all<{ id: string; name: string; rate_bp: number; category: string; is_active: number }>(c.env.DB, `SELECT id, name, rate_bp, category, is_active FROM tax_codes WHERE company_id = ?`, company.id),
     all<{ id: string; code: string; name: string }>(c.env.DB, `SELECT id, code, name FROM warehouses WHERE company_id = ? AND is_active = 1`, company.id),
     all<{ code: string; name: string }>(c.env.DB, `SELECT code, name FROM units WHERE company_id = ?`, company.id),
@@ -133,8 +146,9 @@ imports.post("/items", async (c) => {
   ]);
   const taken = { name: new Set(existing.map((e) => e.name.toLowerCase())), sku: new Set(existing.map((e) => e.sku?.toLowerCase()).filter(Boolean)), code: new Set(existing.map((e) => e.code).filter(Boolean)), barcode: new Set(existing.map((e) => e.barcode).filter(Boolean)) };
   let nextCode = (codeMax[0]?.n ?? 0) + 1;
-  const out: Outcome = { created: 0, skipped: [], errors: [] };
+  const out: Outcome = { created: 0, updated: 0, skipped: [], errors: [] };
   const stmts: D1PreparedStatement[] = [];
+  const updatedIds = new Set<string>();
   const opening: { item_id: string; warehouse_id: string; qty_milli: number; value: number; batch_no: string | null; expiry_date: string | null }[] = [];
   const canStock = hasPerm(c, "inventory.adjust");
   const newUnits: string[] = [];
@@ -142,17 +156,22 @@ imports.post("/items", async (c) => {
     const row = i + 1;
     const p = picker(raw);
     const fail = (message: string) => out.errors.push({ row, message });
-    const name = p("name", "item name", "product name", "stock item", "description");
+    const name = p("name", "item name", "product name", "service name", "service", "product", "stock item", "particulars", "description");
     if (!name) return fail("Name is missing");
+    // "Description" is the name only when the sheet has no name column; otherwise it is the product's description.
+    const details = (name === p("description") ? p("details", "long description", "remarks") : p("details", "long description", "description", "remarks")).slice(0, 1000);
     const sku = p("sku", "item code", "part no");
     const code = p("code", "product code").toUpperCase();
     const barcode = p("barcode", "ean", "upc");
     if (code && !/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(code)) return fail(`Product code ${code} has unsupported characters`);
-    if (taken.name.has(name.toLowerCase()) || (sku && taken.sku.has(sku.toLowerCase()))) { out.skipped.push({ row, reason: `${name} already exists` }); return; }
-    if (code && taken.code.has(code)) return fail(`Product code ${code} is already used`);
-    if (barcode && taken.barcode.has(barcode)) return fail(`Barcode ${barcode} is already used`);
+    const exists = taken.name.has(name.toLowerCase()) || (sku && taken.sku.has(sku.toLowerCase()));
+    if (exists && !input.update_existing) { out.skipped.push({ row, reason: `${name} already exists` }); return; }
+    if (!exists && code && taken.code.has(code)) return fail(`Product code ${code} is already used`);
+    if (!exists && barcode && taken.barcode.has(barcode)) return fail(`Barcode ${barcode} is already used`);
     const kindRaw = p("type", "kind", "goods/service").toLowerCase();
-    const kind = /serv/.test(kindRaw) ? "service" : "goods";
+    // No Type column: a "Service" column, or a rate per month / hour / visit, means a service.
+    const kind = kindRaw ? (/serv/.test(kindRaw) ? "service" : "goods")
+      : Object.keys(raw).some((k) => /\bservices?\b/i.test(k)) || /^(month|year|day|week|hour|hr|session|visit|page|campaign|project)s?$/.test(priceAndUnit(p("sale price", "selling price", "rate", "suggested rate", "mrp", "price", "amount")).unit) ? "service" : "goods";
     const hsn = p("hsn", "hsn/sac", "hsn code", "sac", "hsn_sac").replace(/\s/g, "");
     if (hsn && !/^[0-9]{4,8}$/.test(hsn)) return fail(`HSN/SAC ${hsn} must be 4–8 digits`);
     // Tax: a rate ("18", "18%", "GST 18%") or "exempt"/"nil"; matched to this company's tax codes.
@@ -167,13 +186,14 @@ imports.post("/items", async (c) => {
       taxId = hit.id;
     }
     // Units are matched by code or name; a new unit (e.g. "bag") is added to the company's units.
-    const unitRaw = p("unit", "uom", "units").toLowerCase().replace(/\.$/, "");
+    const salePrice = priceAndUnit(p("sale price", "selling price", "rate", "suggested rate", "mrp", "price", "amount"));
+    const unitRaw = (p("unit", "uom", "units") || salePrice.unit).toLowerCase().replace(/\.$/, "");
     if (unitRaw && !/^[a-z0-9 ._-]{1,20}$/.test(unitRaw)) return fail(`Unit "${unitRaw}" is too long or has unsupported characters`);
     let unit = unitRaw ? units.find((u) => u.code.toLowerCase() === unitRaw || u.name.toLowerCase() === unitRaw)?.code : "nos";
     if (!unit) { units.push({ code: unitRaw, name: unitRaw }); newUnits.push(unitRaw); unit = unitRaw; }
     let sale: number, purchase: number, reorder: number, openQty: number, openValue: number;
     try {
-      sale = minor(money(p("sale price", "selling price", "rate", "mrp", "price")) || "0", exp, "sale price");
+      sale = minor(salePrice.amount || "0", exp, "sale price");
       purchase = minor(money(p("purchase price", "cost", "cost price", "purchase rate")) || "0", exp, "purchase price");
       reorder = qty(p("reorder level", "min stock", "reorder") || "0", "reorder level");
       openQty = qty(p("opening stock", "opening qty", "opening quantity", "stock", "qty") || "0", "opening stock");
@@ -196,13 +216,29 @@ imports.post("/items", async (c) => {
       const w = p("warehouse", "godown", "location");
       if (w) { wh = warehouses.find((x) => x.code.toLowerCase() === w.toLowerCase() || x.name.toLowerCase() === w.toLowerCase())?.id ?? null; if (!wh) return fail(`Warehouse "${w}" not found`); }
     }
+    if (exists) {
+      // Update only what the row gives; stock and codes are never changed by an import.
+      const hit = existing.find((e) => e.name.toLowerCase() === name.toLowerCase()) ?? existing.find((e) => sku && e.sku?.toLowerCase() === sku.toLowerCase());
+      if (!hit || updatedIds.has(hit.id)) { out.skipped.push({ row, reason: `${name} appears twice in the file` }); return; }
+      updatedIds.add(hit.id);
+      const has = (...n: string[]) => p(...n) !== "";
+      stmts.push(stmt(c.env.DB,
+        `UPDATE items SET sale_price = CASE WHEN ? THEN ? ELSE sale_price END, purchase_price = CASE WHEN ? THEN ? ELSE purchase_price END,
+           tax_code_id = COALESCE(?, tax_code_id), hsn_sac = COALESCE(?, hsn_sac), unit = CASE WHEN ? THEN ? ELSE unit END, description = COALESCE(?, description)
+         WHERE id = ? AND company_id = ?`,
+        salePrice.amount ? 1 : 0, sale, has("purchase price", "cost", "cost price", "purchase rate") ? 1 : 0, purchase,
+        taxId, hsn || null, unitRaw ? 1 : 0, unit, details || null, hit.id, company.id));
+      if (openQty > 0) out.skipped.push({ row, reason: `${name}: opening stock not added to an existing product (use Adjust stock)` });
+      out.updated!++;
+      return;
+    }
     const id = newId();
     const itemCode = code || `P${String(nextCode++).padStart(6, "0")}`;
     taken.name.add(name.toLowerCase()); if (sku) taken.sku.add(sku.toLowerCase()); taken.code.add(itemCode); if (barcode) taken.barcode.add(barcode);
     stmts.push(stmt(c.env.DB,
       `INSERT INTO items (id, company_id, kind, name, sku, unit, hsn_sac, description, sale_price, purchase_price, tax_code_id, track_inventory, reorder_level_milli, code, barcode, track_batches)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      id, company.id, kind, name.slice(0, 200), sku || null, unit, hsn || null, p("details", "long description").slice(0, 1000) || null,
+      id, company.id, kind, name.slice(0, 200), sku || null, unit, hsn || null, details || null,
       sale, purchase, taxId, track ? 1 : 0, reorder, itemCode, barcode || null, batches ? 1 : 0));
     if (openQty > 0) opening.push({ item_id: id, warehouse_id: wh ?? "", qty_milli: openQty, value: openValue, batch_no: batches ? batchNo : null, expiry_date: batches ? expiry : null });
     out.created++;
@@ -224,9 +260,9 @@ imports.post("/items", async (c) => {
         stmts.push(stockMoveStmt(c.env.DB, { company_id: company.id, item_id: o.item_id, warehouse_id: o.warehouse_id || fallback, move_date: asOf, qty_milli: o.qty_milli, value: o.value, kind: "opening", journal_entry_id: built.id, memo: "Imported opening stock", created_by: c.get("user").id, batch_no: o.batch_no, expiry_date: o.expiry_date }));
       }
     }
-    await batch(c.env.DB, [...stmts, audit(c, "item.import", "item", null, { created: out.created, skipped: out.skipped.length, opening_items: opening.length })]);
+    await batch(c.env.DB, [...stmts, audit(c, "item.import", "item", null, { created: out.created, updated: out.updated, skipped: out.skipped.length, opening_items: opening.length })]);
   }
-  if (out.errors.length) out.created = 0;
+  if (out.errors.length) { out.created = 0; out.updated = 0; }
   return c.json({ dry_run: input.dry_run, ok: out.errors.length === 0, ...out, new_units: out.errors.length ? [] : newUnits });
 });
 

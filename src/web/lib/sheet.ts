@@ -98,7 +98,9 @@ export function toObjects(rows: string[][]): SheetRow[] {
 
 export async function readSheet(file: File): Promise<SheetRow[]> {
   if (/\.xls$/i.test(file.name)) throw new Error("Old .xls files are not supported. In Excel choose File → Save As → .xlsx (or .csv) and try again.");
-  const rows = /\.(csv|txt)$/i.test(file.name) ? parseCsv(await file.text()) : await parseXlsx(await file.arrayBuffer());
+  const rows = /\.(csv|txt)$/i.test(file.name) ? parseCsv(await file.text())
+    : /\.pdf$/i.test(file.name) ? await (await import("./pdfTable")).parsePdfTable(await file.arrayBuffer())
+    : await parseXlsx(await file.arrayBuffer());
   if (rows.length < 2) throw new Error("The file needs a header row and at least one data row");
   return toObjects(rows);
 }
