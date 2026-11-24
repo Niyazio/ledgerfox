@@ -8,7 +8,7 @@ import { readSheet, type SheetRow } from "../lib/sheet";
 import { Alert, Button, Card, Field, Input, PageHeader, Select, TableWrap, DownloadButtons } from "../components/ui";
 import { today } from "../lib/format";
 
-type Kind = "contacts" | "items";
+type Kind = "contacts" | "items" | "accounts";
 interface Result { created: number; updated?: number; skipped: { row: number; reason: string }[]; errors: { row: number; message: string }[]; new_units?: string[] }
 
 const TEMPLATES: Record<Kind, { head: string[]; sample: string[][]; help: string }> = {
@@ -18,13 +18,18 @@ const TEMPLATES: Record<Kind, { head: string[]; sample: string[][]; help: string
     help: "Type is Customer, Supplier or Both (default: Customer). State can be the name or the 2-digit GST code; it is taken from the GSTIN when blank. Rows whose name or GSTIN already exists are skipped.",
   },
   items: {
-    head: ["Name", "Type", "Code", "SKU", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "Description", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level", "Batch", "Expiry"],
+    head: ["Name", "Type", "Code", "SKU", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "Description", "Income Account", "Expense Account", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level", "Batch", "Expiry"],
     sample: [
-      ["Basmati Rice 5kg", "Goods", "", "RICE5", "1006", "5", "bag", "650", "520", "Long-grain aged basmati rice, 5 kg bag", "8901000000011", "10", "", "", "5", "", ""],
-      ["Website Design", "Service", "WEB-001", "WEB-001", "998314", "18", "nos", "15000", "", "Five-page responsive website with contact form", "", "", "", "", "", "", ""],
-      ["Social Media Management", "Service", "", "DM-001", "998361", "18", "month", "8000", "", "Content planning, posting and monthly report", "", "", "", "", "", "", ""],
+      ["Basmati Rice 5kg", "Goods", "", "RICE5", "1006", "5", "bag", "650", "520", "Long-grain aged basmati rice, 5 kg bag", "4100", "", "8901000000011", "10", "", "", "5", "", ""],
+      ["Website Design", "Service", "WEB-001", "WEB-001", "998314", "18", "nos", "15000", "", "Five-page responsive website with contact form", "4200", "", "", "", "", "", "", "", ""],
+      ["Social Media Management", "Service", "", "DM-001", "998361", "18", "month", "8000", "", "Content planning, posting and monthly report", "4200", "", "", "", "", "", "", "", ""],
     ],
-    help: "Fill one row per product or service; only Name is required. Description is printed under the name on invoices. Selling Price can be written as 8000, ₹8,000/month or 1,000 per hour (the unit is taken from it). A PDF price list also works if it has a header row. GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Existing names or SKUs are skipped. Batch and Expiry (e.g. 06/2027) switch on batch tracking and record the opening batch; add further batches with Adjust stock.",
+    help: "Fill one row per product or service; only Name is required. Description is printed under the name on invoices. Selling Price can be written as 8000, ₹8,000/month or 1,000 per hour (the unit is taken from it). A PDF price list also works if it has a header row. GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Income Account / Expense Account: the account code or name from the chart of accounts (blank = the usual Sales / Service income). Existing names or SKUs are skipped (or updated, with the option below). Batch and Expiry (e.g. 06/2027) switch on batch tracking and record the opening batch; add further batches with Adjust stock.",
+  },
+  accounts: {
+    head: ["Code", "Account Name", "Type", "Parent", "Description"],
+    sample: [["4210", "Website & Software Development Income", "Income", "", ""], ["6630", "AI Tools & Subscriptions", "Expense", "", ""], ["1310", "Cameras & Photography Equipment", "Fixed Asset", "1200", ""]],
+    help: "Type is Income, Other income, Expense, Cost of goods sold, Fixed asset, Current asset, Bank, Cash, Liability, Long-term liability or Equity. Parent is the code or name of a group (blank = the usual group: 4000 Income, 6000 Operating Expenses, 1200 Fixed Assets…). Codes or names that already exist are skipped, never changed.",
   },
 };
 
@@ -32,10 +37,10 @@ const CHUNK = 200;
 
 /** Import customers, suppliers and products from Excel (.xlsx) or CSV — checked first, then saved in chunks. */
 export default function Import() {
-  const { path, can, id } = useCompany();
+  const { path, can, id, reloadAccounts } = useCompany();
   // Chosen by the user, or products by default once the permissions have loaded (they arrive after the first render).
   const [chosen, setKind] = useState<Kind | null>(null);
-  const kind: Kind = chosen ?? (can("items.write") || !can("customers.write") && !can("suppliers.write") ? "items" : "contacts");
+  const kind: Kind = chosen ?? (can("items.write") || !can("customers.write") && !can("suppliers.write") && !can("accounts.write") ? "items" : can("customers.write") || can("suppliers.write") ? "contacts" : "accounts");
   const [rows, setRows] = useState<SheetRow[] | null>(null);
   const [file, setFile] = useState("");
   const [asOf, setAsOf] = useState(today());
@@ -66,7 +71,7 @@ export default function Import() {
     setError(null);
     try {
       const r = await send(dryRun);
-      if (dryRun) setCheck(r); else { setDone(r); setCheck(null); }
+      if (dryRun) setCheck(r); else { setDone(r); setCheck(null); if (kind === "accounts") await reloadAccounts(); }
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(null); }
   };
 
@@ -90,6 +95,7 @@ export default function Import() {
             <Select id={fid} value={kind} onChange={(e) => { setKind(e.target.value as Kind); setRows(null); setCheck(null); setDone(null); }}>
               {(can("customers.write") || can("suppliers.write")) && <option value="contacts">Customers & suppliers</option>}
               {can("items.write") && <option value="items">Products, services & opening stock</option>}
+              {can("accounts.write") && <option value="accounts">Chart of accounts (ledgers)</option>}
             </Select>)}</Field>
           <p className="mt-3 text-xs muted">{t.help}</p>
           <DownloadButtons onDownload={() => downloadCsv(`ledgerfox-${kind}-template.csv`, t.head, t.sample)} />
@@ -120,9 +126,9 @@ export default function Import() {
       {error && <Alert className="mt-4">{error}</Alert>}
       {done && (
         <Alert kind={done.errors.length ? "error" : "success"} className="mt-4">
-          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4" />Imported {done.created} {kind === "items" ? "products" : "contacts"}{done.updated ? `, updated ${done.updated}` : ""}; skipped {done.skipped.length}.</p>
+          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4" />Imported {done.created} {kind === "items" ? "products" : kind === "accounts" ? "accounts" : "contacts"}{done.updated ? `, updated ${done.updated}` : ""}; skipped {done.skipped.length}.</p>
           {done.errors.length > 0 && <p className="mt-1 text-sm">Stopped at a chunk with errors (listed below); rows before it were saved. Fix the file and import again — saved rows will be skipped.</p>}
-          <p className="mt-1 text-sm"><Link className="underline" to={`/app/${id}/${kind === "items" ? "inventory" : "customers"}`}>Open the list</Link></p>
+          <p className="mt-1 text-sm"><Link className="underline" to={`/app/${id}/${kind === "items" ? "inventory" : kind === "accounts" ? "accounts" : "customers"}`}>Open the list</Link></p>
         </Alert>
       )}
       {(check?.errors.length || done?.errors.length) ? (
