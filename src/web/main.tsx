@@ -55,6 +55,8 @@ const PayInvoice = lazy(() => named(import("./pages/Collect"), "PayInvoice"));
 const CustomerPortal = lazy(() => named(import("./pages/Collect"), "CustomerPortal"));
 const Verify = lazy(() => import("./pages/Verify"));
 const PrintPage = lazy(() => import("./pages/Print"));
+const ChequesPage = lazy(() => import("./pages/Cheques"));
+const ChequePrintPage = lazy(() => named(import("./pages/Cheques"), "ChequePrintPage"));
 const Payroll = lazy(() => import("./pages/Payroll"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
@@ -97,6 +99,7 @@ function App() {
       <Route path="/billing/:orgId/invoice/:paymentId" element={<RequireAuth><BillingInvoice /></RequireAuth>} />
       <Route path="/vendor" element={<RequireAuth><VendorPanel /></RequireAuth>} />
       <Route path="/print/:companyId/:kind/:id" element={<RequireAuth><PrintPage /></RequireAuth>} />
+      <Route path="/print-cheque/:companyId/:id" element={<RequireAuth><ChequePrintPage /></RequireAuth>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot" element={<Forgot />} />
@@ -136,6 +139,7 @@ function App() {
         <Route path="payments/:direction/new" element={<PaymentForm />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="banking" element={<Banking />} />
+        <Route path="cheques" element={<ChequesPage />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="inventory/:itemId" element={<Keyed>{(k) => <ProductView key={k} />}</Keyed>} />
         <Route path="assets" element={<Assets />} />

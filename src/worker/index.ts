@@ -5,6 +5,8 @@ import { collect, payPublic, portalPublic } from "./routes/collect";
 import { customise } from "./routes/customise";
 import { projects } from "./routes/projects";
 import { taxcheck } from "./routes/taxcheck";
+import { cheques } from "./routes/cheques";
+import { interest } from "./routes/interest";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { TRIAL_DAYS } from "@shared/plans";
@@ -213,6 +215,8 @@ company.route("/collection", collect);
 company.route("/", customise);
 company.route("/projects", projects);
 company.route("/tax-check", taxcheck);
+company.route("/cheques", cheques);
+company.route("/interest", interest);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

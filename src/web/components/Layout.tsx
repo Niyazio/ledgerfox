@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
-import {
+import { Banknote,
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
   CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory, Clock,
@@ -110,6 +110,7 @@ const NAV: NavGroup[] = [
   { label: "Accounting", items: [
     { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
     { to: "banking", label: "Banking", icon: <Landmark className="h-4 w-4" />, perm: "bank.reconcile" },
+    { to: "cheques", label: "Cheques & interest", icon: <Banknote className="h-4 w-4" />, perm: ["sales.post", "purchase.post"] },
     { to: "journals", label: "Journals & ledgers", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
     { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
     { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" />, perm: "assets.manage" , module: "fixed_assets" },
