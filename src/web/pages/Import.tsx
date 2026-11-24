@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { FileUp, CheckCircle2 } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { api, errorMessage } from "../lib/api";
@@ -8,7 +9,7 @@ import { Alert, Button, Card, Field, Input, PageHeader, Select, TableWrap, Downl
 import { today } from "../lib/format";
 
 type Kind = "contacts" | "items";
-interface Result { created: number; skipped: { row: number; reason: string }[]; errors: { row: number; message: string }[]; new_units?: string[] }
+interface Result { created: number; updated?: number; skipped: { row: number; reason: string }[]; errors: { row: number; message: string }[]; new_units?: string[] }
 
 const TEMPLATES: Record<Kind, { head: string[]; sample: string[][]; help: string }> = {
   contacts: {
@@ -17,9 +18,13 @@ const TEMPLATES: Record<Kind, { head: string[]; sample: string[][]; help: string
     help: "Type is Customer, Supplier or Both (default: Customer). State can be the name or the 2-digit GST code; it is taken from the GSTIN when blank. Rows whose name or GSTIN already exists are skipped.",
   },
   items: {
-    head: ["Name", "Type", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "SKU", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level", "Batch", "Expiry"],
-    sample: [["Basmati Rice 5kg", "Goods", "1006", "5", "bag", "650", "520", "RICE5", "8901000000011", "10", "", "", "5"], ["Delivery charge", "Service", "996812", "18", "nos", "50", "", "", "", "", "", "", ""]],
-    help: "GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Existing names or SKUs are skipped. Batch and Expiry (e.g. 06/2027) switch on batch tracking and record the opening batch; add further batches with Adjust stock.",
+    head: ["Name", "Type", "Code", "SKU", "HSN", "GST %", "Unit", "Selling Price", "Purchase Price", "Description", "Barcode", "Opening Stock", "Opening Rate", "Warehouse", "Reorder Level", "Batch", "Expiry"],
+    sample: [
+      ["Basmati Rice 5kg", "Goods", "", "RICE5", "1006", "5", "bag", "650", "520", "Long-grain aged basmati rice, 5 kg bag", "8901000000011", "10", "", "", "5", "", ""],
+      ["Website Design", "Service", "WEB-001", "WEB-001", "998314", "18", "nos", "15000", "", "Five-page responsive website with contact form", "", "", "", "", "", "", ""],
+      ["Social Media Management", "Service", "", "DM-001", "998361", "18", "month", "8000", "", "Content planning, posting and monthly report", "", "", "", "", "", "", ""],
+    ],
+    help: "Fill one row per product or service; only Name is required. Description is printed under the name on invoices. Selling Price can be written as 8000, ₹8,000/month or 1,000 per hour (the unit is taken from it). A PDF price list also works if it has a header row. GST % is a rate (5, 18, 18%) or Exempt / Nil. Opening Stock is posted on the date below, valued at Opening Rate (or Purchase Price). New units are added automatically. Existing names or SKUs are skipped. Batch and Expiry (e.g. 06/2027) switch on batch tracking and record the opening batch; add further batches with Adjust stock.",
   },
 };
 
@@ -28,10 +33,13 @@ const CHUNK = 200;
 /** Import customers, suppliers and products from Excel (.xlsx) or CSV — checked first, then saved in chunks. */
 export default function Import() {
   const { path, can, id } = useCompany();
-  const [kind, setKind] = useState<Kind>(can("items.write") ? "items" : "contacts");
+  // Chosen by the user, or products by default once the permissions have loaded (they arrive after the first render).
+  const [chosen, setKind] = useState<Kind | null>(null);
+  const kind: Kind = chosen ?? (can("items.write") || !can("customers.write") && !can("suppliers.write") ? "items" : "contacts");
   const [rows, setRows] = useState<SheetRow[] | null>(null);
   const [file, setFile] = useState("");
   const [asOf, setAsOf] = useState(today());
+  const [update, setUpdate] = useState(false);
   const [check, setCheck] = useState<Result | null>(null);
   const [done, setDone] = useState<Result | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,9 +50,10 @@ export default function Import() {
     const total: Result = { created: 0, skipped: [], errors: [], new_units: [] };
     for (let i = 0; i < rows!.length; i += CHUNK) {
       setBusy(`${dryRun ? "Checking" : "Importing"} rows ${i + 1}–${Math.min(i + CHUNK, rows!.length)} of ${rows!.length}…`);
-      const r = await api.post<Result>(path(`/import/${kind}`), { rows: rows!.slice(i, i + CHUNK), dry_run: dryRun, as_of: kind === "items" ? asOf : undefined });
+      const r = await api.post<Result>(path(`/import/${kind}`), { rows: rows!.slice(i, i + CHUNK), dry_run: dryRun, as_of: kind === "items" ? asOf : undefined, ...(kind === "items" ? { update_existing: update } : {}) });
       const shift = <T extends { row: number }>(x: T) => ({ ...x, row: x.row + i + 1 }); // +1 for the header row
       total.created += r.created;
+      total.updated = (total.updated ?? 0) + (r.updated ?? 0);
       total.skipped.push(...r.skipped.map(shift));
       total.errors.push(...r.errors.map(shift));
       total.new_units!.push(...(r.new_units ?? []));
@@ -88,10 +97,12 @@ export default function Import() {
         <Card title="2. Choose your file">
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-[var(--border)] p-6 text-center text-sm hover:border-brand-500">
             <FileUp className="h-6 w-6 muted" />
-            <span>{file || "Excel (.xlsx) or CSV file"}</span>
-            <input type="file" accept=".xlsx,.csv,.txt,.xls" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
+            <span>{file || (kind === "items" ? "Excel (.xlsx), CSV or PDF price list" : "Excel (.xlsx) or CSV file")}</span>
+            <input type="file" accept={kind === "items" ? ".xlsx,.csv,.txt,.xls,.pdf" : ".xlsx,.csv,.txt,.xls"} className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
           </label>
           <p className="mt-2 text-xs muted">The first row must be the column names. Columns are matched by name (e.g. “Party Name”, “GST No”, “HSN Code”); extra columns are ignored. The file is read in your browser.</p>
+          {kind === "items" && <label className="mt-3 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={update} onChange={(e) => { setUpdate(e.target.checked); setCheck(null); }} />
+            <span>Update products that already exist<span className="block text-xs muted">Prices, tax, HSN, unit and description are changed from the file (only the columns that have a value). Stock is never changed.</span></span></label>}
           {kind === "items" && <Field label="Opening stock date" className="mt-3">{(fid) => <Input id={fid} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />}</Field>}
         </Card>
         <Card title="3. Check and import">
@@ -99,19 +110,19 @@ export default function Import() {
             <p className="text-sm"><b>{rows.length}</b> rows found in {file}.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="secondary" loading={busy?.startsWith("Checking")} disabled={!!busy} onClick={() => void run(true)}>Check file</Button>
-              <Button disabled={!!busy || !check || check.errors.length > 0} onClick={() => void run(false)}>Import {check ? check.created : ""} rows</Button>
+              <Button disabled={!!busy || !check || check.errors.length > 0 || check.created + (check.updated ?? 0) === 0} onClick={() => void run(false)}>Import {check ? check.created + (check.updated ?? 0) : ""} rows</Button>
             </div>
             {busy && <p className="mt-2 text-xs muted">{busy}</p>}
-            {check && !check.errors.length && <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">Ready: {check.created} new, {check.skipped.length} already exist and will be skipped.{check.new_units?.length ? ` New units: ${check.new_units.join(", ")}.` : ""}</p>}
+            {check && !check.errors.length && <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">Ready: {check.created} new{check.updated ? `, ${check.updated} to update` : ""}, {check.skipped.length} skipped.{check.new_units?.length ? ` New units: ${check.new_units.join(", ")}.` : ""}</p>}
           </>}
         </Card>
       </div>
       {error && <Alert className="mt-4">{error}</Alert>}
       {done && (
         <Alert kind={done.errors.length ? "error" : "success"} className="mt-4">
-          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4" />Imported {done.created} {kind === "items" ? "products" : "contacts"}; skipped {done.skipped.length} existing.</p>
+          <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="h-4 w-4" />Imported {done.created} {kind === "items" ? "products" : "contacts"}{done.updated ? `, updated ${done.updated}` : ""}; skipped {done.skipped.length}.</p>
           {done.errors.length > 0 && <p className="mt-1 text-sm">Stopped at a chunk with errors (listed below); rows before it were saved. Fix the file and import again — saved rows will be skipped.</p>}
-          <p className="mt-1 text-sm"><a className="underline" href={`/app/${id}/${kind === "items" ? "inventory" : "customers"}`}>Open the list</a></p>
+          <p className="mt-1 text-sm"><Link className="underline" to={`/app/${id}/${kind === "items" ? "inventory" : "customers"}`}>Open the list</Link></p>
         </Alert>
       )}
       {(check?.errors.length || done?.errors.length) ? (

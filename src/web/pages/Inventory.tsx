@@ -288,7 +288,8 @@ export default function Inventory() {
                   <td className="font-medium"><Link className="text-brand-700 hover:underline dark:text-brand-300" to={productPath(settings!.company.id, i.id)}>{i.name}</Link> {i.kind === "service" ? <Badge color="blue">service</Badge> : i.track_inventory ? <Badge color="green">stock</Badge> : <Badge>non-stock</Badge>}
                     {i.track_batches ? <span className="ml-1"><Badge color="blue">batches</Badge></span> : null}
                     {i.track_serials ? <span className="ml-1"><Badge color="blue">serials</Badge></span> : null}
-                    {i.track_inventory && i.reorder_level_milli > 0 && i.stock_qty_milli <= i.reorder_level_milli && <span className="ml-1"><Badge color="amber">reorder</Badge></span>}</td>
+                    {i.track_inventory && i.reorder_level_milli > 0 && i.stock_qty_milli <= i.reorder_level_milli ? <span className="ml-1"><Badge color="amber">reorder</Badge></span> : null}
+                    {i.description ? <span className="mt-0.5 block max-w-md truncate text-xs font-normal muted" title={i.description}>{i.description}</span> : null}</td>
                   <td className="font-mono text-xs">{i.code}</td><td className="font-mono text-xs">{i.sku}{i.sku && i.barcode ? <br /> : null}{i.barcode}</td><td className="font-mono text-xs">{i.hsn_sac}</td>
                   <td className="num">{money(i.sale_price)}</td>
                   <td className="num">{i.track_inventory ? `${qty(i.stock_qty_milli)} ${i.unit}` : "—"}</td>
