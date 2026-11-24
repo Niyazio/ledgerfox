@@ -4,7 +4,7 @@ import { ArrowLeftRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner, TableWrap, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, TableWrap, useToast } from "../components/ui";
 import { AccountSelect } from "../components/pickers";
 import { DateRangeFilter } from "../components/DateRange";
 import { fmtDate, fyStart, today } from "../lib/format";
@@ -116,6 +116,63 @@ export function AuditChecksReport() {
               <thead><tr>{Object.keys(c.rows[0]).filter((k) => !HIDE.includes(k)).map((k) => <th key={k} className={["amount", "balance", "debit", "credit", "ledger", "details", "difference"].includes(k) ? "num" : ""}>{LABEL[k] ?? k.replace(/_/g, " ").replace(/^./, (x) => x.toUpperCase())}</th>)}</tr></thead>
               <tbody>{c.rows.map((r: any, i: number) => <tr key={i}>{Object.keys(c.rows[0]).filter((k) => !HIDE.includes(k)).map((k) => <td key={k} className={["amount", "balance", "debit", "credit", "ledger", "details", "difference"].includes(k) ? "num" : ""}>{cell(k, r[k], r)}</td>)}</tr>)}</tbody>
             </table></TableWrap>}
+          </Card>
+        ))}
+      </div>}
+    </>
+  );
+}
+
+// ── Reports → Tax check (fix GST / VAT problems) ──
+
+function ItemFix({ row, mode, onDone }: { row: any; mode: "item_hsn" | "item_tax"; onDone: () => void }) {
+  const { path, settings } = useCompany();
+  const toast = useToast();
+  const [v, setV] = useState(mode === "item_hsn" ? row.hsn_sac ?? "" : "");
+  const codes = (settings?.tax_codes ?? []).filter((t: any) => t.is_active);
+  return (
+    <span className="flex items-center gap-2">
+      {mode === "item_hsn"
+        ? <Input value={v} inputMode="numeric" className="w-28 font-mono" placeholder="HSN / SAC" aria-label={`HSN for ${row.name}`} onChange={(e) => setV(e.target.value.replace(/\D/g, "").slice(0, 8))} />
+        : <Select className="w-44" value={v} aria-label={`Tax for ${row.name}`} onChange={(e) => setV(e.target.value)}><option value="">Choose tax…</option>{codes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>}
+      <Button size="sm" disabled={!v} onClick={async () => {
+        try { await api.patch(path(`/tax-check/item/${row.item_id}`), mode === "item_hsn" ? { hsn_sac: v } : { tax_code_id: v }); toast("success", "Fixed"); onDone(); }
+        catch (e) { toast("error", errorMessage(e)); }
+      }}>Fix</Button>
+    </span>
+  );
+}
+
+export function TaxCheckReport() {
+  const { path, id, can } = useCompany();
+  const toast = useToast();
+  const { data, error, loading, reload } = useApi<{ issues: any[]; registered: boolean }>(path("/tax-check"));
+  const HIDE = ["contact_id", "item_id", "document_id", "doc_type"];
+  const open = (data?.issues ?? []).filter((i) => i.count > 0);
+  return (
+    <>
+      <PageHeader title="Tax check" subtitle="Mistakes that would make your GST / VAT return or invoices wrong, with the fix for each." back={{ to: `/app/${id}/reports`, label: "Reports" }} />
+      {error && <Alert>{error}</Alert>}
+      {loading && !data ? <Spinner /> : data && <div className="space-y-3">
+        {!data.registered && <Alert kind="info">Your company has no tax registration number in Settings → Company, so tax-rate checks on products are skipped.</Alert>}
+        {open.length === 0
+          ? <Card><p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-5 w-5" />Everything looks right. Nothing to fix.</p></Card>
+          : <p className="text-sm">{open.reduce((t, i) => t + i.count, 0)} things to fix in {open.length} {open.length === 1 ? "group" : "groups"}.</p>}
+        {open.map((iss) => (
+          <Card key={iss.key} title={<span className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-500" />{iss.title}<Badge color="amber">{iss.count}</Badge></span>}>
+            <p className="text-sm muted">{iss.why}</p>
+            <TableWrap><table className="table mt-2">
+              <thead><tr>{Object.keys(iss.rows[0]).filter((k) => !HIDE.includes(k)).map((k) => <th key={k}>{k.replace(/_/g, " ").replace(/^./, (x: string) => x.toUpperCase())}</th>)}<th>Fix</th></tr></thead>
+              <tbody>{iss.rows.map((r: any, i: number) => <tr key={i}>
+                {Object.keys(iss.rows[0]).filter((k) => !HIDE.includes(k)).map((k) => <td key={k}>{k === "date" ? fmtDate(r[k]) : r[k] ?? "—"}</td>)}
+                <td>{iss.fix === "edit_contact" && <Link className="text-brand-700 hover:underline dark:text-brand-300" to={contactPath(id, r.contact_id)}>Open and edit</Link>}
+                  {iss.fix === "state_from_gstin" && (can("customers.write") || can("suppliers.write")) && <Button size="sm" onClick={async () => {
+                    try { await api.post(path("/tax-check/state-from-gstin"), { contact_id: r.contact_id }); toast("success", "State set from the GSTIN"); reload(); } catch (e) { toast("error", errorMessage(e)); }
+                  }}>Set state from GSTIN</Button>}
+                  {(iss.fix === "item_hsn" || iss.fix === "item_tax") && can("items.write") && <ItemFix row={r} mode={iss.fix} onDone={reload} />}
+                  {iss.fix === "open_document" && <Link className="text-brand-700 hover:underline dark:text-brand-300" to={docPath(id, r.doc_type, r.document_id)}>Open</Link>}
+                </td></tr>)}</tbody>
+            </table></TableWrap>
           </Card>
         ))}
       </div>}

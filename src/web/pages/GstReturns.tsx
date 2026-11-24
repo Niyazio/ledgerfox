@@ -1,6 +1,6 @@
 import { Gstr2bMatch } from "./Extras";
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { FileJson, Printer } from "lucide-react";
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
@@ -47,7 +47,7 @@ export default function GstReturns() {
   return (
     <>
       <PageHeader title="GST returns" subtitle="Prepare GSTR-1 and GSTR-3B from posted invoices, credit notes, bills and expenses." back={{ to: `/app/${id}/reports`, label: "Reports" }}
-        actions={<Button variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print / PDF</Button>} />
+        actions={<><Link className="inline-flex items-center rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]" to={`/app/${id}/reports/tax-check`}>Check & fix mistakes</Link><Button variant="secondary" onClick={printPage}><Printer className="h-4 w-4" />Print / PDF</Button></>} />
       <div className="mb-4 flex flex-wrap items-end gap-3 no-print">
         <Field label="Return period (month)">{(fid) => <Input id={fid} type="month" value={period} onChange={(e) => set("period", e.target.value)} />}</Field>
         {(g1.data?.gstins?.length ?? 0) > 1 && <Field label="GSTIN">{(fid) => (

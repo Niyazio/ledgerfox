@@ -13,7 +13,7 @@ import { api } from "../lib/api";
 import { CURRENCIES } from "@shared/currencies";
 import { allocateProportionally, parseDecimal, toDecimalString } from "@shared/money";
 import { printPage } from "../lib/download";
-import { AuditChecksReport } from "./Control";
+import { AuditChecksReport, TaxCheckReport } from "./Control";
 import { contactPath, journalSourcePath, ledgerPath, productPath, sourceName } from "../lib/links";
 
 const REPORTS = [
@@ -24,6 +24,7 @@ const REPORTS = [
   { key: "cash-flow", title: "Cash flow statement", group: "Financial statements", desc: "Indirect method; reconciles to the change in cash & bank balances." },
   { key: "trial-balance", title: "Trial balance", group: "Financial statements", desc: "Opening, movement and closing balance for every account." },
   { key: "general-ledger", title: "General ledger", group: "Ledgers", desc: "Every posting to an account with running balance." },
+  { key: "tax-check", title: "Tax check — fix GST / VAT mistakes", group: "Ledgers", desc: "Wrong GSTIN or tax numbers, state not matching the GSTIN, products without HSN or tax rate, drafts without tax — with a fix button for each." },
   { key: "audit-checks", title: "Audit checks", group: "Ledgers", desc: "Cash limits, negative cash, duplicate bills, late entries, missing numbers, manual journals — what auditors check first." },
   { key: "aging-receivable", title: "Aged receivables", group: "Customers & suppliers", desc: "Outstanding invoices by days overdue, reconciled to the AR account." },
   { key: "aging-payable", title: "Aged payables", group: "Customers & suppliers", desc: "Outstanding bills by days overdue, reconciled to the AP account." },
@@ -656,6 +657,7 @@ export function ReportRouter() {
     case "cash-flow": return <CashFlow />;
     case "general-ledger": return <GeneralLedger />;
     case "audit-checks": return <AuditChecksReport />;
+    case "tax-check": return <TaxCheckReport />;
     case "aging-receivable": return <Aging kind="receivable" />;
     case "aging-payable": return <Aging kind="payable" />;
     case "sales-by-customer": return <SimpleTotals kind="sales-by-customer" />;

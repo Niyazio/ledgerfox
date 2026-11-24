@@ -64,7 +64,8 @@ verifyPublic.get("/:token", async (c) => {
       currency: d.currency, amount: d.total, settled: d.amount_settled, party: d.party };
     // Sales documents are what customers receive, so the link also shows the full document and how to pay.
     // Purchase documents only confirm that they exist.
-    if (!SALES_DOC_TYPES.includes(d.doc_type as string) || !base.valid) return c.json(base);
+    // Purchase orders are sent to suppliers, so their link shows the whole order too.
+    if ((!SALES_DOC_TYPES.includes(d.doc_type as string) && d.doc_type !== "purchase_order") || !base.valid) return c.json(base);
     const lines = await all(c.env.DB,
       `SELECT l.description, l.hsn_sac, l.qty_milli, l.unit_price, l.discount_bp, l.taxable, l.cgst, l.sgst, l.igst, l.other_tax, l.line_total, i.unit
        FROM document_lines l LEFT JOIN items i ON i.id = l.item_id WHERE l.document_id = ? ORDER BY l.line_no`, v.entity_id);

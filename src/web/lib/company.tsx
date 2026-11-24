@@ -48,12 +48,14 @@ interface CompanyCtx {
 const Ctx = createContext<CompanyCtx | null>(null);
 
 import { money as fmtMoney } from "./format";
+import { CompanyUnavailable } from "../components/CompanyUnavailable";
 import { parseModulesOff, type ModuleKey } from "@shared/modules";
 
 export function CompanyProvider({ id, children }: { id: string; children: ReactNode }) {
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const key = `ledgerfox-branch-${id}`;
   const [branch, setBranchState] = useState(() => { try { return localStorage.getItem(key) ?? ""; } catch { return ""; } });
   const setBranch = (b: string) => { setBranchState(b); try { localStorage.setItem(key, b); } catch { /* storage unavailable */ } };
@@ -63,6 +65,7 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
       setError(null);
     } catch (e) {
       setError(e instanceof ApiError && e.code === "TWO_FACTOR_REQUIRED" ? TWO_FACTOR : (e as Error).message);
+      setErrorCode(e instanceof ApiError ? e.code : null);
     }
   }, [id]);
   const reloadAccounts = useCallback(async () => {
@@ -71,7 +74,7 @@ export function CompanyProvider({ id, children }: { id: string; children: ReactN
   }, [id]);
   useEffect(() => { setSettings(null); reload(); reloadAccounts(); }, [reload, reloadAccounts]);
   if (error === TWO_FACTOR) return <div className="mx-auto max-w-lg p-6"><p className="mb-3 text-lg font-semibold">Set up two-factor sign-in to continue</p><p className="mb-4 text-sm muted">Your organisation's owner requires it for everyone.</p><TwoFactorCard onDone={() => void reload()} /></div>;
-  if (error) return <div className="p-8 text-center"><p className="text-lg font-semibold">Company unavailable</p><p className="muted mt-2">{error}</p></div>;
+  if (error) return <CompanyUnavailable code={errorCode} message={error} onRetry={() => void reload()} />;
   const scope = settings?.branch_scope ?? { all: true, ids: [] };
   const branches = (settings?.branches ?? []).filter((b) => scope.all || scope.ids.includes(b.id));
   // A member limited to some branches always works in one of them; a stale choice falls back to the first allowed.

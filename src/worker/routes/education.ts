@@ -95,6 +95,7 @@ education.put("/admin/:email", async (c) => {
   const email = emailParam(c);
   const input = await body(c, z.object({
     devices: z.number().int().min(1).max(1000).optional(),
+    max_companies: z.number().int().min(1).max(500).optional(),
     pack: z.enum(EDUCATION_PACK_IDS as [EducationPackId, ...EducationPackId[]]).nullable().optional(),
     months: z.number().int().min(1).max(36).optional(),
     note: shortText(500).nullish(),
@@ -110,11 +111,11 @@ education.put("/admin/:email", async (c) => {
   }
   const now = new Date().toISOString();
   await run(c.env.DB,
-    `INSERT INTO education_access (email, devices, pack, pack_until, note, granted_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)
-     ON CONFLICT (email) DO UPDATE SET devices = COALESCE(?, devices), pack = excluded.pack, pack_until = excluded.pack_until,
+    `INSERT INTO education_access (email, devices, pack, pack_until, note, granted_by, created_at, updated_at, max_companies) VALUES (?,?,?,?,?,?,?,?,?)
+     ON CONFLICT (email) DO UPDATE SET devices = COALESCE(?, devices), max_companies = COALESCE(?, max_companies), pack = excluded.pack, pack_until = excluded.pack_until,
        note = COALESCE(excluded.note, note), granted_by = excluded.granted_by, updated_at = excluded.updated_at, revoked_at = NULL`,
-    email, input.devices ?? EDUCATION_FREE_DEVICES, pack, until, input.note ?? null, c.get("user").email, now, now, input.devices ?? null);
-  await billingEvent(c.env, null, "education_access_granted", { email, devices: input.devices ?? null, pack, pack_until: until }, c.get("user").email);
+    email, input.devices ?? EDUCATION_FREE_DEVICES, pack, until, input.note ?? null, c.get("user").email, now, now, input.max_companies ?? 1, input.devices ?? null, input.max_companies ?? null);
+  await billingEvent(c.env, null, "education_access_granted", { email, devices: input.devices ?? null, max_companies: input.max_companies ?? null, pack, pack_until: until }, c.get("user").email);
   return c.json({ access: await educationAccess(c.env, email) });
 });
 
