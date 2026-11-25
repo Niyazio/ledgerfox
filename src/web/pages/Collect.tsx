@@ -309,7 +309,8 @@ export function CustomerPortal() {
             <td>{d.due_date ? <>{fmtDate(d.due_date)} {bal > 0 && d.due_date < today && <Badge color="red">overdue</Badge>}</> : "—"}</td>
             <td className="num">{d.doc_type === "credit_note" ? "−" : ""}{m(d.total, d.currency)}</td>
             <td className="num">{bal > 0 ? m(bal, d.currency) : d.doc_type === "invoice" ? <Badge color="green">Paid</Badge> : ""}</td>
-            <td className="text-right">{bal > 0 && data.online_pay && <a className="inline-flex items-center gap-1 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800" href={d.link.replace("/verify/", "/pay/")}><CreditCard className="h-3.5 w-3.5" />Pay</a>}</td></tr>;
+            <td className="whitespace-nowrap text-right">{bal > 0 && data.online_pay && <a className="inline-flex items-center gap-1 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-800" href={d.link.replace("/verify/", "/pay/")}><CreditCard className="h-3.5 w-3.5" />Pay</a>}
+              {bal > 0 && data.upi_pay && d.currency === "INR" && <a className="ml-1 inline-flex items-center gap-1 rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400" href={d.link}>Pay by UPI</a>}</td></tr>;
         })}</tbody>
       </table></TableWrap> : <EmptyState title="No invoices yet" />}</Card>
       {data.quotes.length > 0 && <Card title="Quotations and orders" padded={false} className="mt-5"><TableWrap><table className="table">

@@ -61,6 +61,15 @@ export async function recordPayment(c: Context<AppEnv>, input: PaymentInput) {
   if (!fx) throw unprocessable("RATE_REQUIRED", `Enter the ${currency} exchange rate for ${input.payment_date}`);
   fx = Number(fx);
 
+  // A UPI or bank-transfer reference (UTR) identifies one payment: the same one cannot be recorded twice.
+  const ref = (input.reference ?? "").replace(/\s+/g, "").toUpperCase();
+  if ((input.method === "upi" || input.method === "bank_transfer") && ref.length >= 6) {
+    const dup = await first<{ number: string; payment_date: string }>(db,
+      `SELECT number, payment_date FROM payments WHERE company_id = ? AND direction = ? AND status = 'posted' AND method IN ('upi','bank_transfer') AND upper(replace(reference, ' ', '')) = ?`,
+      company.id, input.direction, ref);
+    if (dup) throw conflict("DUPLICATE_REFERENCE", `Reference ${input.reference} is already recorded on ${dup.number} (${dup.payment_date}). Check the bank statement: the same payment cannot be recorded twice.`);
+  }
+
   const tds = input.tds_amount ?? 0;
   if (!Number.isSafeInteger(tds) || tds < 0) throw badRequest("TDS cannot be negative");
   if (tds > 0 && currency !== company.base_currency) throw badRequest("TDS can only be recorded on payments in the base currency");

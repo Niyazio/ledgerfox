@@ -190,6 +190,8 @@ portalPublic.get("/:token", async (c) => {
     business: { name: co?.legal_name || co?.name, email: co?.email, phone: co?.phone, address: [co?.address, co?.city].filter(Boolean).join(", ") || null },
     customer: { name: ct?.name, kind: ct?.kind ?? "customer" },
     online_pay: await onlineReady(c.env, l.company_id),
+    // Free, instant UPI straight to the business's bank account (the invoice page shows the UPI QR and app link).
+    upi_pay: Boolean(co?.upi_id) && (ct?.currency ?? co?.base_currency) === "INR",
     summary: {
       outstanding: open.reduce((s, d) => s + d.total - d.amount_settled, 0),
       overdue: open.filter((d) => d.due_date && d.due_date < today).reduce((s, d) => s + d.total - d.amount_settled, 0),
