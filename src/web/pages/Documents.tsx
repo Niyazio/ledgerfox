@@ -372,6 +372,42 @@ function ApplyCreditModal({ note, onClose }: { note: any; onClose: () => void })
   );
 }
 
+/**
+ * The customer paid by UPI straight into the business's bank account: record it with the UTR (the 12-digit UPI
+ * reference on the customer's payment screen and in the bank statement). The same UTR cannot be recorded twice.
+ */
+function UpiReceivedModal({ doc, outstanding, onClose }: { doc: any; outstanding: number; onClose: (saved: boolean) => void }) {
+  const { path, accounts } = useCompany();
+  const toast = useToast();
+  const banks = accounts.filter((a) => a.subtype === "bank" && !a.is_group && a.is_active !== 0);
+  const [v, setV] = useState({ utr: "", amount: toInput(outstanding, doc.currency), date: today(), account_id: banks[0]?.id ?? "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const utr = v.utr.replace(/\s+/g, "");
+  const utrOk = /^[0-9]{12}$/.test(utr) || /^[A-Za-z0-9]{8,30}$/.test(utr);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.post(path("/payments"), { direction: "in", contact_id: doc.contact_id, payment_date: v.date, account_id: v.account_id, amount: v.amount, method: "upi", reference: utr,
+        allocations: [{ document_id: doc.id, amount: v.amount }] });
+      toast("success", "UPI payment recorded"); onClose(true);
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open title={`Paid by UPI · ${doc.number}`} onClose={() => onClose(false)}
+      footer={<><Button variant="secondary" onClick={() => onClose(false)}>Close</Button><Button loading={busy} disabled={!utrOk || !v.amount || !v.account_id} onClick={() => void save()}>Record payment</Button></>}>
+      {error && <Alert className="mb-3">{error}</Alert>}
+      <p className="mb-3 text-sm muted">Check that the money has arrived in your bank or UPI app first. Enter the UPI reference (UTR) shown there: a payment can be recorded only once.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="UTR / UPI reference" required hint="12 digits, e.g. 412345678901">{(fid) => <Input id={fid} inputMode="numeric" value={v.utr} onChange={(e) => setV({ ...v, utr: e.target.value })} />}</Field>
+        <Field label="Amount received">{(fid) => <Input id={fid} inputMode="decimal" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} />}</Field>
+        <Field label="Date">{(fid) => <Input id={fid} type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} />}</Field>
+        <Field label="Received in (bank account)">{(fid) => <AccountSelect id={fid} value={v.account_id} onChange={(a) => setV({ ...v, account_id: a })} filter={(a) => a.subtype === "bank"} />}</Field>
+      </div>
+    </Modal>
+  );
+}
+
 export function DocumentView() {
   const { docType = "invoice", docId } = useParams();
   const { path, money, id, settings, can, on } = useCompany();
@@ -380,6 +416,7 @@ export function DocumentView() {
   const toast = useToast();
   const { data, error, loading, reload } = useApi<any>(path(`/documents/${docId}`));
   const [applying, setApplying] = useState(false);
+  const [upiPaid, setUpiPaid] = useState(false);
   if (loading && !data) return <Spinner />;
   if (error) return <Alert>{error}</Alert>;
   const d = data.document;
@@ -427,6 +464,7 @@ export function DocumentView() {
           }, "Issued")}>{["invoice", "credit_note", "bill", "debit_note"].includes(d.doc_type) ? "Post" : "Issue"}</Button>}
           {d.status === "draft" && can(`${fam}.create`) && <ConfirmButton label="Delete" title="Delete draft?" body="Drafts can be deleted; issued documents must be voided." confirmLabel="Delete" onConfirm={async () => { await api.del(path(`/documents/${d.id}`)); nav(`/app/${id}/${area(docType)}/${docType}`); }} />}
           {d.status === "posted" && settles && outstanding > 0 && can(`${fam}.post`) && <LinkButton to={`/app/${id}/payments/${sales ? "in" : "out"}/new?contact=${d.contact_id}&doc=${d.id}`}>Record {sales ? "receipt" : "payment"}</LinkButton>}
+          {d.status === "posted" && d.doc_type === "invoice" && outstanding > 0 && d.currency === "INR" && can("sales.post") && <Button variant="secondary" onClick={() => setUpiPaid(true)}>Paid by UPI</Button>}
           {d.status === "posted" && isNote && outstanding > 0 && can(`${fam}.post`) && <Button variant="secondary" onClick={() => setApplying(true)}>Apply to {sales ? "invoice" : "bill"}</Button>}
           {["open", "accepted"].includes(d.status) && d.doc_type === "quote" && can(`${fam}.create`) && <>
             <Button variant="secondary" onClick={() => act(async () => { const r = await api.post(path(`/documents/${d.id}/convert`), { to: "sales_order" }); nav(`/app/${id}/sales/sales_order/${r.id}`); }, "Sales order draft created")}>→ Sales order</Button>
@@ -549,6 +587,7 @@ export function DocumentView() {
       )}
       {(d.doc_type === "quote" || d.doc_type === "sales_order") && ["open", "accepted", "converted"].includes(d.status) && on("quotations") && <AdvancesCard docId={d.id} currency={d.currency} contactId={d.contact_id} />}
       {applying && <ApplyCreditModal note={d} onClose={() => { setApplying(false); reload(); }} />}
+      {upiPaid && <UpiReceivedModal doc={d} outstanding={outstanding} onClose={(saved) => { setUpiPaid(false); if (saved) reload(); }} />}
     </>
   );
 }
