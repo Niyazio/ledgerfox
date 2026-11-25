@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { useCompany } from "../lib/company";
+import { useSession } from "../lib/session";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner, TableWrap, useToast } from "../components/ui";
@@ -158,6 +159,7 @@ export function FxPage() {
 
 export function ApiKeysPage() {
   const { path, settings } = useCompany();
+  const { me } = useSession();
   const toast = useToast();
   const keys = useApi<{ keys: any[] }>(path("/api-keys"));
   const [v, setV] = useState({ name: "", access: "read" });
@@ -189,7 +191,7 @@ export function ApiKeysPage() {
 curl -X POST ${base}/api/c/${settings?.company.id}/contacts \\
   -H "Authorization: Bearer lfk_…" -H "Content-Type: application/json" \\
   -d '{"kind":"customer","name":"Online buyer","email":"buyer@example.com"}'`}</pre>
-        <p className="mt-2 text-sm muted">Main endpoints: <code>/contacts</code>, <code>/items</code>, <code>/documents</code> (invoices, quotations, orders, bills; <code>POST /documents/:id/issue</code> to issue), <code>/payments</code>, <code>/reports/…</code>. Up to 600 requests a minute. To be told when something happens (an invoice issued, a payment received), add a webhook in Settings → Automations.</p>
+        <p className="mt-2 text-sm muted">Main endpoints: <code>/contacts</code>, <code>/items</code>, <code>/documents</code> (invoices, quotations, orders, bills; <code>POST /documents/:id/issue</code> to issue), <code>/payments</code>, <code>/reports/…</code>. Up to 600 requests a minute.{me?.online_payments_enabled ? " To be told when something happens (an invoice issued, a payment received), add a webhook in Settings → Customise → Automations." : ""}</p>
       </Card>
       {made && <Modal open title="Copy your key now" onClose={() => setMade(null)}>
         <Alert kind="warning">This is the only time the key is shown. Keep it secret, like a password.</Alert>

@@ -41,9 +41,8 @@ export function CollectionTab() {
   return (
     <div className="space-y-4">
       {err && <Alert>{err}</Alert>}
-      <Card title={<span className="flex items-center gap-2"><CreditCard className="h-5 w-5" />Customers pay invoices online</span>}>
+      {data.secrets_ready && <Card title={<span className="flex items-center gap-2"><CreditCard className="h-5 w-5" />Customers pay invoices online</span>}>
         <p className="text-sm muted">Customers pay from the invoice link you send (or their customer portal) by UPI, card, net banking or wallet. The money goes straight to <b>your own Razorpay account</b>, and LedgerFox records the receipt against the invoice automatically.</p>
-        {!data.secrets_ready && <Alert kind="warning" className="mt-3">Online payments are not available on this LedgerFox server yet (DATA_KEY is not set). Please contact LedgerFox.</Alert>}
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
           <li>Sign up or log in at razorpay.com (free; Razorpay charges a small fee per payment).</li>
           <li>Razorpay → Account &amp; Settings → <b>API Keys</b>: generate a key and copy the Key ID and Key Secret here.</li>
@@ -57,10 +56,9 @@ export function CollectionTab() {
         </div>
         <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" disabled={disabled} checked={v.online_enabled} onChange={(e) => set("online_enabled", e.target.checked)} /> Show <b>Pay online</b> on invoices and in the customer portal</label>
         {data.ready && <p className="mt-2 flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" />Online payments are on.</p>}
-      </Card>
-      <Card title={<span className="flex items-center gap-2"><Mail className="h-5 w-5" />Automatic payment reminders</span>}>
+      </Card>}
+      {data.email_ready && <Card title={<span className="flex items-center gap-2"><Mail className="h-5 w-5" />Automatic payment reminders</span>}>
         <p className="text-sm muted">Emails customers about unpaid invoices with the link to view and pay. Sent once a day; each reminder goes out once. Customers need an email address.</p>
-        {!data.email_ready && <Alert kind="warning" className="mt-3">Email is not set up on this LedgerFox server yet, so reminders cannot be sent. Please contact LedgerFox.</Alert>}
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" disabled={disabled} checked={v.reminders_enabled} onChange={(e) => set("reminders_enabled", e.target.checked)} /> Send reminders automatically</label>
         <div className="mt-3 grid gap-4 sm:grid-cols-4">
           <Field label="Days before due" hint="0 = none">{(id) => <Input id={id} type="number" min={0} max={30} disabled={disabled} value={v.remind_before_days} onChange={(e) => set("remind_before_days", e.target.value)} />}</Field>
@@ -68,8 +66,9 @@ export function CollectionTab() {
           <Field label="When overdue, every (days)">{(id) => <Input id={id} type="number" min={1} max={60} disabled={disabled} value={v.remind_every_days} onChange={(e) => set("remind_every_days", e.target.value)} />}</Field>
           <Field label="Overdue reminders, at most">{(id) => <Input id={id} type="number" min={0} max={12} disabled={disabled} value={v.remind_max_after} onChange={(e) => set("remind_max_after", e.target.value)} />}</Field>
         </div>
-      </Card>
-      {!disabled && <Button loading={busy} onClick={save}>Save</Button>}
+      </Card>}
+      {!data.secrets_ready && !data.email_ready && <EmptyState title="Nothing to set up here yet" />}
+      {!disabled && (data.secrets_ready || data.email_ready) && <Button loading={busy} onClick={save}>Save</Button>}
     </div>
   );
 }

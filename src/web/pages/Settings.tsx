@@ -385,7 +385,7 @@ export default function Settings() {
     <>
       <PageHeader title="Settings" subtitle={`${settings.company.name} · your role: ${ROLE_LABELS[settings.role as Role]}`} />
       <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: "company", label: "Company" }, { value: "features", label: "Features" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
+        { value: "company", label: "Company" }, { value: "features", label: "Features" }, { value: "members", label: "Users & permissions" }, { value: "tax", label: "Tax codes" }, ...(me?.edition === "cloud" && (me.online_payments_enabled || me.email_enabled) ? [{ value: "collect" as Tab, label: "Payments & reminders" }] : []), { value: "dimensions", label: "Branches & dimensions" },
         { value: "numbering", label: "Numbering" }, ...(me?.edition === "cloud" ? [{ value: "customise" as Tab, label: "Customise" }] : []), { value: "currency", label: "Currencies" }, { value: "periods", label: "Fiscal periods" }, { value: "audit", label: "Audit log" },
         { value: "data", label: "Data export" }, { value: "account", label: "My account" },
         ...(me?.edition === "desktop" ? [{ value: "backup" as Tab, label: "Cloud backup" }] : []),
