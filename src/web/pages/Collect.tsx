@@ -4,7 +4,7 @@ import { BadgeCheck, CheckCircle2, CreditCard, ExternalLink, MessageCircle, Mail
 import { useCompany } from "../lib/company";
 import { useApi } from "../lib/hooks";
 import { api, errorMessage } from "../lib/api";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner, TableWrap, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Modal, Spinner, TableWrap, useToast, Textarea, Select } from "../components/ui";
 import { AccountSelect } from "../components/pickers";
 import { ProductCredit, Wordmark } from "../components/Layout";
 import { DOC_LABELS, fmtDate, money } from "../lib/format";
@@ -168,6 +168,68 @@ export function PayInvoice() {
   );
 }
 
+/** The customer's support tickets in their portal: raise a new one, see status and replies. */
+function SupportTickets({ token, tickets, onDone }: { token: string; tickets: any[]; onDone: (msg: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState({ subject: "", description: "", asset: "", priority: "normal" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label: Record<string, string> = { open: "Received", in_progress: "Being worked on", waiting: "Waiting for you", resolved: "Resolved", closed: "Closed" };
+  return (
+    <Card title="Support requests" className="mt-4" actions={<Button size="sm" variant="secondary" onClick={() => setOpen(!open)}>{open ? "Close" : "Raise a request"}</Button>}>
+      {open && <div className="mb-3 grid gap-2">
+        {error && <Alert>{error}</Alert>}
+        <Input aria-label="Subject" placeholder="What is the problem?" value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} />
+        <Textarea aria-label="Details" rows={3} placeholder="Details (since when, error message…)" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Input aria-label="Product or serial number" placeholder="Product / serial number (if any)" value={v.asset} onChange={(e) => setV({ ...v, asset: e.target.value })} />
+          <Select aria-label="How urgent" value={v.priority} onChange={(e) => setV({ ...v, priority: e.target.value })}><option value="low">Not urgent</option><option value="normal">Normal</option><option value="high">Urgent</option><option value="urgent">Work has stopped</option></Select>
+        </div>
+        <Button loading={busy} disabled={v.subject.trim().length < 3} onClick={async () => {
+          setBusy(true); setError(null);
+          try { const r = await api.post<{ number: string }>(`/api/portal/${token}/tickets`, { ...v, description: v.description || null, asset: v.asset || null }); setOpen(false); setV({ subject: "", description: "", asset: "", priority: "normal" }); onDone(`Request ${r.number} received. You will see updates here.`); }
+          catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+        }}>Send request</Button>
+      </div>}
+      {tickets.length ? <ul className="grid gap-2">{tickets.map((t) => <li key={t.id} className="rounded-lg border border-[var(--border)] p-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2"><b>{t.number}</b><span>{t.subject}</span><Badge color={t.status === "resolved" || t.status === "closed" ? "green" : t.status === "waiting" ? "amber" : "blue"}>{label[t.status] ?? t.status}</Badge></div>
+        {t.replies.map((r: any, i: number) => <p key={i} className="mt-1 text-xs"><span className="muted">{fmtDate(r.created_at.slice(0, 10))}:</span> {r.note}</p>)}
+        {t.resolution && <p className="mt-1 text-xs text-emerald-700">Resolved: {t.resolution}</p>}
+      </li>)}</ul> : !open && <p className="text-sm muted">No requests. Raise one if something needs fixing.</p>}
+    </Card>
+  );
+}
+
+/** One request for quotation in the supplier's portal: price per line, delivery days, notes. */
+function RfqQuote({ r, busy, money, onSend, onDecline }: { r: any; busy: boolean; money: (n: number) => string; onSend: (payload: unknown) => void; onDecline: () => void }) {
+  const [prices, setPrices] = useState<Record<string, string>>(Object.fromEntries(r.lines.filter((l: any) => l.my_price != null).map((l: any) => [l.id, String(l.my_price / 100)])));
+  const [days, setDays] = useState(r.delivery_days != null ? String(r.delivery_days) : "");
+  const [notes, setNotes] = useState(r.my_notes ?? "");
+  const open = r.status === "sent";
+  const total = r.lines.reduce((t: number, l: any) => t + Math.round((Number(prices[l.id] || 0) * 100 * l.qty_milli) / 1000), 0);
+  return (
+    <div className="rounded-xl border border-[var(--border)] p-3">
+      <div className="flex flex-wrap items-center gap-2"><b>{r.number}</b><span>{r.title}</span>
+        {r.outcome === "won" ? <Badge color="green">Your quote was selected</Badge> : r.outcome === "not_selected" ? <Badge>Another supplier was selected</Badge>
+          : r.my_status === "quoted" ? <Badge color="blue">Quoted, you can still change it</Badge> : r.my_status === "declined" ? <Badge>Declined</Badge> : <Badge color="amber">Waiting for your quote</Badge>}
+        {r.respond_by && open && <span className="text-xs muted">Reply by {fmtDate(r.respond_by)}</span>}</div>
+      {r.notes && <p className="mt-1 text-sm muted">{r.notes}</p>}
+      <TableWrap><table className="table mt-2 text-sm">
+        <thead><tr><th>Item</th><th className="num">Price per unit</th></tr></thead>
+        <tbody>{r.lines.map((l: any) => <tr key={l.id}><td>{l.description}<span className="block text-xs muted">{(l.qty_milli / 1000).toLocaleString("en-IN")} {l.unit ?? ""}</span></td>
+          <td className="num">{open ? <Input aria-label={`Price for ${l.description}`} className="ml-auto w-24 text-right" inputMode="decimal" value={prices[l.id] ?? ""} onChange={(e) => setPrices({ ...prices, [l.id]: e.target.value })} /> : l.my_price != null ? money(l.my_price) : "—"}</td></tr>)}
+          {open && <tr className="font-semibold"><td>Total</td><td className="num">{money(total)}</td></tr>}</tbody>
+      </table></TableWrap>
+      {open && <div className="mt-2 grid gap-2 sm:grid-cols-[8rem_1fr_auto_auto] sm:items-end">
+        <label className="text-xs">Delivery (days)<Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} /></label>
+        <label className="text-xs">Notes (brand, validity, terms)<Input value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+        <Button loading={busy} disabled={!Object.values(prices).some(Boolean)} onClick={() => onSend({ prices: Object.entries(prices).filter(([, v]) => v !== "").map(([line_id, unit_price]) => ({ line_id, unit_price })), delivery_days: days ? Number(days) : null, notes: notes || null })}>{r.my_status === "quoted" ? "Update quote" : "Send quote"}</Button>
+        {r.my_status !== "quoted" && <Button variant="ghost" disabled={busy} onClick={onDecline}>Decline</Button>}
+      </div>}
+    </div>
+  );
+}
+
 // ── Public: /portal/:token — the customer's portal ──
 
 export function CustomerPortal() {
@@ -190,6 +252,11 @@ export function CustomerPortal() {
     catch (e) { setMsg(errorMessage(e)); } finally { setBusy(null); }
   };
   const sup = data.supplier;
+  const rfqAction = async (rfqId: string, action: "quote" | "decline", payload: unknown) => {
+    setBusy(rfqId);
+    try { await api.post(`/api/portal/${token}/rfqs/${rfqId}/${action}`, payload); setMsg(action === "quote" ? `Quotation sent. ${data.business.name} will compare and let you know.` : "You declined this request."); reload(); }
+    catch (e) { setMsg(errorMessage(e)); } finally { setBusy(null); }
+  };
   const isSupplier = data.customer.kind === "supplier";
   const label = (d: any) => DOC_LABELS[d.variant ?? d.doc_type]?.one ?? d.doc_type;
   return (
@@ -204,6 +271,9 @@ export function CustomerPortal() {
           <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">{data.business.name} owes you</p><p className="text-2xl font-semibold">{m(sup.owed)}</p></div>
           <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">Past due date</p><p className={`text-2xl font-semibold ${sup.overdue > 0 ? "text-red-600" : ""}`}>{m(sup.overdue)}</p></div>
         </div>
+        {sup.rfqs?.length > 0 && <Card title="Requests for quotation" className="mt-5">
+          <div className="grid gap-4">{sup.rfqs.map((r: any) => <RfqQuote key={r.id} r={r} busy={busy === r.id} money={m} onSend={(p) => void rfqAction(r.id, "quote", p)} onDecline={() => { if (confirm("Decline to quote?")) void rfqAction(r.id, "decline", {}); }} />)}</div>
+        </Card>}
         <Card title="Purchase orders" padded={false} className="mt-5">{sup.orders.length ? <TableWrap><table className="table">
           <thead><tr><th>Order</th><th className="num">Amount</th><th>Status</th></tr></thead>
           <tbody>{sup.orders.map((d: any) => <tr key={d.id}>
@@ -226,6 +296,7 @@ export function CustomerPortal() {
         </table></TableWrap></Card>}
       </>}
       {!isSupplier && <>
+      <SupportTickets token={token!} tickets={data.tickets ?? []} onDone={(m: string) => { setMsg(m); reload(); }} />
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">You owe</p><p className="text-2xl font-semibold">{data.summary.mixed ? "See below" : m(data.summary.outstanding)}</p></div>
         <div className="card p-4"><p className="text-xs uppercase tracking-wide muted">Overdue</p><p className={`text-2xl font-semibold ${data.summary.overdue > 0 ? "text-red-600" : ""}`}>{data.summary.mixed ? "—" : m(data.summary.overdue)}</p></div>

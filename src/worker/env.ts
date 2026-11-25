@@ -94,6 +94,8 @@ export interface CompanyRow {
 }
 
 export type AppVariables = {
+  /** Set when the request is made with an API key instead of a signed-in session. */
+  apiKey?: { id: string; company_id: string; access: "read" | "write" };
   user: SessionUser;
   company: CompanyRow;
   role: Role;

@@ -3,6 +3,7 @@ import { applyAdvances } from "../services/extras";
 import { recordPayment } from "../services/payments";
 import { parseSerials } from "../services/serials";
 import { Hono } from "hono";
+import { requireRuleApprovals } from "./advanced";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { all, batch, first, stmt, todayIso } from "../lib/db";
@@ -214,7 +215,9 @@ documents.put("/:id", async (c) => {
   const existing = await access(c, id, "create");
   if (existing.status !== "draft") throw conflict("POSTED_IMMUTABLE", "Only drafts can be edited");
   if (existing.doc_type !== stored(input.doc_type).doc_type) throw badRequest("Document type cannot change");
-  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
+  // An edit that does not mention the source document (e.g. the purchase order of a bill) keeps the link.
+  const keepRelated = input.related_doc_id === undefined ? (await first<{ related_doc_id: string | null }>(c.env.DB, `SELECT related_doc_id FROM documents WHERE id = ?`, id))?.related_doc_id ?? null : input.related_doc_id;
+  const draft = await toDraftInput(c.env.DB, company.base_currency, company.id, { ...input, related_doc_id: keepRelated, branch_id: resolveBranch(c, input.branch_id ?? existing.branch_id) });
   checkDiscounts(c, input.doc_type, draft.lines);
   const before = await first<Record<string, unknown>>(c.env.DB, `SELECT contact_id, issue_date, due_date, reference, currency, total, branch_id FROM documents WHERE id = ?`, id);
   const prepared = await prepareDraft(c, draft, id);
@@ -265,6 +268,8 @@ documents.post("/:id/issue", async (c) => {
     const ok = await first(c.env.DB, `SELECT 1 FROM document_approvals WHERE document_id = ? AND approved_at IS NOT NULL`, id);
     if (!ok) throw new AppError(403, "APPROVAL_REQUIRED", "This purchase is above the approval limit. Request approval first.");
   }
+  // Approval rules (Settings → Approvals): each step approved by its role before the document is issued.
+  await requireRuleApprovals(c, id);
   if (d.doc_type === "invoice") {
     const doc = await first<{ contact_id: string; total: number; currency: string }>(c.env.DB, `SELECT contact_id, total, currency FROM documents WHERE id = ?`, id);
     const problem = await creditLimitProblem(c, doc!.contact_id, id, doc!.total);

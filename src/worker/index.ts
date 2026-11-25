@@ -5,6 +5,12 @@ import { collect, payPublic, portalPublic } from "./routes/collect";
 import { customise } from "./routes/customise";
 import { projects } from "./routes/projects";
 import { taxcheck } from "./routes/taxcheck";
+import { cheques } from "./routes/cheques";
+import { interest } from "./routes/interest";
+import { purchasing } from "./routes/purchasing";
+import { crm } from "./routes/crm";
+import { service } from "./routes/service";
+import { advanced } from "./routes/advanced";
 import { Hono } from "hono";
 import type { AppEnv, Env } from "./env";
 import { TRIAL_DAYS } from "@shared/plans";
@@ -67,6 +73,8 @@ app.use("/api/*", async (c, next) => {
   const m = c.req.method;
   // Razorpay's webhook carries no cookies and is authenticated by its HMAC signature instead.
   if (c.req.path === "/api/billing/webhook" || c.req.path.startsWith("/api/pay/webhook/")) return next();
+  // API keys (Authorization: Bearer lfk_…) carry no cookies, so a forged browser request cannot use them.
+  if (/^Bearer lfk_/.test(c.req.header("authorization") ?? "") && !c.req.header("cookie")) return next();
   if (m !== "GET" && m !== "HEAD" && m !== "OPTIONS") {
     if (c.req.header("x-requested-with") !== "ledgerfox") throw new AppError(403, "CSRF", "Missing request header");
     const origin = c.req.header("origin");
@@ -213,6 +221,12 @@ company.route("/collection", collect);
 company.route("/", customise);
 company.route("/projects", projects);
 company.route("/tax-check", taxcheck);
+company.route("/cheques", cheques);
+company.route("/interest", interest);
+company.route("/purchasing", purchasing);
+company.route("/crm", crm);
+company.route("/service", service);
+company.route("/", advanced);
 app.route("/api/c/:companyId", company);
 
 app.all("/api/*", (c) => c.json({ error: { code: "NOT_FOUND", message: "Unknown API route" } }, 404));

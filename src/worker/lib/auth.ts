@@ -68,9 +68,26 @@ export async function loadSessionUser(c: Context<AppEnv>): Promise<SessionUser |
   return { id: row.id, email: row.email, name: row.name, username: row.username, must_change_password: Boolean(row.must_change_password), totp_enabled: Boolean(row.totp_enabled), session_id: sid };
 }
 
+/** An API key (Authorization: Bearer lfk_…) acts as the member who made it, for that one company only. */
+async function loadApiKeyUser(c: Context<AppEnv>): Promise<SessionUser | null> {
+  const h = c.req.header("authorization") ?? "";
+  // Keys work only on one company's API (/api/c/:companyId/…), never on accounts, organisations or billing.
+  if (!h.startsWith("Bearer lfk_") || h.length > 120 || !c.req.path.startsWith("/api/c/")) return null;
+  const k = await first<{ id: string; company_id: string; access: "read" | "write"; revoked_at: string | null; created_by: string; last_used_at: string | null }>(c.env.DB,
+    `SELECT id, company_id, access, revoked_at, created_by, last_used_at FROM api_keys WHERE key_hash = ?`, await sha256Hex(h.slice(7)));
+  if (!k || k.revoked_at) return null;
+  const u = await first<{ id: string; email: string; name: string; username: string | null; is_disabled: number; totp_enabled: number }>(c.env.DB, `SELECT id, email, name, username, is_disabled, totp_enabled FROM users WHERE id = ?`, k.created_by);
+  if (!u || u.is_disabled) return null;
+  if (!(await rateLimit(c.env.DB, `apikey:${k.id}`, 600, 60))) throw new AppError(429, "RATE_LIMITED", "Too many API requests: up to 600 a minute");
+  if (!k.last_used_at || Date.now() - Date.parse(k.last_used_at) > 3_600_000) await run(c.env.DB, `UPDATE api_keys SET last_used_at = ? WHERE id = ?`, new Date().toISOString(), k.id);
+  c.set("apiKey", { id: k.id, company_id: k.company_id, access: k.access });
+  // Two-factor sign-in is a person's check; a key made by a member who passed it stands for them.
+  return { id: u.id, email: u.email, name: u.name, username: u.username, must_change_password: false, totp_enabled: true, session_id: `apikey:${k.id}` };
+}
+
 /** Signed-in user required; accounts still on a temporary/default password may only change it. */
 export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const user = await loadSessionUser(c);
+  const user = (await loadApiKeyUser(c)) ?? (await loadSessionUser(c));
   if (!user) throw unauthorized();
   if (user.must_change_password) throw new AppError(403, "PASSWORD_CHANGE_REQUIRED", "Set a new password before continuing");
   c.set("user", user);
@@ -98,6 +115,8 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   const companyId = c.req.param("companyId");
   const user = c.get("user");
   if (!companyId) throw notFound("Company");
+  const key = c.get("apiKey");
+  if (key && key.company_id !== companyId) throw notFound("Company");
   // One query for the company, the member's role and the organisation flags (each D1 round trip costs time).
   const row = await first<CompanyRow & { role: Role; all_branches: number; require_2fa: number; org_suspended_at: string | null }>(
     c.env.DB,
@@ -119,7 +138,8 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
     orgPermissions(c.env.DB, company.org_id, role),
     branchScope(c.env.DB, company.org_id, company.id, user.id, role, Boolean(all_branches)),
   ]);
-  c.set("perms", perms);
+  // A read-only API key can only look (view and report permissions).
+  c.set("perms", key?.access === "read" ? perms.filter((p) => /\.(view|read)$/.test(p)) : perms);
   c.set("branches", branches);
   await next();
 };

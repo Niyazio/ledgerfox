@@ -10,6 +10,8 @@ import {
   payableInvoice, portalToken, secretsReady, settleOnlineOrder,
 } from "../services/collect";
 import { emailOn, siteUrl } from "../services/email";
+import { quoteSchema, saveQuote } from "./purchasing";
+import { createTicket } from "./service";
 import { paymentAutomation, trigger } from "../services/customise";
 
 // ── Company: settings for online payments and reminders; portal links ──
@@ -171,6 +173,18 @@ portalPublic.get("/:token", async (c) => {
   const bills = withLinks.filter((d) => d.doc_type === "bill" && d.status === "posted" && d.total > d.amount_settled);
   const today = new Date().toISOString().slice(0, 10);
   const open = withLinks.filter((d) => d.doc_type === "invoice" && d.status === "posted" && d.total > d.amount_settled);
+  // Requests for quotation sent to this supplier, with the lines and what they quoted.
+  const rfqs = ct?.kind === "customer" ? [] : await all<{ id: string; number: string; title: string; issue_date: string; respond_by: string | null; status: string; notes: string | null; my_status: string; delivery_days: number | null; valid_until: string | null; my_notes: string | null; awarded_contact_id: string | null }>(c.env.DB,
+    `SELECT r.id, r.number, r.title, r.issue_date, r.respond_by, r.status, r.notes, r.awarded_contact_id, s.status AS my_status, s.delivery_days, s.valid_until, s.notes AS my_notes
+       FROM rfqs r JOIN rfq_suppliers s ON s.rfq_id = r.id WHERE r.company_id = ? AND s.contact_id = ? AND r.status IN ('sent','awarded') ORDER BY r.issue_date DESC LIMIT 50`, l.company_id, l.contact_id);
+  const rfqLines = rfqs.length ? await all<{ id: string; rfq_id: string; line_no: number; description: string; qty_milli: number; unit: string | null; my_price: number | null }>(c.env.DB,
+    `SELECT l.id, l.rfq_id, l.line_no, l.description, l.qty_milli, l.unit, q.unit_price AS my_price FROM rfq_lines l LEFT JOIN rfq_quotes q ON q.line_id = l.id AND q.contact_id = ?
+      WHERE l.rfq_id IN (${rfqs.map(() => "?").join(",")}) ORDER BY l.line_no`, l.contact_id, ...rfqs.map((r) => r.id)) : [];
+  // Support tickets of this customer, with the replies marked as visible to them.
+  const tickets = ct?.kind === "supplier" ? [] : await all<{ id: string; number: string; subject: string; status: string; priority: string; created_at: string; resolution: string | null }>(c.env.DB,
+    `SELECT id, number, subject, status, priority, created_at, resolution FROM tickets WHERE company_id = ? AND contact_id = ? ORDER BY created_at DESC LIMIT 30`, l.company_id, l.contact_id);
+  const replies = tickets.length ? await all<{ ticket_id: string; note: string; created_at: string }>(c.env.DB,
+    `SELECT ticket_id, note, created_at FROM ticket_notes WHERE public = 1 AND ticket_id IN (${tickets.map(() => "?").join(",")}) ORDER BY created_at`, ...tickets.map((t) => t.id)) : [];
   await run(c.env.DB, `UPDATE portal_links SET last_opened_at = ? WHERE token = ?`, new Date().toISOString(), token);
   return c.json({
     business: { name: co?.legal_name || co?.name, email: co?.email, phone: co?.phone, address: [co?.address, co?.city].filter(Boolean).join(", ") || null },
@@ -184,6 +198,7 @@ portalPublic.get("/:token", async (c) => {
     invoices: ct?.kind === "supplier" ? [] : withLinks.filter((d) => d.doc_type === "invoice" || d.doc_type === "credit_note"),
     quotes: ct?.kind === "supplier" ? [] : withLinks.filter((d) => d.doc_type === "quote" || d.doc_type === "sales_order"),
     receipts,
+    tickets: tickets.map((t) => ({ ...t, replies: replies.filter((r) => r.ticket_id === t.id) })),
     // Supplier side (Ariba-style): orders sent to them, their bills in our books, our payments and what we still owe.
     supplier: ct?.kind === "customer" ? null : {
       orders: withLinks.filter((d) => d.doc_type === "purchase_order"),
@@ -191,8 +206,43 @@ portalPublic.get("/:token", async (c) => {
       payments: pays.filter((p) => p.direction === "out"),
       owed: bills.reduce((s, d) => s + d.total - d.amount_settled, 0),
       overdue: bills.filter((d) => d.due_date && d.due_date < today).reduce((s, d) => s + d.total - d.amount_settled, 0),
+      rfqs: rfqs.map(({ awarded_contact_id, ...r }) => ({ ...r, outcome: r.status === "awarded" ? (awarded_contact_id === l.contact_id ? "won" : "not_selected") : null, lines: rfqLines.filter((x) => x.rfq_id === r.id) })),
     },
   });
+});
+
+/** The customer raises a support ticket from their portal. */
+portalPublic.post("/:token/tickets", async (c) => {
+  if (!(await rateLimit(c.env.DB, `portalticket:${clientIp(c)}`, 10, 3600))) throw new AppError(429, "RATE_LIMITED", "Too many requests. Try again later.");
+  const l = await portalFor(c, c.req.param("token"));
+  const ct = await first<{ kind: string }>(c.env.DB, `SELECT kind FROM contacts WHERE id = ?`, l.contact_id);
+  if (ct?.kind === "supplier") throw notFound("Portal");
+  const input = await body(c, z.object({ subject: z.string().trim().min(3).max(200), description: shortText(4000).nullish(), asset: shortText(120).nullish(), priority: z.enum(["low", "normal", "high", "urgent"]).optional() }));
+  const t = await createTicket(c.env.DB, l.company_id, { contact_id: l.contact_id, subject: input.subject, description: input.description ?? null, asset: input.asset ?? null, priority: input.priority ?? "normal", source: "portal" }, null);
+  c.set("company", (await first<CompanyRow>(c.env.DB, `SELECT * FROM companies WHERE id = ?`, l.company_id))!);
+  await batch(c.env.DB, [audit(c, "ticket.create", "ticket", t.id, { number: t.number, via: "portal" })]);
+  return c.json({ number: t.number }, 201);
+});
+
+/** The supplier sends their quotation for an RFQ (or declines to quote) from their portal. */
+portalPublic.post("/:token/rfqs/:rfqId/quote", async (c) => {
+  if (!(await rateLimit(c.env.DB, `portalquote:${clientIp(c)}`, 30, 600))) throw new AppError(429, "RATE_LIMITED", "Too many requests. Try again in a few minutes.");
+  const l = await portalFor(c, c.req.param("token"));
+  const input = await body(c, quoteSchema);
+  const n = await saveQuote(c.env.DB, l.company_id, c.req.param("rfqId"), l.contact_id, input, null);
+  c.set("company", (await first<CompanyRow>(c.env.DB, `SELECT * FROM companies WHERE id = ?`, l.company_id))!);
+  await batch(c.env.DB, [audit(c, "rfq.quoted_by_supplier", "rfq", c.req.param("rfqId"), { contact_id: l.contact_id, lines: n, via: "portal" })]);
+  return c.json({ ok: true });
+});
+
+portalPublic.post("/:token/rfqs/:rfqId/decline", async (c) => {
+  const l = await portalFor(c, c.req.param("token"));
+  const input = await body(c, z.object({ notes: shortText(500).nullish() }));
+  const r = await first<{ status: string }>(c.env.DB, `SELECT r.status FROM rfqs r JOIN rfq_suppliers s ON s.rfq_id = r.id WHERE r.id = ? AND r.company_id = ? AND s.contact_id = ?`, c.req.param("rfqId"), l.company_id, l.contact_id);
+  if (!r) throw notFound("RFQ");
+  if (r.status !== "sent") throw new AppError(409, "NOT_OPEN", "This request is closed");
+  await run(c.env.DB, `UPDATE rfq_suppliers SET status = 'declined', notes = ?, quoted_at = ? WHERE rfq_id = ? AND contact_id = ?`, input.notes ?? null, new Date().toISOString(), c.req.param("rfqId"), l.contact_id);
+  return c.json({ ok: true });
 });
 
 /** The supplier accepts (acknowledges) or declines an open purchase order from their portal. */

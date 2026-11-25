@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams, Link } from "react-router";
-import {
+import { BadgeCheck, KeyRound, LifeBuoy, Target, ClipboardCheck, Banknote,
   LayoutDashboard, BookOpen, FileText, ShoppingCart, Receipt, Landmark, Package, Building2, BarChart3, Settings, Users,
   Menu, X, LogOut, ChevronDown, Wallet, Lightbulb, Briefcase, CloudOff, RefreshCw, AlertTriangle, Trash2,
   CalendarDays, ArrowLeftRight, QrCode, ShieldCheck, UserCog, GitBranch, CalendarRange, TrendingUp, Scale, FileUp, Truck, Repeat, ShoppingBag, Factory, Clock,
@@ -84,6 +84,8 @@ const NAV: NavGroup[] = [
   { label: "Sales & billing", items: [
     { to: "pos", label: "POS / counter billing", icon: <ShoppingBag className="h-4 w-4" />, perm: "sales.post" , module: "pos" },
     { to: "customers", label: "Customers", icon: <Users className="h-4 w-4" />, perm: "sales.view" },
+    { to: "crm", label: "Leads & CRM", icon: <Target className="h-4 w-4" />, perm: ["sales.view", "customers.write"] },
+    { to: "service", label: "Service desk & AMC", icon: <LifeBuoy className="h-4 w-4" />, perm: ["sales.view", "customers.write"] },
     { to: "sales/quote", label: "Quotations", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
     { to: "sales/proforma", label: "Proforma invoices", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
     { to: "sales/sales_order", label: "Sales orders", icon: <FileText className="h-4 w-4" />, perm: "sales.view" , module: "quotations" },
@@ -97,6 +99,7 @@ const NAV: NavGroup[] = [
   { label: "Purchases", items: [
     { to: "suppliers", label: "Suppliers", icon: <Users className="h-4 w-4" />, perm: "purchase.view" },
     { to: "purchases/purchase_order", label: "Purchase orders", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" , module: "purchase_orders" },
+    { to: "purchasing", label: "RFQ, receipts & matching", icon: <ClipboardCheck className="h-4 w-4" />, perm: "purchase.view", module: "purchase_orders" },
     { to: "purchases/bill", label: "Supplier bills", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "purchases/debit_note", label: "Purchase returns", icon: <ShoppingCart className="h-4 w-4" />, perm: "purchase.view" },
     { to: "payments/out", label: "Supplier payments", icon: <Wallet className="h-4 w-4" />, perm: "purchase.view" },
@@ -110,6 +113,8 @@ const NAV: NavGroup[] = [
   { label: "Accounting", items: [
     { to: "expenses", label: "Expenses", icon: <Receipt className="h-4 w-4" />, perm: ["expense.create", "expense.approve"] },
     { to: "banking", label: "Banking", icon: <Landmark className="h-4 w-4" />, perm: "bank.reconcile" },
+    { to: "cheques", label: "Cheques & interest", icon: <Banknote className="h-4 w-4" />, perm: ["sales.post", "purchase.post"] },
+    { to: "fx-revaluation", label: "Currency revaluation", icon: <ArrowLeftRight className="h-4 w-4" />, perm: "journal.post" },
     { to: "journals", label: "Journals & ledgers", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
     { to: "accounts", label: "Chart of accounts", icon: <BookOpen className="h-4 w-4" />, perm: "journal.view" },
     { to: "assets", label: "Fixed assets", icon: <Building2 className="h-4 w-4" />, perm: "assets.manage" , module: "fixed_assets" },
@@ -130,6 +135,8 @@ const NAV: NavGroup[] = [
   { label: "Administration", items: [
     { to: "settings?tab=members", label: "Users & permissions", icon: <UserCog className="h-4 w-4" />, perm: "org.manage" },
     { to: "settings?tab=dimensions", label: "Branches", icon: <GitBranch className="h-4 w-4" />, perm: "branches.manage" },
+    { to: "approvals", label: "Approvals", icon: <BadgeCheck className="h-4 w-4" />, perm: ["sales.view", "purchase.view"] },
+    { to: "api-keys", label: "API keys", icon: <KeyRound className="h-4 w-4" />, perm: "company.manage" },
     { to: "import", label: "Import from Excel", icon: <FileUp className="h-4 w-4" />, perm: ["items.write", "customers.write", "suppliers.write", "accounts.write"] },
     { to: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
   ] },
@@ -354,6 +361,7 @@ function Shell() {
               <Shortcuts items={GOTO_ITEMS} />
               <UpdateCenter />
             </div>
+            <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
             <LangPicker />
             <div className="hidden sm:block"><ThemePicker /></div>
             {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}
