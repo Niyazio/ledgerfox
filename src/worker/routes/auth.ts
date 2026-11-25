@@ -9,6 +9,7 @@ import { hashPassword, newId, randomToken, recoveryCode, sha256Hex, temporaryPas
 import { newTotpSecret, otpauthUrl, verifyTotp } from "../lib/totp";
 import { createSession, destroySession, loadSessionUser, rateLimit, clientIp, requireAuth, requireSession, isLocalRequest } from "../lib/auth";
 import { deliverable, emailOn, sendMail, siteUrl } from "../services/email";
+import { secretsReady } from "../services/collect";
 import { isVendor } from "../services/billing";
 
 const auth = new Hono<AppEnv>();
@@ -185,6 +186,8 @@ auth.get("/me", async (c) => {
     user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: false, totp_enabled: Boolean(user.totp_enabled),
       email_verified: Boolean((await first<{ v: string | null }>(c.env.DB, `SELECT email_verified_at AS v FROM users WHERE id = ?`, user.id))?.v), email_deliverable: deliverable(user.email) },
     email_enabled: emailOn(c.env),
+    // Online payments and webhooks need the server's secret key; until then the app does not offer them.
+    online_payments_enabled: secretsReady(c.env),
     is_vendor: isVendor(c.env, user.email),
     organisations: orgs,
     companies,

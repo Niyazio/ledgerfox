@@ -105,9 +105,8 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
       { t: "p", text: "Record money received under **Receipts** (F6). Choose the customer, the bank or cash account and the amount; tick the invoices it pays. An amount not applied stays as an advance for later." },
       { t: "img", shot: "receipt-new", caption: "A receipt applied to the customer's open invoices." },
       { t: "h3", text: "The customer portal" },
-      { t: "p", text: "Every customer can have a private link (customer page → **Customer portal**). There they see their invoices and payments, download PDFs, accept quotations, pay online (once online payments are set up), and raise support requests. Send the link once by WhatsApp or email." },
+      { t: "p", text: "Every customer can have a private link (customer page → **Customer portal**). There they see their invoices and payments, download PDFs, accept quotations, and raise support requests. Send the link once by WhatsApp or email." },
       { t: "img", shot: "portal-customer", caption: "The customer's portal on a phone.", phone: true },
-      { t: "tip", text: "Automatic payment reminders (before the due date, on it, and after) are switched on in Settings → Payments & reminders, where you also set up online payments, so you do not have to chase every customer." },
     ],
   },
   {
@@ -251,7 +250,6 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
     blocks: [
       { t: "p", text: "Administration → **API keys** connects your website, online shop or other software to LedgerFox. A key is read-only or read-write, works for one company only, is shown once, and can be revoked at any time." },
       { t: "img", shot: "api-keys", caption: "API keys and how to use them." },
-      { t: "p", text: "To be told when something happens (an invoice issued, a payment received), add a webhook in Settings → Customise → Automations." },
     ],
   },
   {

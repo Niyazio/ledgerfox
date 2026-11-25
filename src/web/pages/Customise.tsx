@@ -55,7 +55,8 @@ function ReportsCard() {
   const { data, error, reload } = useApi<{ schedules: any[]; email_ready: boolean }>(can("reports.read") ? path("/report-schedules") : null);
   const toast = useToast();
   const [v, setV] = useState({ report: "daily-summary", frequency: "daily", weekday: "1", recipients: "", send_now: true });
-  if (!can("reports.read")) return null;
+  // Reports are sent by email: the card appears once email works on this server.
+  if (!can("reports.read") || !data?.email_ready) return null;
   const add = async () => {
     try { await api.post(path("/report-schedules"), { ...v, weekday: Number(v.weekday) }); setV({ ...v, recipients: "" }); reload(); toast("success", v.send_now ? "Scheduled — the first one is on its way" : "Scheduled"); }
     catch (e) { toast("error", errorMessage(e)); }
@@ -64,7 +65,6 @@ function ReportsCard() {
     <Card title={<span className="flex items-center gap-2"><Mail className="h-5 w-5" />Reports by email</span>}>
       <p className="mb-3 text-sm muted">Get the key figures in your inbox every day, week or month, with a link to the full report. Sent early in the morning.</p>
       {error && <Alert>{error}</Alert>}
-      {data && !data.email_ready && <Alert kind="warning" className="mb-3">Email is not set up on this LedgerFox server yet. Please contact LedgerFox.</Alert>}
       {data?.schedules.length ? <TableWrap><table className="table">
         <thead><tr><th>Report</th><th>When</th><th>To</th><th>Last sent</th><th /></tr></thead>
         <tbody>{data.schedules.map((s) => <tr key={s.id}><td>{REPORT_LABELS[s.report]}</td><td>{s.frequency === "weekly" ? `Every ${DAYS[s.weekday]}` : s.frequency === "monthly" ? "1st of each month" : "Every day"}</td><td className="text-xs">{s.recipients}</td><td>{s.last_sent_on ?? "—"}</td>
@@ -88,10 +88,13 @@ function AutomationsCard() {
   const toast = useToast();
   const [v, setV] = useState({ name: "", event: "invoice.issued", min_amount: "", action: "email", target: "" });
   const [secret, setSecret] = useState<string | null>(null);
-  if (!can("company.manage")) return null;
+  // Only actions that work on this server are offered; with none, the card is hidden.
+  const actions = data ? [...(data.email_ready ? ["email"] : []), ...(data.webhooks_ready ? ["webhook"] : [])] : [];
+  if (!can("company.manage") || (data && !actions.length)) return null;
+  const action = actions.includes(v.action) ? v.action : actions[0];
   const add = async () => {
     try {
-      const r = await api.post<{ signing_secret: string | null }>(path("/automations"), { ...v, min_amount: v.min_amount || null });
+      const r = await api.post<{ signing_secret: string | null }>(path("/automations"), { ...v, action, min_amount: v.min_amount || null });
       setSecret(r.signing_secret); setV({ ...v, name: "", target: "", min_amount: "" }); reload(); toast("success", "Rule added");
     } catch (e) { toast("error", errorMessage(e)); }
   };
@@ -117,10 +120,9 @@ function AutomationsCard() {
         <Field label="Name">{(id) => <Input id={id} value={v.name} placeholder="e.g. Tell me about big invoices" onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
         <Field label="When">{(id) => <Select id={id} value={v.event} onChange={(e) => setV({ ...v, event: e.target.value })}>{Object.entries(data.events).map(([k, l]) => <option key={k} value={k}>{l as string}</option>)}</Select>}</Field>
         <Field label="Only from amount" hint="Optional, in your currency">{(id) => <Input id={id} inputMode="decimal" value={v.min_amount} onChange={(e) => setV({ ...v, min_amount: e.target.value })} />}</Field>
-        <Field label="Then">{(id) => <Select id={id} value={v.action} onChange={(e) => setV({ ...v, action: e.target.value })}><option value="email">Send an email</option><option value="webhook">Call a webhook (for developers)</option></Select>}</Field>
-        <Field label={v.action === "email" ? "Email to" : "Webhook https:// address"} className="sm:col-span-2">{(id) => <Input id={id} value={v.target} placeholder={v.action === "email" ? "owner@example.com" : "https://…"} onChange={(e) => setV({ ...v, target: e.target.value })} />}</Field>
-        <div className="sm:col-span-3"><Button disabled={!v.name.trim() || !v.target.trim()} onClick={() => void add()}>Add rule</Button>
-          {!data.email_ready && v.action === "email" && <span className="ml-3 text-xs text-amber-700 dark:text-amber-300">Email is not set up on this server yet: email rules will not send.</span>}</div>
+        <Field label="Then">{(id) => <Select id={id} value={action} onChange={(e) => setV({ ...v, action: e.target.value })}>{actions.includes("email") && <option value="email">Send an email</option>}{actions.includes("webhook") && <option value="webhook">Call a webhook (for developers)</option>}</Select>}</Field>
+        <Field label={action === "email" ? "Email to" : "Webhook https:// address"} className="sm:col-span-2">{(id) => <Input id={id} value={v.target} placeholder={action === "email" ? "owner@example.com" : "https://…"} onChange={(e) => setV({ ...v, target: e.target.value })} />}</Field>
+        <div className="sm:col-span-3"><Button disabled={!v.name.trim() || !v.target.trim()} onClick={() => void add()}>Add rule</Button></div>
       </div>}
     </Card>
   );
