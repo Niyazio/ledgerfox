@@ -134,7 +134,7 @@ export default function MobileHome() {
       <div className="mb-6 flex justify-center text-xl"><Wordmark iconClass="h-10 w-10" /></div>
       {update && <Alert kind="info" className="mb-4">Foxlator {update} is available. <button className="font-semibold underline" disabled={busy === "update"} onClick={async () => {
         setBusy("update"); setError(null);
-        try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/LedgerFox-android.apk` } as UpdateInfo); }
+        try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/Foxlator-android.apk` } as UpdateInfo); }
         catch (e) { setError((e as Error).message || "The update could not be downloaded."); } finally { setBusy(null); }
       }}>{busy === "update" ? "Downloading…" : "Update now"}</button></Alert>}
       {error && <Alert className="mb-4">{error}</Alert>}

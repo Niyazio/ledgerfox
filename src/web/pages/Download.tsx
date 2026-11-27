@@ -62,7 +62,7 @@ export default function Download() {
             <li><b>Android:</b> open the downloaded .apk and allow "Install unknown apps" for your browser when asked (the app is not on Google Play).</li>
             <li><b>No warnings at all:</b> install from your browser instead (above). On iPhone and iPad that is the way: Safari → Share → Add to Home Screen.</li>
             <li>On first launch, sign in with your Foxlator email and password (or create an account). Data files from older versions open from <b>File → Open an old data file (view only)</b>.</li>
-            <li>Only download Foxlator from this page or our GitHub releases. The file name is <code>LedgerFox-Setup-x64.exe</code>, published by Niyazio.</li>
+            <li>Only download Foxlator from this page or our GitHub releases. The file name is <code>Foxlator-Setup-x64.exe</code>, published by Niyazio.</li>
           </ul>
         </section>
         <ProductCredit className="mt-8 text-center" />

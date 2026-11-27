@@ -41,7 +41,7 @@ Foxlator is free to download and free for 30 days. After the trial a subscriptio
 Foxlator is a product of Niyazio. Support: info@niyazio.com
 
 **What's new in this version**
-LedgerFox is now Foxlator: same app, same account, same data. New: UPI payments straight to your bank, requests for quotation and goods receipts, CRM, service desk and AMC contracts, cheque register and printing, approvals, and a user manual with screenshots.
+New: UPI payments straight to your bank, requests for quotation and goods receipts, CRM, service desk and AMC contracts, cheque register and printing, approvals, and a user manual with screenshots.
 
 **Product features** (one per line, up to 20)
 GST invoices, quotations and POS billing
@@ -118,7 +118,7 @@ Paste, filling in the reviewer account you created:
 3. In the app → **Product management → Product identity**: copy **Package/Identity/Name**, **Package/Identity/Publisher** (starts with `CN=`) and **Package/Identity/PublisherDisplayName**.
 4. GitHub → Niyazio/ledgerfox → **Settings → Secrets and variables → Actions → Variables → New repository variable**, three times:
    `MS_STORE_IDENTITY_NAME`, `MS_STORE_PUBLISHER`, `MS_STORE_PUBLISHER_DISPLAY_NAME` (values from step 3).
-5. Ask for a release (e.g. “release v0.10.2”). The build then also makes **Foxlator Store package** — download it from the release run's artifacts (`microsoft-store-package`, file `LedgerFox-Store-x64.appx`).
+5. Ask for a release (e.g. “release v0.10.2”). The build then also makes **Foxlator Store package** — download it from the release run's artifacts (`microsoft-store-package`, file `Foxlator-Store-x64.appx`).
 6. Partner Center → **Start your submission**:
    - **Pricing and availability** → section 4 above
    - **Properties** → section 2

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, vi, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,9 +152,26 @@ describe("download links", () => {
     const none = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never })).json() as { available: boolean };
     expect(none.available).toBe(false);
     const set = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never, GITHUB_REPO: "acme/ledgerfox" })).json() as { files: Record<string, string> };
-    expect(set.files.windows).toBe("https://github.com/acme/ledgerfox/releases/latest/download/LedgerFox-Setup-x64.exe");
-    expect(set.files.mac_arm64).toBe("https://github.com/acme/ledgerfox/releases/latest/download/LedgerFox-mac-arm64.dmg");
+    expect(set.files.windows).toBe("/api/downloads/windows");
+    expect(set.files.android).toBe("/api/downloads/android");
     const bad = await (await app.request("http://x/api/downloads", {}, { DB: srv.db as never, GITHUB_REPO: "evil.com/x/y" })).json() as { available: boolean };
     expect(bad.available).toBe(false);
+  });
+
+  it("send each system to the latest release's file, whatever it is called, and fall back to the standard name", async () => {
+    const { default: app } = await import("../src/worker/index");
+    const env = { DB: srv.db as never, GITHUB_REPO: "acme/foxlator" };
+    const release = (names: string[]) => vi.fn(async () => new Response(JSON.stringify({ assets: names.map((n) => ({ name: n, browser_download_url: `https://gh.example/${n}` })) })));
+    const go = async (p: string) => (await app.request(`http://x/api/downloads/${p}`, {}, env)).headers.get("location");
+    vi.stubGlobal("fetch", release(["LedgerFox-Setup-x64.exe", "LedgerFox-android.apk"])); // a release from before the rename
+    expect(await go("windows")).toBe("https://gh.example/LedgerFox-Setup-x64.exe");
+    vi.stubGlobal("fetch", release(["Foxlator-Setup-x64.exe", "Foxlator-android.apk", "LedgerFox-android.apk", "Foxlator-mac-arm64.dmg"]));
+    expect(await go("windows")).toBe("https://gh.example/Foxlator-Setup-x64.exe");
+    expect(await go("android")).toBe("https://gh.example/Foxlator-android.apk");
+    expect(await go("mac_arm64")).toBe("https://gh.example/Foxlator-mac-arm64.dmg");
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    expect(await go("linux")).toBe("https://github.com/acme/foxlator/releases/latest/download/Foxlator-linux-x86_64.AppImage");
+    expect((await app.request("http://x/api/downloads/nope", {}, env)).status).toBe(404);
+    vi.unstubAllGlobals();
   });
 });

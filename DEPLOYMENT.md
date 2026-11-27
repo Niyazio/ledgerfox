@@ -95,8 +95,8 @@ Cloudflare re-runs the *same old commit*; it does not pick up newer pushes.
    `v0.1.0` (e.g. **Releases → Draft a new release → tag v0.1.0 → Publish**, or `git tag v0.1.0 && git push --tags`).
    The workflow builds Windows (.exe), macOS (.dmg ×2) and Linux on GitHub's free runners and attaches them to the release.
 2. Set `GITHUB_REPO` in `wrangler.jsonc` and deploy. `https://ledgerfox.niyazio.com/download` then offers the files,
-   picking Windows or Mac automatically. File names are stable (`LedgerFox-Setup-x64.exe`, `LedgerFox-mac-arm64.dmg`,
-   `LedgerFox-mac-x64.dmg`), so every new release updates the links with no website change.
+   picking Windows or Mac automatically. The site asks GitHub for the latest release and sends each visitor to the file for their system (`Foxlator-Setup-x64.exe`,
+   `Foxlator-mac-arm64.dmg`, …), so every new release updates the links with no website change.
 
 ## Every deploy
 

@@ -76,7 +76,7 @@ public class ApkUpdaterPlugin extends Plugin {
             try {
                 File dir = new File(getContext().getCacheDir(), "updates");
                 if (!dir.exists() && !dir.mkdirs()) throw new Exception("Could not prepare the download folder");
-                File out = new File(dir, "LedgerFox-update.apk");
+                File out = new File(dir, "Foxlator-update.apk");
                 String target = url;
                 // GitHub answers with redirects to its download servers; follow up to 5 of them (https only).
                 for (int i = 0; i < 5; i++) {

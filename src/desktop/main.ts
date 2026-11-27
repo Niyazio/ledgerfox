@@ -8,7 +8,7 @@
  * things up and export them; the same server as the cloud version runs on this computer for that.
  */
 import { app, BrowserWindow, Menu, dialog, shell, net, systemPreferences, type MenuItemConstructorOptions } from "electron";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync, renameSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
 import QRCode from "qrcode";
@@ -21,7 +21,7 @@ const DEFAULT_PORT = 4780;
 const FILE_EXT = "ledgerfox";
 
 interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; port?: number; lastBackup?: number; toldOnlineOnly?: boolean;
-  /** Automatic local copy of the cloud data (default Documents\LedgerFox Data). */
+  /** Automatic local copy of the cloud data (default Documents\Foxlator Data). */
   localFolder?: string; lastLocalCopy?: string; localCopyError?: string | null; toldLocalCopy?: boolean }
 
 /** The Foxlator website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
@@ -31,9 +31,13 @@ const online = () => config.mode === "online";
 const resources = app.isPackaged ? process.resourcesPath : join(__dirname, "..");
 const webDir = join(resources, app.isPackaged ? "web" : "dist");
 const migrationsDir = join(resources, "migrations");
-// The app was renamed from LedgerFox to Foxlator: keep using the settings folder existing installs already have
-// (it is named after the app), so nobody is signed out or loses the location of their data.
-app.setPath("userData", join(app.getPath("appData"), "LedgerFox"));
+// Settings folder: "Foxlator". A computer that still has the folder from before the rename gets it renamed, so the
+// sign-in and settings carry over; if that is not possible (e.g. the folder is in use), the old folder is used.
+{
+  const oldDir = join(app.getPath("appData"), "LedgerFox"), newDir = join(app.getPath("appData"), "Foxlator");
+  if (existsSync(oldDir) && !existsSync(newDir)) { try { renameSync(oldDir, newDir); } catch { /* keep using the old folder */ } }
+  app.setPath("userData", existsSync(oldDir) && !existsSync(newDir) ? oldDir : newDir);
+}
 const configPath = () => join(app.getPath("userData"), "config.json");
 
 let config: Config = {};
@@ -170,7 +174,9 @@ async function tellOnlineOnly() {
   });
 }
 
-const localFolder = () => config.localFolder ?? join(app.getPath("documents"), "LedgerFox Data");
+// "Foxlator Data", unless this computer already has the folder from before the rename (its copies stay where they are).
+const localFolder = () => config.localFolder ?? (existsSync(join(app.getPath("documents"), "LedgerFox Data")) && !existsSync(join(app.getPath("documents"), "Foxlator Data"))
+  ? join(app.getPath("documents"), "LedgerFox Data") : join(app.getPath("documents"), "Foxlator Data"));
 let copying = false;
 
 /** Copy every company the signed-in person can open to the local folder (online mode only; quietly skipped offline). */
