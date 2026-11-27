@@ -1,7 +1,7 @@
 /**
  * Automatic local copy: while the app is signed in and online, every company the person can open is saved as a full
  * data file in a folder on this computer (default Documents\LedgerFox Data, changeable in File → Local copy folder).
- * The LedgerFox cloud (D1) stays the main copy; this one is for the customer's own records, with no manual export.
+ * The Foxlator cloud (D1) stays the main copy; this one is for the customer's own records, with no manual export.
  *
  * Layout: <folder>/<Company>/<Company> - latest.json (always the newest) and <Company> - YYYY-MM-DD.json (one per
  * day, the newest 30 kept). Files are written to a temporary name first and then renamed, so a copy is never half

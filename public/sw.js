@@ -1,5 +1,5 @@
 /*
- * LedgerFox service worker.
+ * Foxlator service worker.
  * - App shell (HTML, JS, CSS, icons) is precached so the app opens without a connection.
  * - API GETs are network-first; successful JSON responses are kept on this device and served when offline.
  * - Writes (POST/PUT/DELETE) are never handled here; the page queues them in IndexedDB (see src/web/lib/offline.ts).
@@ -74,7 +74,7 @@ async function navigation(req) {
   try {
     return await fetch(req);
   } catch {
-    return (await caches.match("/", { cacheName: SHELL })) || new Response("LedgerFox is offline and not yet installed on this device.", { status: 503 });
+    return (await caches.match("/", { cacheName: SHELL })) || new Response("Foxlator is offline and not yet installed on this device.", { status: 503 });
   }
 }
 

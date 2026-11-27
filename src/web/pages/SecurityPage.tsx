@@ -11,8 +11,8 @@ export default function SecurityPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
       <Link to="/" className="text-lg"><Wordmark iconClass="h-8 w-8" /></Link>
-      <h1 className="mt-8 text-3xl font-semibold tracking-tight">Security at LedgerFox</h1>
-      <p className="mt-2 max-w-2xl muted">Your accounts, invoices, payroll and customer details are your business's most private records. This page explains how LedgerFox protects them, in plain words. Last updated 29 October 2026.</p>
+      <h1 className="mt-8 text-3xl font-semibold tracking-tight">Security at Foxlator</h1>
+      <p className="mt-2 max-w-2xl muted">Your accounts, invoices, payroll and customer details are your business's most private records. This page explains how Foxlator protects them, in plain words. Last updated 29 October 2026.</p>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         <Item title="Your data is kept separate from every other business">
@@ -31,16 +31,16 @@ export default function SecurityPage() {
           <p>Posted invoices and journal entries cannot be edited or deleted, only reversed. Closed periods are locked. An audit trail records who changed what and when, with the old and new values, and it cannot be edited.</p>
         </Item>
         <Item title="Payments are handled by Razorpay">
-          <p>Card numbers and UPI PINs are entered only in Razorpay's own secure window (PCI-DSS compliant); LedgerFox never sees or stores them. Every payment is confirmed with Razorpay's cryptographic signature before a plan is activated.</p>
+          <p>Card numbers and UPI PINs are entered only in Razorpay's own secure window (PCI-DSS compliant); Foxlator never sees or stores them. Every payment is confirmed with Razorpay's cryptographic signature before a plan is activated.</p>
         </Item>
         <Item title="Protection against common web attacks">
-          <p>A strict Content-Security-Policy allows only LedgerFox's own code to run inside the app. There are no ad, tracking or analytics scripts on any signed-in page. Requests from other websites are refused (CSRF protection). Every database query is parameterised (no SQL injection). Uploads are checked by file content, and Excel and CSV exports are protected against formula injection.</p>
+          <p>A strict Content-Security-Policy allows only Foxlator's own code to run inside the app. There are no ad, tracking or analytics scripts on any signed-in page. Requests from other websites are refused (CSRF protection). Every database query is parameterised (no SQL injection). Uploads are checked by file content, and Excel and CSV exports are protected against formula injection.</p>
         </Item>
         <Item title="Always yours: export and keep a copy">
           <p>You can download all your data at any time (Excel, CSV and a full backup). The desktop app can also save a backup file to your computer. Your data is never deleted for non-payment: after a plan ends you can still view and export it.</p>
         </Item>
         <Item title="Kept up to date">
-          <p>Every change runs hundreds of automated tests, including security tests, before it can go live. Releases are blocked if a known high-severity vulnerability is found in the software LedgerFox depends on. The source code is open, so anyone can inspect it.</p>
+          <p>Every change runs hundreds of automated tests, including security tests, before it can go live. Releases are blocked if a known high-severity vulnerability is found in the software Foxlator depends on. The source code is open, so anyone can inspect it.</p>
         </Item>
         <Item title="What you can do">
           <p>Use a long, unique password, and turn on two-factor sign-in (Settings → My account). Give staff their own logins with the smallest role they need. Remove people who leave. Download a backup now and then.</p>
@@ -49,10 +49,10 @@ export default function SecurityPage() {
 
       <div className="mt-8 space-y-3 text-[15px] leading-relaxed">
         <h2 className="text-lg font-semibold">Being honest about limits</h2>
-        <p>No online service can promise it can never be attacked. LedgerFox has not yet had an independent penetration test; we plan one as the service grows. The cloud database is encrypted by Cloudflare, but not separately by LedgerFox, so LedgerFox's operators could technically access it. We access customer data only to provide support you ask for, or when the law requires it.</p>
+        <p>No online service can promise it can never be attacked. Foxlator has not yet had an independent penetration test; we plan one as the service grows. The cloud database is encrypted by Cloudflare, but not separately by Foxlator, so Foxlator's operators could technically access it. We access customer data only to provide support you ask for, or when the law requires it.</p>
         <h2 className="pt-2 text-lg font-semibold">Report a security problem</h2>
-        <p>If you find a weakness, please email <a className="underline" href="mailto:info@niyazio.com?subject=LedgerFox%20security">info@niyazio.com</a> with the subject "LedgerFox security". We reply within 2 working days and fix confirmed issues as a priority. Please do not access other people's data or disrupt the service while testing.</p>
-        <p className="text-sm muted">See also the <Link className="underline" to="/privacy">privacy policy</Link>. LedgerFox is a product of <a className="underline" href="https://niyazio.com">Niyazio</a>.</p>
+        <p>If you find a weakness, please email <a className="underline" href="mailto:info@niyazio.com?subject=Foxlator%20security">info@niyazio.com</a> with the subject "Foxlator security". We reply within 2 working days and fix confirmed issues as a priority. Please do not access other people's data or disrupt the service while testing.</p>
+        <p className="text-sm muted">See also the <Link className="underline" to="/privacy">privacy policy</Link>. Foxlator is a product of <a className="underline" href="https://niyazio.com">Niyazio</a>.</p>
       </div>
     </div>
   );

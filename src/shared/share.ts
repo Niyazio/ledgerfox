@@ -1,6 +1,6 @@
 /**
  * Free ways to send a document: a WhatsApp chat link (wa.me), an email draft (mailto:), or the device share sheet.
- * Nothing is sent by LedgerFox itself, so there is no SMS/WhatsApp API cost; the user presses Send in their own app.
+ * Nothing is sent by Foxlator itself, so there is no SMS/WhatsApp API cost; the user presses Send in their own app.
  */
 
 /** UPI deep link (opens any UPI app on a phone) for a payment of `amountMinor` paise. */

@@ -86,7 +86,7 @@ function BrandingCard({ disabled }: { disabled: boolean }) {
   );
 }
 
-/** Desktop only: encrypted automatic backup of this data file to the owner's LedgerFox Cloud account. */
+/** Desktop only: encrypted automatic backup of this data file to the owner's Foxlator Cloud account. */
 function CloudBackupTab() {
   const toast = useToast();
   const status = useApi<{ connected: boolean; user?: string; enabled?: boolean; lastBackupAt?: string; lastError?: string }>("/api/desktop/backup/status");
@@ -99,11 +99,11 @@ function CloudBackupTab() {
   if (!s) return <Card><p className="text-sm muted">{status.error ?? "Loading…"}</p></Card>;
   if (!s.connected) {
     return (
-      <Card title="Back up this data file to LedgerFox Cloud">
-        <p className="mb-4 text-sm muted">Once a day while this computer is online, LedgerFox encrypts the data file with your backup passphrase and uploads it to your free LedgerFox Cloud account (ledgerfox.niyazio.com). The passphrase never leaves this computer — without it nobody, including the website operator, can read the backup. Keep it safe: a lost passphrase means the cloud copies cannot be restored. Local daily backups continue as well.</p>
+      <Card title="Back up this data file to Foxlator Cloud">
+        <p className="mb-4 text-sm muted">Once a day while this computer is online, Foxlator encrypts the data file with your backup passphrase and uploads it to your free Foxlator Cloud account (ledgerfox.niyazio.com). The passphrase never leaves this computer — without it nobody, including the website operator, can read the backup. Keep it safe: a lost passphrase means the cloud copies cannot be restored. Local daily backups continue as well.</p>
         {error && <Alert className="mb-3">{error}</Alert>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="LedgerFox Cloud username or email">{(id) => <Input id={id} autoCapitalize="none" value={v.login} onChange={(e) => setV({ ...v, login: e.target.value })} />}</Field>
+          <Field label="Foxlator Cloud username or email">{(id) => <Input id={id} autoCapitalize="none" value={v.login} onChange={(e) => setV({ ...v, login: e.target.value })} />}</Field>
           <Field label="Cloud password">{(id) => <Input id={id} type="password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} />}</Field>
           <Field label="Backup passphrase (min. 8 characters)">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.passphrase} onChange={(e) => setV({ ...v, passphrase: e.target.value })} />}</Field>
           <Field label="Repeat passphrase">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} />}</Field>
@@ -126,7 +126,7 @@ function CloudBackupTab() {
       <Card title="Cloud backup">
         {error && <Alert className="mb-3">{error}</Alert>}
         {s.lastError && <Alert kind="warning" className="mb-3">Last attempt failed: {s.lastError}. It retries automatically every hour while online.</Alert>}
-        <p className="text-sm">Connected to LedgerFox Cloud as <b>{s.user}</b>. Last backup: <b>{s.lastBackupAt ? fmtDateTime(s.lastBackupAt) : "never"}</b>.</p>
+        <p className="text-sm">Connected to Foxlator Cloud as <b>{s.user}</b>. Last backup: <b>{s.lastBackupAt ? fmtDateTime(s.lastBackupAt) : "never"}</b>.</p>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(s.enabled)} onChange={async (e) => { await api.post("/api/desktop/backup/enable", { enabled: e.target.checked }); status.reload(); }} />Back up automatically every day</label>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button loading={busy} onClick={async () => { const r = await run(() => api.post<{ size: number }>("/api/desktop/backup/run")); if (r) { toast("success", `Backed up (${Math.round(r.size / 1024)} KB encrypted)`); status.reload(); list.reload(); } }}>Back up now</Button>

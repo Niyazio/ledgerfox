@@ -5,7 +5,7 @@ import { dailyBillingReminders } from "../src/worker/services/notices";
 
 const SECRET = "test_key_secret", HOOK = "test_webhook_secret";
 const sign = (s: string, data: string) => createHmac("sha256", s).update(data).digest("hex");
-const MAIL = { RESEND_API_KEY: "re_test", EMAIL_FROM: "LedgerFox <billing@ledgerfox.example>", APP_URL: "https://ledgerfox.example" };
+const MAIL = { RESEND_API_KEY: "re_test", EMAIL_FROM: "Foxlator <billing@ledgerfox.example>", APP_URL: "https://ledgerfox.example" };
 
 /** Captures mail sent through Resend (and answers Razorpay's API for the billing tests). */
 function mockOut(opts: { mailStatus?: number } = {}) {
@@ -36,7 +36,7 @@ describe("email: verification and password reset", () => {
     const mails = mockOut();
     const { client, email } = await register(W.env, "Meera");
     expect(mails).toHaveLength(1);
-    expect(mails[0]).toMatchObject({ to: email, subject: "Confirm your email for LedgerFox" });
+    expect(mails[0]).toMatchObject({ to: email, subject: "Confirm your email for Foxlator" });
     let me = (await client.get("/api/auth/me")).json;
     expect(me).toMatchObject({ email_enabled: true, user: { email_verified: false, email_deliverable: true } });
     const verify = linkIn(mails[0].text, "/verify-email");
@@ -50,7 +50,7 @@ describe("email: verification and password reset", () => {
     expect((await anon.post("/api/auth/forgot", { email: "nobody@example.com" })).json).toEqual({ ok: true });
     expect((await anon.post("/api/auth/forgot", { email: email.toUpperCase() })).json).toEqual({ ok: true });
     expect(mails).toHaveLength(2);
-    expect(mails[1]).toMatchObject({ to: email, subject: "Reset your LedgerFox password" });
+    expect(mails[1]).toMatchObject({ to: email, subject: "Reset your Foxlator password" });
     const reset = linkIn(mails[1].text, "/reset");
     expect((await anon.post("/api/auth/reset", { token: reset.searchParams.get("token"), new_password: "a brand new password" })).status).toBe(200);
     expect((await anon.post("/api/auth/reset", { token: reset.searchParams.get("token"), new_password: "another new password" })).status).toBe(400);
@@ -124,13 +124,13 @@ describe("billing emails", () => {
     const mails = mockOut();
     expect(await dailyBillingReminders(W.env, now)).toBe(1);
     expect(await dailyBillingReminders(W.env, now)).toBe(0);
-    expect(mails[0].subject).toBe("Your LedgerFox free trial ends soon");
+    expect(mails[0].subject).toBe("Your Foxlator free trial ends soon");
     await rawQuery(W, `UPDATE org_subscriptions SET plan = 'starter', paid_until = ?, trial_ends_at = NULL WHERE org_id = ?`, new Date(now + 4 * DAY).toISOString(), W.orgId);
     expect(await dailyBillingReminders(W.env, now)).toBe(1);
-    expect(mails[1].subject).toMatch(/^Your LedgerFox Starter plan ends on/);
+    expect(mails[1].subject).toMatch(/^Your Foxlator Starter plan ends on/);
     await rawQuery(W, `UPDATE org_subscriptions SET paid_until = ? WHERE org_id = ?`, new Date(now - DAY).toISOString(), W.orgId);
     expect(await dailyBillingReminders(W.env, now)).toBe(1);
-    expect(mails[2].subject).toBe("Your LedgerFox plan has ended — 7 days to renew");
+    expect(mails[2].subject).toBe("Your Foxlator plan has ended — 7 days to renew");
     // Auto-renew on: no "please renew" reminders.
     await rawQuery(W, `UPDATE org_subscriptions SET paid_until = ?, autopay_status = 'active' WHERE org_id = ?`, new Date(now + 3 * DAY).toISOString(), W.orgId);
     expect(await dailyBillingReminders(W.env, now)).toBe(0);

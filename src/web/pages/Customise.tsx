@@ -102,7 +102,7 @@ function AutomationsCard() {
     <Card title={<span className="flex items-center gap-2"><Zap className="h-5 w-5" />Automations</span>}>
       <p className="mb-3 text-sm muted">“When this happens, do that.” Send an email (e.g. tell the owner about every big invoice) or call a webhook to connect another system (a CRM, a Google Sheet through a connector, your own app).</p>
       {error && <Alert>{error}</Alert>}
-      {secret && <Alert kind="info" className="mb-3">Webhook signing secret (shown once — copy it now): <code className="break-all">{secret}</code>. Each call carries the header <code>X-LedgerFox-Signature: sha256=…</code>, an HMAC-SHA256 of the body with this secret.</Alert>}
+      {secret && <Alert kind="info" className="mb-3">Webhook signing secret (shown once — copy it now): <code className="break-all">{secret}</code>. Each call carries the header <code>X-Foxlator-Signature: sha256=…</code>, an HMAC-SHA256 of the body with this secret.</Alert>}
       {!data ? <Spinner /> : data.rules.length ? <TableWrap><table className="table">
         <thead><tr><th>Rule</th><th>When</th><th>Then</th><th /></tr></thead>
         <tbody>{data.rules.map((r: any) => {

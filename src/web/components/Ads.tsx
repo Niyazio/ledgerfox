@@ -33,7 +33,7 @@ export function AdSense() {
   if (!cloud || consent) return null;
   return (
     <div role="dialog" aria-label="Cookies" className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-2xl rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-xl">
-      <p>LedgerFox uses an essential cookie to keep you signed in. With your consent, the public pages also show ads from Google, which uses cookies. See the <a className="underline" href="/privacy">Privacy policy</a>.</p>
+      <p>Foxlator uses an essential cookie to keep you signed in. With your consent, the public pages also show ads from Google, which uses cookies. See the <a className="underline" href="/privacy">Privacy policy</a>.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="rounded-lg bg-brand-700 px-3 py-1.5 font-medium text-white hover:bg-brand-800" onClick={() => choose("all")}>Accept all</button>
         <button className="rounded-lg border border-[var(--border)] px-3 py-1.5 hover:bg-[var(--surface-2)]" onClick={() => choose("essential")}>Essential only</button>

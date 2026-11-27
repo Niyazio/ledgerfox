@@ -68,7 +68,7 @@ export default function GstReturns() {
                 <div key={l as string} className="rounded-lg border border-[var(--border)] p-3"><p className="muted">{l}</p><p className="text-lg font-semibold">{n}</p>{t !== undefined && <p className="text-xs muted">Taxable ₹{inr(t as number)} · Tax ₹{inr(x as number)}</p>}</div>
               ))}
             </div>
-            <p className="mt-3 text-xs muted">Upload the JSON in the GST offline tool (or the portal's “Prepare offline → Upload”), which validates it before you file. Nothing is sent to the GST portal from LedgerFox.</p>
+            <p className="mt-3 text-xs muted">Upload the JSON in the GST offline tool (or the portal's “Prepare offline → Upload”), which validates it before you file. Nothing is sent to the GST portal from Foxlator.</p>
           </Card>
           {s ? (["b2b", "b2cl", "b2cs", "cdnr", "hsn", "docs"] as const).map((k) => (
             <Card key={k} title={{ b2b: "4A — B2B invoices", b2cl: "5 — B2C large invoices", b2cs: "7 — B2C others", cdnr: "9B — Credit notes (registered)", hsn: "12 — HSN summary", docs: "13 — Documents issued" }[k]}>

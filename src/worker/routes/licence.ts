@@ -51,7 +51,7 @@ async function issue(c: Context<AppEnv>, orgId: string, user: { id: string; emai
   return { token: await signLicence(c.env, payload), autopay_required: needsAutopay };
 }
 
-/** Desktop app: "Connect your LedgerFox account". Same password, two-factor and rate-limit rules as the web sign-in. */
+/** Desktop app: "Connect your Foxlator account". Same password, two-factor and rate-limit rules as the web sign-in. */
 licenceCloud.post("/issue", async (c) => {
   const input = await body(c, z.object({
     login: z.string().trim().toLowerCase().min(1).max(254), password: z.string().min(1).max(200),
@@ -80,7 +80,7 @@ licenceCloud.post("/refresh", async (c) => {
   if (!(await rateLimit(c.env.DB, `licence-refresh:${clientIp(c)}`, 120, 3600))) throw new AppError(429, "RATE_LIMITED", "Too many checks. Try again later.");
   const d = await first<{ id: string; user_id: string; org_id: string; revoked_at: string | null }>(c.env.DB,
     `SELECT id, user_id, org_id, revoked_at FROM desktop_devices WHERE token_hash = ?`, await sha256Hex(input.device_token));
-  if (!d || d.revoked_at) throw new AppError(401, "DEVICE_REVOKED", "This computer is no longer connected. Connect your LedgerFox account again in Settings → Plan & billing.");
+  if (!d || d.revoked_at) throw new AppError(401, "DEVICE_REVOKED", "This computer is no longer connected. Connect your Foxlator account again in Settings → Plan & billing.");
   const u = await first<{ id: string; email: string; is_disabled: number; role: string | null }>(c.env.DB,
     `SELECT u.id, u.email, u.is_disabled, m.role FROM users u LEFT JOIN memberships m ON m.user_id = u.id AND m.org_id = ? WHERE u.id = ?`, d.org_id, d.user_id);
   if (!u || u.is_disabled || !u.role || !["owner", "admin"].includes(u.role)) throw new AppError(401, "DEVICE_REVOKED", "The account that connected this computer no longer manages the organisation. Connect again.");
@@ -95,10 +95,10 @@ licenceDesktop.use("*", requireAuth, async (c, next) => {
   await next();
 });
 
-/** Connecting and disconnecting is for an owner or administrator on this LedgerFox. */
+/** Connecting and disconnecting is for an owner or administrator on this Foxlator. */
 async function requireManager(c: Context<AppEnv>) {
   const m = await first(c.env.DB, `SELECT 1 FROM memberships WHERE user_id = ? AND role IN ('owner','admin') LIMIT 1`, c.get("user").id);
-  if (!m) throw forbidden("Only an owner or administrator can connect this computer to a LedgerFox account");
+  if (!m) throw forbidden("Only an owner or administrator can connect this computer to a Foxlator account");
 }
 
 licenceDesktop.get("/", async (c) => c.json({ ...(await desktopLicenceState(c.env)), server: licenceServer(c.env), offline_days: OFFLINE_DAYS }));
@@ -114,14 +114,14 @@ licenceDesktop.post("/connect", async (c) => {
   try {
     res = await fetch(`${server}/api/licence/issue`, {
       method: "POST", headers: { "content-type": "application/json", "x-requested-with": "ledgerfox" },
-      body: JSON.stringify({ ...input, device_name: c.env.DEVICE_NAME ?? "LedgerFox desktop" }),
+      body: JSON.stringify({ ...input, device_name: c.env.DEVICE_NAME ?? "Foxlator desktop" }),
     });
   } catch {
     throw new AppError(503, "OFFLINE", "Could not reach ledgerfox.niyazio.com. Connect this computer to the internet and try again.");
   }
   const data = (await res.json().catch(() => ({}))) as { token?: string; public_key?: JsonWebKey; device_token?: string; email?: string; error?: { code: string; message: string; details?: unknown } };
   if (!res.ok || !data.token || !data.public_key || !data.device_token) {
-    throw new AppError(res.status === 200 ? 502 : res.status, data.error?.code ?? "LICENCE_FAILED", data.error?.message ?? "The LedgerFox website did not issue a licence", data.error?.details);
+    throw new AppError(res.status === 200 ? 502 : res.status, data.error?.code ?? "LICENCE_FAILED", data.error?.message ?? "The Foxlator website did not issue a licence", data.error?.details);
   }
   if (!(await verifyLicence(data.token, data.public_key))) throw new AppError(502, "LICENCE_INVALID", "The licence could not be verified");
   const now = new Date().toISOString();

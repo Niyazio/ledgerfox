@@ -136,7 +136,7 @@ function EinvoiceModal({ docId, refs, onClose }: { docId: string; refs: GstRefs;
       footer={<><Button variant="secondary" onClick={() => onClose(false)}>Close</Button>
         <Button variant="secondary" loading={x.busy} onClick={() => x.run()}>Check again</Button>
         <Button loading={x.busy} onClick={async () => { const r = await x.run(); if (r) download(r.filename, r.json); }}><FileJson className="h-4 w-4" />Download JSON</Button></>}>
-      <p className="mb-3 text-sm muted">Download the JSON (IRP schema 1.1) and upload it at <b>einvoice1.gst.gov.in</b> → e-Invoice → Bulk upload. LedgerFox does not connect to the IRP itself. Corrections below apply to this file only.</p>
+      <p className="mb-3 text-sm muted">Download the JSON (IRP schema 1.1) and upload it at <b>einvoice1.gst.gov.in</b> → e-Invoice → Bulk upload. Foxlator does not connect to the IRP itself. Corrections below apply to this file only.</p>
       {x.err && <Alert className="mb-3">{x.err}</Alert>}
       {x.res && <Problems list={x.res.problems} />}
       {x.seller && x.buyer && <div className="space-y-3">

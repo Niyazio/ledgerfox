@@ -125,9 +125,9 @@ export const requireCompany: MiddlewareHandler<AppEnv> = async (c, next) => {
   );
   if (!row) throw notFound("Company");
   const { role, all_branches, require_2fa, org_suspended_at, ...company } = row;
-  // Paused by LedgerFox (admin panel): nothing can be opened except the full export, so the owner keeps their data.
+  // Paused by Foxlator (admin panel): nothing can be opened except the full export, so the owner keeps their data.
   if (org_suspended_at && !(c.req.method === "GET" && /\/export(\/|$)/.test(c.req.path))) {
-    throw new AppError(403, "ACCOUNT_SUSPENDED", "Access to this business has been paused by LedgerFox. Your data is safe. Please contact info@niyazio.com.");
+    throw new AppError(403, "ACCOUNT_SUSPENDED", "Access to this business has been paused by Foxlator. Your data is safe. Please contact info@niyazio.com.");
   }
   // The owner can require two-factor sign-in for everyone; members without it are sent to set it up.
   if (require_2fa && !user.totp_enabled) throw new AppError(403, "TWO_FACTOR_REQUIRED", "Your organisation requires two-factor sign-in. Set it up under Settings → My account.");

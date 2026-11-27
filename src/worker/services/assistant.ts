@@ -97,9 +97,9 @@ const HOWTO: { re: RegExp; text: string; to: string; label: string }[] = [
   { re: /receipt|payment|collect|received/, text: "Receipts → Record receipt: choose the customer, the amount and which invoices it settles. Enter TDS if the customer deducted it.", to: "payments/in/new", label: "Record receipt" },
   { re: /gst|gstr|return/, text: "Reports → GST returns: pick the month to see GSTR-1 and GSTR-3B and download the JSON for the GST offline tool.", to: "reports/gst-returns", label: "GST returns" },
   { re: /import|excel|upload/, text: "Administration → Import from Excel: download the template, fill it, upload, check the preview, then import.", to: "import", label: "Import from Excel" },
-  { re: /user|staff|login|password|permission/, text: "Administration → Users & permissions: add a user with a role; LedgerFox shows a one-time password they change at first sign-in.", to: "settings?tab=members", label: "Users" },
+  { re: /user|staff|login|password|permission/, text: "Administration → Users & permissions: add a user with a role; Foxlator shows a one-time password they change at first sign-in.", to: "settings?tab=members", label: "Users" },
   { re: /stock|inventory|product|item/, text: "Products & stock → New item; tick “Track stock”. Stock comes in through supplier bills or Adjust stock.", to: "inventory", label: "Products & stock" },
-  { re: /backup|restore/, text: "Settings → Backup: download a backup file; the desktop app can also back up to LedgerFox Cloud, encrypted.", to: "settings", label: "Settings" },
+  { re: /backup|restore/, text: "Settings → Backup: download a backup file; the desktop app can also back up to Foxlator Cloud, encrypted.", to: "settings", label: "Settings" },
   { re: /update|version/, text: "Use the arrow button in the top bar: it shows your version and installs or reloads to the latest one.", to: "dashboard", label: "Dashboard" },
   { re: /report|profit|balance sheet|daybook|trial/, text: "Reports has the profit & loss, balance sheet, daybook, daily report, ledgers and more, each with Excel and CSV download.", to: "reports", label: "Reports" },
 ];
@@ -122,7 +122,7 @@ export async function answer(c: Context<AppEnv>, question: string): Promise<Repl
 
   switch (intent) {
     case "help":
-      return { text: "Hello! Ask me about your sales, purchases, expenses, profit, who owes you, overdue invoices, a customer's details, stock, GST or how to do something in LedgerFox. Periods like “today”, “last month”, “in March” or “last 7 days” work too.", suggestions: SUGGESTIONS };
+      return { text: "Hello! Ask me about your sales, purchases, expenses, profit, who owes you, overdue invoices, a customer's details, stock, GST or how to do something in Foxlator. Periods like “today”, “last month”, “in March” or “last 7 days” work too.", suggestions: SUGGESTIONS };
 
     case "howto": {
       const hit = HOWTO.find((h) => h.re.test(question.toLowerCase()));

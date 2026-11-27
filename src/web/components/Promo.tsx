@@ -12,7 +12,7 @@ const hiddenToday = () => { try { return localStorage.getItem(HIDE_KEY) === new 
 
 /**
  * One small, dismissible card for organisations on the Free plan of the hosted edition. It is plain first-party text
- * and a link: no ad network script, image or tracker runs inside the app, so nothing outside LedgerFox can read the
+ * and a link: no ad network script, image or tracker runs inside the app, so nothing outside Foxlator can read the
  * books on screen. The server decides who sees it (never trial, paid, desktop or self-hosted users).
  */
 export function PromoCard() {
@@ -26,9 +26,9 @@ export function PromoCard() {
   const hide = () => { try { localStorage.setItem(HIDE_KEY, new Date().toISOString().slice(0, 10)); } catch { /* private mode */ } setHidden(true); };
   const cls = "shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--surface-2)]";
   return (
-    <aside className="no-print relative mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3" aria-label={p.sponsor ? "Sponsored message" : "Message from LedgerFox"}>
+    <aside className="no-print relative mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3" aria-label={p.sponsor ? "Sponsored message" : "Message from Foxlator"}>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] uppercase tracking-wider muted">{p.sponsor ? `Sponsored · ${p.sponsor}` : "From LedgerFox"}</p>
+        <p className="text-[11px] uppercase tracking-wider muted">{p.sponsor ? `Sponsored · ${p.sponsor}` : "From Foxlator"}</p>
         <p className="text-sm font-medium">{p.title}</p>
         <p className="text-sm muted">{p.body}</p>
       </div>

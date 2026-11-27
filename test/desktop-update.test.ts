@@ -14,7 +14,7 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "lf-upd-"));
   const web = join(dir, "web");
   mkdirSync(web, { recursive: true });
-  writeFileSync(join(web, "index.html"), "<!doctype html><title>LedgerFox</title>");
+  writeFileSync(join(web, "index.html"), "<!doctype html><title>Foxlator</title>");
   srv = await startServer({
     dataFile: join(dir, "d.ledgerfox"), webDir: web, migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0, env: { PBKDF2_ITERATIONS: "1000" },
     updater: {

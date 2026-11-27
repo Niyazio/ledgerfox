@@ -1,7 +1,7 @@
 /**
  * e-invoice (IRP schema 1.1) and e-way bill (bulk upload) JSON for one document.
  *
- * LedgerFox does not talk to the IRP or the e-way bill system (that needs a paid GSP or direct-API eligibility).
+ * Foxlator does not talk to the IRP or the e-way bill system (that needs a paid GSP or direct-API eligibility).
  * The user downloads the JSON, uploads it on the free government portal (einvoice1.gst.gov.in /
  * ewaybillgst.gov.in), and records the IRN, acknowledgement, signed QR and e-way bill number back here so they print
  * on the invoice. The portals validate every field; `problems` lists what we can already see is missing.

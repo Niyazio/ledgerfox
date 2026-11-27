@@ -1,6 +1,6 @@
 {
   "appId": "com.niyazio.ledgerfox",
-  "appName": "LedgerFox",
+  "appName": "Foxlator",
   "webDir": "www",
   "server": {
     "androidScheme": "https",

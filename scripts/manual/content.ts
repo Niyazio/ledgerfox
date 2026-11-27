@@ -11,25 +11,25 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
   {
     title: "Getting started",
     blocks: [
-      { t: "p", text: "LedgerFox is accounting and billing software that works in the browser, as a desktop app (Windows, macOS, Linux) and as an Android app. Your data is kept safely online, so every device sees the same books, and several people can work at the same time." },
+      { t: "p", text: "Foxlator is accounting and billing software that works in the browser, as a desktop app (Windows, macOS, Linux) and as an Android app. Your data is kept safely online, so every device sees the same books, and several people can work at the same time." },
       { t: "h3", text: "Create your account and company" },
       { t: "steps", items: [
-        "Open the LedgerFox website and choose **Get started** (or **Sign in** if you already have an account). New accounts get a 30-day free trial.",
+        "Open the Foxlator website and choose **Get started** (or **Sign in** if you already have an account). New accounts get a 30-day free trial.",
         "Enter your name, email and a password. Keep the recovery codes shown after sign-up in a safe place: they let you back in if you forget your password.",
         "Create your organisation and your first company: name, country, currency, the month your financial year starts, your state, and your type of business.",
-        "LedgerFox sets up the chart of accounts, tax codes (GST for India, VAT for other countries) and number series for you.",
+        "Foxlator sets up the chart of accounts, tax codes (GST for India, VAT for other countries) and number series for you.",
       ] },
       { t: "img", shot: "login", caption: "Sign in. Your browser remembers you on this device; use Sign out on shared computers." },
       { t: "h3", text: "The main screen" },
-      { t: "p", text: "The menu on the left is grouped as Sales & billing, Purchases, Inventory, Accounting, People, Reports & control and Administration. At the top are the company switcher, the branch, the financial year, your role, the language, the theme, and Sign out. The **Ask** button at the bottom right answers questions about your books and about using LedgerFox." },
+      { t: "p", text: "The menu on the left is grouped as Sales & billing, Purchases, Inventory, Accounting, People, Reports & control and Administration. At the top are the company switcher, the branch, the financial year, your role, the language, the theme, and Sign out. The **Ask** button at the bottom right answers questions about your books and about using Foxlator." },
       { t: "img", shot: "dashboard", caption: "The dashboard: sales, purchases, what customers owe you, what you owe suppliers, cash and bank balances, and what needs attention today." },
-      { t: "tip", text: "Press the keyboard icon at the top to see shortcuts: F8 new invoice, F9 supplier bill, F6 receipt, F5 payment, F7 journal, Alt+R reports. Install LedgerFox as an app with the Install app button for a full-screen window." },
+      { t: "tip", text: "Press the keyboard icon at the top to see shortcuts: F8 new invoice, F9 supplier bill, F6 receipt, F5 payment, F7 journal, Alt+R reports. Install Foxlator as an app with the Install app button for a full-screen window." },
     ],
   },
   {
     title: "Setting up your company",
     blocks: [
-      { t: "p", text: "Open **Settings** to fill in the details printed on your invoices and to decide how LedgerFox works for you." },
+      { t: "p", text: "Open **Settings** to fill in the details printed on your invoices and to decide how Foxlator works for you." },
       { t: "list", items: [
         "**Company**: legal name, address, GSTIN / tax number, phone, email, logo, signature, UPI ID and payment QR, invoice terms, print layout.",
         "**Features**: switch off what your business does not use (barcode scanning, POS, stock, manufacturing, payroll…). Menus disappear; nothing is deleted.",
@@ -50,11 +50,11 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
   {
     title: "Customers and suppliers",
     blocks: [
-      { t: "p", text: "Add customers under **Customers** and suppliers under **Suppliers** (a party who is both can be marked so). Enter the GSTIN and LedgerFox fills in the state, so CGST + SGST or IGST is worked out correctly on every invoice." },
+      { t: "p", text: "Add customers under **Customers** and suppliers under **Suppliers** (a party who is both can be marked so). Enter the GSTIN and Foxlator fills in the state, so CGST + SGST or IGST is worked out correctly on every invoice." },
       { t: "img", shot: "customers", caption: "Customers: what each one owes, with search and export to Excel." },
       { t: "p", text: "Click a name to open the customer's page: everything they bought, what they paid in cash or by bank, what is outstanding and overdue, their statement, and their **portal link** (see chapter 6)." },
       { t: "img", shot: "customer", caption: "A customer's page: documents, products, payments, balance and profit." },
-      { t: "tip", text: "Set a credit limit and credit days on a customer. LedgerFox warns before an invoice takes them over the limit." },
+      { t: "tip", text: "Set a credit limit and credit days on a customer. Foxlator warns before an invoice takes them over the limit." },
     ],
   },
   {
@@ -136,7 +136,7 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
       { t: "p", text: "When goods arrive, **Receive goods** against the purchase order: how many came, how many were rejected after checking, and why. Stock and the books move when you enter the supplier's bill (convert the purchase order to a bill)." },
       { t: "img", shot: "grn", caption: "Goods receipts, with what was rejected." },
       { t: "h3", text: "3-way match" },
-      { t: "p", text: "For every purchase order LedgerFox compares the **order**, the **goods received** and the **bill**, line by line, and flags: short receipt, billed more than received, bill price above the order, goods rejected. Pay only for what was received and accepted, at the ordered price." },
+      { t: "p", text: "For every purchase order Foxlator compares the **order**, the **goods received** and the **bill**, line by line, and flags: short receipt, billed more than received, bill price above the order, goods rejected. Pay only for what was received and accepted, at the ordered price." },
       { t: "img", shot: "match", caption: "3-way match: the second laptop line was billed for 3 but only 2 were accepted." },
       { t: "h3", text: "Landed cost" },
       { t: "p", text: "Freight, customs duty, clearing and insurance are part of the cost of imported or transported goods. Choose the goods bill, enter the charges and the account they were booked to, and spread them by value or quantity: the stock value and margins are then right." },
@@ -159,7 +159,7 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
   {
     title: "Expenses, banking and cheques",
     blocks: [
-      { t: "p", text: "Record day-to-day spending under **Expenses** (rent, internet, travel, fuel). **Banking** imports your bank statement (Excel or CSV), matches each line to the entries in LedgerFox, and reconciles the account. A **contra entry** records cash deposited, cash withdrawn, or a transfer between bank accounts." },
+      { t: "p", text: "Record day-to-day spending under **Expenses** (rent, internet, travel, fuel). **Banking** imports your bank statement (Excel or CSV), matches each line to the entries in Foxlator, and reconciles the account. A **contra entry** records cash deposited, cash withdrawn, or a transfer between bank accounts." },
       { t: "img", shot: "expenses", caption: "Expenses." },
       { t: "img", shot: "banking", caption: "Banking: statement import, matching and reconciliation." },
       { t: "h3", text: "Cheques and post-dated cheques (PDC)" },
@@ -248,7 +248,7 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
   {
     title: "API keys and connecting other software",
     blocks: [
-      { t: "p", text: "Administration → **API keys** connects your website, online shop or other software to LedgerFox. A key is read-only or read-write, works for one company only, is shown once, and can be revoked at any time." },
+      { t: "p", text: "Administration → **API keys** connects your website, online shop or other software to Foxlator. A key is read-only or read-write, works for one company only, is shown once, and can be revoked at any time." },
       { t: "img", shot: "api-keys", caption: "API keys and how to use them." },
     ],
   },
@@ -256,7 +256,7 @@ export const CHAPTERS: { title: string; blocks: Block[] }[] = [
     title: "Apps, safety and help",
     blocks: [
       { t: "list", items: [
-        "**Apps**: LedgerFox runs in any modern browser, as a desktop app for Windows, macOS and Linux, and as an Android app. Install it from the Install app button or the Download page.",
+        "**Apps**: Foxlator runs in any modern browser, as a desktop app for Windows, macOS and Linux, and as an Android app. Install it from the Install app button or the Download page.",
         "**Languages**: menus in English, Hindi, Tamil, Malayalam, Kannada and Arabic; invoices can also print in Hindi or Tamil.",
         "**Your data**: kept online, the same on every device. Settings → Data export downloads everything at any time, so your data is always yours.",
         "**Security**: two-factor sign-in, roles and branch limits, period locks, and an audit log of every change.",

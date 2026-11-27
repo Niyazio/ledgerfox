@@ -1,6 +1,6 @@
 /**
  * Getting paid: customers pay invoices online through the business's own Razorpay account (money goes straight to
- * the business, never through LedgerFox), and the receipt is recorded and matched to the invoice automatically.
+ * the business, never through Foxlator), and the receipt is recorded and matched to the invoice automatically.
  * Also: customer portal links and automatic payment reminders.
  *
  * The business's Razorpay key secret and webhook secret are stored encrypted with AES-GCM under the DATA_KEY Worker
@@ -24,7 +24,7 @@ const unb64 = (s: string) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0));
 export const secretsReady = (env: Env) => Boolean(env.DATA_KEY && env.DATA_KEY.length >= 16);
 
 async function aesKey(env: Env) {
-  if (!secretsReady(env)) throw new AppError(503, "DATA_KEY_MISSING", "Online payments are not available yet: the LedgerFox server needs its DATA_KEY secret. Please contact LedgerFox.");
+  if (!secretsReady(env)) throw new AppError(503, "DATA_KEY_MISSING", "Online payments are not available yet: the Foxlator server needs its DATA_KEY secret. Please contact Foxlator.");
   const raw = await crypto.subtle.digest("SHA-256", enc.encode(`ledgerfox-secrets:${env.DATA_KEY}`));
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
 }

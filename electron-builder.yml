@@ -1,6 +1,6 @@
 # Desktop installers. Unsigned builds (no paid certificates): see DESKTOP.md for the one-time "open anyway" steps.
 appId: com.niyazio.ledgerfox
-productName: LedgerFox
+productName: Foxlator
 electronVersion: 44.9.2
 copyright: "Copyright © Niyazio (niyazio.com). MIT licence."
 directories:
@@ -18,20 +18,20 @@ extraResources:
 asar: true
 fileAssociations:
   - ext: ledgerfox
-    name: LedgerFox data
-    description: LedgerFox accounting data (older versions, opens view-only)
+    name: Foxlator data
+    description: Foxlator accounting data (older versions, opens view-only)
     role: Viewer
 win:
   # Shown in the file's Properties → Details and in Windows' prompts.
-  legalTrademarks: "LedgerFox is a product of Niyazio"
+  legalTrademarks: "Foxlator is a product of Niyazio"
   target:
     - target: nsis
       arch: [x64]
 # Microsoft Store package (free to publish for individual developers). The Store signs it and updates it, so Windows
 # shows no "unknown publisher" warning. identityName / publisher come from Partner Center (repository variables).
 appx:
-  displayName: LedgerFox
-  applicationId: LedgerFox
+  displayName: Foxlator
+  applicationId: Foxlator
   backgroundColor: "#1d4ed8"
   languages: [en-US, ar, hi]
   artifactName: LedgerFox-Store-${arch}.${ext}
@@ -49,7 +49,7 @@ mac:
   category: public.app-category.finance
   # Needed for barcode / QR scanning with the Mac's camera.
   extendInfo:
-    NSCameraUsageDescription: "LedgerFox uses the camera to scan product barcodes and QR codes."
+    NSCameraUsageDescription: "Foxlator uses the camera to scan product barcodes and QR codes."
   # Ad-hoc signature only (Apple Developer ID costs money); required for Apple Silicon to launch at all.
   identity: "-"
   artifactName: LedgerFox-mac-${arch}.${ext}

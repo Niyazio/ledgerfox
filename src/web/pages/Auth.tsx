@@ -66,6 +66,7 @@ export function Login() {
         <Button type="submit" loading={busy} className="w-full">Sign in</Button>
         </>}
         <p className="text-center text-sm"><Link to="/forgot" className="muted hover:underline">Forgot password?</Link></p>
+        <p className="text-center text-xs muted">LedgerFox is now Foxlator: sign in with the same account.</p>
       </form>
     </AuthCard>
   );
@@ -177,8 +178,8 @@ export function VerifyEmail() {
   return (
     <AuthCard title="Confirm your email">
       {state === "working" ? <p className="text-sm muted">Checking the link…</p>
-        : state === "done" ? <div className="space-y-4"><Alert kind="success">Thank you — your email address is confirmed.</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open LedgerFox</Link></div>
-        : <div className="space-y-4"><Alert>{message}</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open LedgerFox</Link></div>}
+        : state === "done" ? <div className="space-y-4"><Alert kind="success">Thank you — your email address is confirmed.</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open Foxlator</Link></div>
+        : <div className="space-y-4"><Alert>{message}</Alert><Link to="/app" className="block text-center text-brand-700 hover:underline dark:text-brand-300">Open Foxlator</Link></div>}
     </AuthCard>
   );
 }
@@ -242,7 +243,7 @@ export function ChangePasswordFirst() {
     if (ok) await refresh();
   };
   return (
-    <AuthCard title="Choose your own password" subtitle="For your security, replace the temporary password before using LedgerFox.">
+    <AuthCard title="Choose your own password" subtitle="For your security, replace the temporary password before using Foxlator.">
       <form onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
         <Field label="Username" hint="You sign in with this.">{(id) => <Input id={id} autoCapitalize="none" spellCheck={false} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />}</Field>

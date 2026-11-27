@@ -61,7 +61,7 @@ function CloudPlanTab() {
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Spinner />;
   const edu = settings!.company.is_practice ? <EducationCard orgId={orgId} /> : null;
-  if (!data.enabled) return <Card><p className="text-sm">All features are available. Subscriptions are not switched on for this LedgerFox.</p></Card>;
+  if (!data.enabled) return <Card><p className="text-sm">All features are available. Subscriptions are not switched on for this Foxlator.</p></Card>;
   if (data.demo_only && edu) return edu;
   if (data.demo_only) return <Card><p className="text-sm">This is a demo company, so there is nothing to subscribe for here. Open your own company (company switcher at the top) and choose a plan in its Settings → Plan & billing.</p></Card>;
   const s = data.subscription;
@@ -229,7 +229,7 @@ export function RenewGate() {
       <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] p-6 shadow-xl">
         <h2 id="renew-title" className="text-xl font-semibold">{desktop && data.subscription.status === "free" ? "Sign in or renew to continue" : "Renew your plan to continue"}</h2>
         <p className="mt-2 text-sm">{desktop
-          ? "This computer needs a current LedgerFox plan. Sign in with your LedgerFox account (new accounts get a free trial), or renew on the website and click “Check now”."
+          ? "This computer needs a current Foxlator plan. Sign in with your Foxlator account (new accounts get a free trial), or renew on the website and click “Check now”."
           : "Your free trial or paid plan has ended. Choose a plan to continue adding invoices, payments and entries."}</p>
         <ul className="mt-3 space-y-1 text-sm">
           <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Your data is safe and never deleted.</li>
@@ -302,7 +302,7 @@ export function CheckoutPage() {
         const o = await api.post<{ subscription_id: string; key_id: string; amount: number; name: string; starts_at: string | null; prefill: Record<string, string> }>(`/api/billing/org/${orgId}/autopay`, { plan, interval });
         setStartsAt(o.starts_at);
         const rz = new window.Razorpay!({
-          key: o.key_id, subscription_id: o.subscription_id, name: "LedgerFox", description: `${o.name} plan, renews every ${interval === "monthly" ? "month" : "year"}`, prefill: o.prefill, theme: { color: "#1d4ed8" },
+          key: o.key_id, subscription_id: o.subscription_id, name: "Foxlator", description: `${o.name} plan, renews every ${interval === "monthly" ? "month" : "year"}`, prefill: o.prefill, theme: { color: "#1d4ed8" },
           handler: async (r: { razorpay_subscription_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
             try { await api.post(`/api/billing/org/${orgId}/autopay/verify`, r); setState("done"); }
             catch (e) { setState("error"); setMessage(errorMessage(e)); }
@@ -315,7 +315,7 @@ export function CheckoutPage() {
       }
       const o = await api.post<{ order_id: string; key_id: string; amount: number; currency: string; name: string; prefill: Record<string, string> }>(`/api/billing/org/${orgId}/checkout`, { plan, interval });
       const rz = new window.Razorpay!({
-        key: o.key_id, order_id: o.order_id, amount: o.amount, currency: o.currency, name: "LedgerFox", description: `${o.name} plan (${interval})`, prefill: o.prefill, theme: { color: "#1d4ed8" },
+        key: o.key_id, order_id: o.order_id, amount: o.amount, currency: o.currency, name: "Foxlator", description: `${o.name} plan (${interval})`, prefill: o.prefill, theme: { color: "#1d4ed8" },
         handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           try { await api.post(`/api/billing/org/${orgId}/verify`, r); setState("done"); }
           catch (e) { setState("error"); setMessage(errorMessage(e)); }
@@ -334,11 +334,11 @@ export function CheckoutPage() {
           {state === "done" ? <>
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
             <p className="mt-3 text-lg font-semibold">{autopay ? (startsAt ? "Auto-pay is set up — enjoy your free trial" : "Payment received — auto-renew is on") : "Payment received — your plan is active"}</p>
-            {autopay && <p className="mt-1 text-sm muted">{startsAt ? `Your free trial is running. The ₹5 check is refunded by Razorpay; the first charge is on ${fmtDate(startsAt.slice(0, 10))}.` : "Your plan is active. It will renew by itself; you can turn this off in Plan & billing."} It can take a minute to show in LedgerFox.</p>}
-            <Button className="mt-4" onClick={() => nav(-1)}>Back to LedgerFox</Button>
+            {autopay && <p className="mt-1 text-sm muted">{startsAt ? `Your free trial is running. The ₹5 check is refunded by Razorpay; the first charge is on ${fmtDate(startsAt.slice(0, 10))}.` : "Your plan is active. It will renew by itself; you can turn this off in Plan & billing."} It can take a minute to show in Foxlator.</p>}
+            <Button className="mt-4" onClick={() => nav(-1)}>Back to Foxlator</Button>
           </> : <>
-            <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your LedgerFox plan" : "Pay for your LedgerFox plan"}</p>
-            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay (outside India: a debit or credit card, in your currency). If your free trial or paid period is still running, Razorpay only takes ₹5 now to check it (refunded) and the first charge waits until the period ends. You are then charged each period until you turn it off in Plan & billing." : "Secure payment by Razorpay (UPI, cards and net banking in India; cards in your currency elsewhere)."} LedgerFox never sees your card details or UPI PIN.</p>
+            <p className="text-lg font-semibold">{autopay ? "Set up auto-renew for your Foxlator plan" : "Pay for your Foxlator plan"}</p>
+            <p className="mt-1 text-sm muted">{autopay ? "Approve a UPI AutoPay, card or bank mandate with Razorpay (outside India: a debit or credit card, in your currency). If your free trial or paid period is still running, Razorpay only takes ₹5 now to check it (refunded) and the first charge waits until the period ends. You are then charged each period until you turn it off in Plan & billing." : "Secure payment by Razorpay (UPI, cards and net banking in India; cards in your currency elsewhere)."} Foxlator never sees your card details or UPI PIN.</p>
             {message && <Alert className="mt-4 text-left">{message}</Alert>}
             {autopay && state === "error" && <Button variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(`/billing/${orgId}/checkout?plan=${plan}&interval=${interval}`)}>Pay once instead (no auto-renew)</Button>}
             <Button className="mt-4 w-full" loading={state === "loading" || state === "paying"} onClick={() => void pay()}>Continue to payment</Button>
@@ -369,7 +369,7 @@ export function BillingInvoice() {
         <div className="text-right"><p className="text-xl font-semibold">{s.gstin ? "Tax Invoice" : "Invoice"}</p><p>No. {p.invoice_number}</p><p>Date {fmtDate(p.paid_at.slice(0, 10))}</p></div></div>
       <div className="mt-6"><p className="text-slate-500">Bill to</p><p className="font-medium">{b.legal_name || b.name || b.org_name}</p>{b.address && <p>{[b.address, b.city].filter(Boolean).join(", ")}</p>}{b.tax_id && <p>{b.country && b.country !== "IN" ? "Tax / VAT no." : "GSTIN"} {b.tax_id}</p>}{b.country && b.country !== "IN" && <p>{b.country}</p>}</div>
       <table className="mt-6 w-full border-collapse"><thead><tr className="border-b border-slate-300 text-left"><th className="py-2">Description</th><th>SAC</th><th className="text-right">Amount</th></tr></thead>
-        <tbody><tr className="border-b border-slate-200"><td className="py-2">LedgerFox {p.plan.replace("_", "-")} plan, {p.billing_interval} subscription<br /><span className="text-slate-500">{fmtDate(p.period_start.slice(0, 10))} to {fmtDate(p.period_end.slice(0, 10))}</span></td><td>{data.sac}</td><td className="text-right">{m(p.amount)}</td></tr></tbody></table>
+        <tbody><tr className="border-b border-slate-200"><td className="py-2">Foxlator {p.plan.replace("_", "-")} plan, {p.billing_interval} subscription<br /><span className="text-slate-500">{fmtDate(p.period_start.slice(0, 10))} to {fmtDate(p.period_end.slice(0, 10))}</span></td><td>{data.sac}</td><td className="text-right">{m(p.amount)}</td></tr></tbody></table>
       <dl className="ml-auto mt-3 w-64 space-y-1">
         {exported ? <div className="flex justify-between"><dt>GST</dt><dd>{m(0)}</dd></div> : intra ? <><div className="flex justify-between"><dt>CGST</dt><dd>{m(p.gst / 2)}</dd></div><div className="flex justify-between"><dt>SGST</dt><dd>{m(p.gst / 2)}</dd></div></>
           : <div className="flex justify-between"><dt>{s.gstin ? "IGST" : "GST"}</dt><dd>{m(p.gst)}</dd></div>}

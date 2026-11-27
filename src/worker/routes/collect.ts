@@ -55,7 +55,7 @@ collect.put("/", async (c) => {
   const keyId = input.razorpay_key_id || null;
   let secretEnc = cur?.razorpay_secret_enc ?? null, hookEnc = cur?.razorpay_webhook_secret_enc ?? null;
   if (input.razorpay_secret || input.razorpay_webhook_secret) {
-    if (!secretsReady(c.env)) throw new AppError(503, "DATA_KEY_MISSING", "Online payments are not available yet: the LedgerFox server needs its DATA_KEY secret. Please contact LedgerFox.");
+    if (!secretsReady(c.env)) throw new AppError(503, "DATA_KEY_MISSING", "Online payments are not available yet: the Foxlator server needs its DATA_KEY secret. Please contact Foxlator.");
   }
   if (input.razorpay_secret) {
     if (!keyId) throw badRequest("Enter the Razorpay Key ID with the Key Secret");
@@ -65,7 +65,7 @@ collect.put("/", async (c) => {
   if (input.razorpay_webhook_secret) hookEnc = await encryptSecret(c.env, input.razorpay_webhook_secret);
   if (!keyId) { secretEnc = null; hookEnc = null; }
   if (input.online_enabled && (!keyId || !secretEnc || !input.deposit_account_id)) throw badRequest("To take payments online, enter the Razorpay Key ID and Key Secret and choose the bank account they arrive in");
-  if (input.reminders_enabled && !emailOn(c.env)) throw new AppError(409, "EMAIL_OFF", "Reminders are sent by email, which is not set up on this LedgerFox yet. Please contact LedgerFox.");
+  if (input.reminders_enabled && !emailOn(c.env)) throw new AppError(409, "EMAIL_OFF", "Reminders are sent by email, which is not set up on this Foxlator yet. Please contact Foxlator.");
   await batch(c.env.DB, [
     c.env.DB.prepare(`INSERT INTO collection_settings (company_id, online_enabled, razorpay_key_id, razorpay_secret_enc, razorpay_webhook_secret_enc, deposit_account_id,
         reminders_enabled, remind_before_days, remind_on_due, remind_every_days, remind_max_after, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)

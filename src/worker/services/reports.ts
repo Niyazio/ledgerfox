@@ -344,7 +344,7 @@ export async function vatReturn(db: D1Database, company: CompanyRow, from: strin
   return {
     from, to, currency: company.base_currency, country: company.country, sales, purchases,
     output_vat: outputVat, input_vat: inputVat, net_vat: outputVat - inputVat,
-    disclaimer: "Prepared from posted invoices, credit notes and supplier bills in your base currency. Check the figures, then file them on your tax authority's portal (e.g. EmaraTax in the UAE, ZATCA in Saudi Arabia). LedgerFox does not file returns.",
+    disclaimer: "Prepared from posted invoices, credit notes and supplier bills in your base currency. Check the figures, then file them on your tax authority's portal (e.g. EmaraTax in the UAE, ZATCA in Saudi Arabia). Foxlator does not file returns.",
   };
 }
 

@@ -8,7 +8,7 @@ export interface Me {
   email_enabled?: boolean;
   /** Online payments and webhooks are available on this server. */
   online_payments_enabled?: boolean;
-  /** Signed-in person is LedgerFox's own staff (VENDOR_ADMIN_EMAILS): show the admin panel link. */
+  /** Signed-in person is Foxlator's own staff (VENDOR_ADMIN_EMAILS): show the admin panel link. */
   is_vendor?: boolean;
   organisations: { org_id: string; org_name: string; role: string }[];
   companies: { id: string; name: string; org_id: string; base_currency: string; country: string; business_type?: string; is_demo?: number }[];
@@ -39,7 +39,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setMe(r);
       return r;
     } catch {
-      setMe({ user: null, organisations: [], companies: [], brand: "LedgerFox" });
+      setMe({ user: null, organisations: [], companies: [], brand: "Foxlator" });
       return null;
     } finally {
       setLoading(false);
@@ -49,7 +49,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await api.post("/api/auth/logout").catch(() => undefined);
     await clearOfflineData();
     setOfflineUser(null);
-    setMe({ user: null, organisations: [], companies: [], brand: me?.brand ?? "LedgerFox" });
+    setMe({ user: null, organisations: [], companies: [], brand: me?.brand ?? "Foxlator" });
   }, [me?.brand]);
   useEffect(() => {
     refresh();

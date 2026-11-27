@@ -55,5 +55,5 @@ export async function verifyTotp(secret: string, code: string, lastStep: number 
   return null;
 }
 
-export const otpauthUrl = (secret: string, account: string, issuer = "LedgerFox") =>
+export const otpauthUrl = (secret: string, account: string, issuer = "Foxlator") =>
   `otpauth://totp/${encodeURIComponent(`${issuer}:${account}`)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;

@@ -30,7 +30,7 @@
   // Keep variables added in the Cloudflare dashboard (e.g. VENDOR_ADMIN_EMAILS) when CI deploys; values below still win.
   "keep_vars": true,
   "vars": {
-    "BRAND_NAME": "LedgerFox",
+    "BRAND_NAME": "Foxlator",
     "APP_ENV": "production",
     "PBKDF2_ITERATIONS": "50000",
     "ALLOW_REGISTRATION": "true",

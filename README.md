@@ -1,6 +1,6 @@
-# LedgerFox — open-source double-entry accounting
+# Foxlator — open-source double-entry accounting
 
-LedgerFox is a cloud accounting application for small and growing businesses: invoicing, purchases, expenses,
+Foxlator is a cloud accounting application for small and growing businesses: invoicing, purchases, expenses,
 banking, inventory, fixed assets and financial statements on a real double-entry ledger. It runs on the
 Cloudflare Workers **Free** plan with a D1 (SQLite) database, with no paid services required.
 
@@ -24,7 +24,7 @@ Cloudflare Workers **Free** plan with a D1 (SQLite) database, with no paid servi
 - **Business types** — restaurant, supermarket, software, school/college, clinic, manufacturing, hotel and more add matching accounts and starter items.
 - **Print & share** — modern/classic A4, A5 and 80/58 mm thermal layouts with amount in words, UPI "scan to pay" QR and a QR code anyone can scan to verify the document.
 - **Demo company** — one click loads a complete sample company; delete it when done.
-- **Android app** — opens LedgerFox Cloud or the office computer (scan its QR code).
+- **Android app** — opens Foxlator Cloud or the office computer (scan its QR code).
 - **No paid AI** — rule-based category suggestions, duplicate-bill warnings, anomaly flags, bank-match
   suggestions, a cash projection and plain-language P&L summaries. Nothing posts without a person.
 
@@ -54,7 +54,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) (Cloudflare Workers Builds from GitHub, D1, c
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `BRAND_NAME` | `LedgerFox` | Product name shown in the UI and API |
+| `BRAND_NAME` | `Foxlator` | Product name shown in the UI and API |
 | `APP_ENV` | `production` | Informational |
 | `PBKDF2_ITERATIONS` | `50000` | Password hashing work factor (max 100000 on Workers) — see SECURITY.md |
 | `ALLOW_REGISTRATION` | `true` | Set `false` to stop new sign-ups (invitations still work) |

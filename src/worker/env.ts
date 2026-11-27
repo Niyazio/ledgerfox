@@ -31,15 +31,15 @@ export interface Env {
   VENDOR_UDYAM?: string;
   /** "true": during the free trial, organisations must set up auto-pay (₹5 refundable check) before entering data. */
   BILLING_REQUIRE_AUTOPAY?: string;
-  /** Desktop app: plans come from a licence issued by the LedgerFox website ("off" for self-built, unlimited copies). */
+  /** Desktop app: plans come from a licence issued by the Foxlator website ("off" for self-built, unlimited copies). */
   DESKTOP_LICENSING?: string;
-  /** "true": an old desktop data file opened only to look at and export (LedgerFox now works online). */
+  /** "true": an old desktop data file opened only to look at and export (Foxlator now works online). */
   DESKTOP_READONLY?: string;
   /** Desktop app: the website that issues licences (default https://ledgerfox.niyazio.com). */
   LICENCE_SERVER?: string;
   /** Desktop app: this computer's name, shown in the admin panel. */
   DEVICE_NAME?: string;
-  /** Outgoing email through Resend (secret) and the sender, e.g. "LedgerFox <billing@niyazio.com>". Off when unset. */
+  /** Outgoing email through Resend (secret) and the sender, e.g. "Foxlator <billing@niyazio.com>". Off when unset. */
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_REPLY_TO?: string;

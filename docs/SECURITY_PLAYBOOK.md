@@ -1,7 +1,7 @@
-# Security playbook (for the LedgerFox team)
+# Security playbook (for the Foxlator team)
 
 The public page for customers is https://ledgerfox.niyazio.com/security. `SECURITY.md` lists every technical control.
-This page covers what *you* do: protecting the accounts that run LedgerFox, watching for trouble, and handling an attack.
+This page covers what *you* do: protecting the accounts that run Foxlator, watching for trouble, and handling an attack.
 
 ## 1. The real risk: your own accounts
 
@@ -25,7 +25,7 @@ used for the **live** webhook, change it now: Razorpay → Webhooks → Edit →
 In the Cloudflare dashboard, for the `niyazio.com` zone:
 - **Security → Bots:** turn on **Bot Fight Mode**.
 - **Security → WAF → Managed rules:** turn on the **Cloudflare Free Managed Ruleset**.
-- **Security → WAF → Rate limiting rules:** the free plan allows one rule. Use it for `/api/auth/*`, e.g. 20 requests per 10 seconds per IP → Block. LedgerFox also limits sign-in attempts itself.
+- **Security → WAF → Rate limiting rules:** the free plan allows one rule. Use it for `/api/auth/*`, e.g. 20 requests per 10 seconds per IP → Block. Foxlator also limits sign-in attempts itself.
 - **SSL/TLS:** mode **Full (strict)**. Turn on **Always Use HTTPS**.
 - **Notifications:** add alerts for Workers errors and for DDoS attacks, sent to `info@niyazio.com`.
 
@@ -70,7 +70,7 @@ Short answers you can give. Details are on https://ledgerfox.niyazio.com/securit
 - **"What if someone steals my password?"** Turn on two-factor sign-in in Settings → My account; owners can require it for everyone. "Sign out everywhere" ends all sessions.
 - **"Can entries be altered later?"** Posted invoices and entries can't be edited or deleted, only reversed. Every change is recorded in the audit trail.
 - **"Can I get my data out?"** Yes, any time, as Excel/CSV or a full backup. Data is never deleted for non-payment. The desktop app keeps books on your own computer.
-- **"Have you been audited / is it 100% secure?"** Be honest: no service is 100% secure. LedgerFox follows standard practice (listed on the Security page) and has automated security tests, but has **not yet had an independent penetration test**. We plan one as we grow. Don't claim certifications such as ISO 27001 or SOC 2 that we don't hold.
+- **"Have you been audited / is it 100% secure?"** Be honest: no service is 100% secure. Foxlator follows standard practice (listed on the Security page) and has automated security tests, but has **not yet had an independent penetration test**. We plan one as we grow. Don't claim certifications such as ISO 27001 or SOC 2 that we don't hold.
 
 ## 6. Next steps worth paying for later
 

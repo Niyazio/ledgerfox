@@ -25,8 +25,8 @@ export function InstallAppCard() {
             ))}
           </ul>
           <div className="mt-4">
-            {state === "installed" && <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-5 w-5" />Installed on this device — open LedgerFox from your home screen or apps.</p>}
-            {state === "available" && <Button onClick={() => void install()}><Download className="h-4 w-4" />Install LedgerFox</Button>}
+            {state === "installed" && <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-5 w-5" />Installed on this device — open Foxlator from your home screen or apps.</p>}
+            {state === "available" && <Button onClick={() => void install()}><Download className="h-4 w-4" />Install Foxlator</Button>}
             {(state === "ios" || state === "safari-mac" || state === "menu" || state === "unsupported") && (
               <div className="rounded-lg bg-[var(--surface-2)] p-3"><p className="mb-2 text-sm font-medium">{state === "unsupported" ? "Use another browser" : "How to install"}</p><Steps steps={installSteps(state)} /></div>
             )}
@@ -47,8 +47,8 @@ export function InstallAppButton({ className = "", oneClickOnly = false }: { cla
       <Button size="sm" variant="secondary" className={className} onClick={() => (state === "available" ? void install() : setHelp(true))}>
         <Download className="h-4 w-4" />Install app
       </Button>
-      {help && <Modal open title="Install LedgerFox" onClose={() => setHelp(false)}>
-        <p className="mb-3 text-sm muted">LedgerFox gets its own icon and window, with no download and no security warnings.</p>
+      {help && <Modal open title="Install Foxlator" onClose={() => setHelp(false)}>
+        <p className="mb-3 text-sm muted">Foxlator gets its own icon and window, with no download and no security warnings.</p>
         <Steps steps={installSteps(state)} />
       </Modal>}
     </>

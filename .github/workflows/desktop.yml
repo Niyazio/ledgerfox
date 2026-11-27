@@ -100,7 +100,7 @@ jobs:
           else
             # No signing key configured: a temporary key is generated, so installing a newer build needs the old one uninstalled.
             PASS=$(openssl rand -hex 16)
-            keytool -genkeypair -keystore release.jks -storepass "$PASS" -keypass "$PASS" -alias ledgerfox -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=LedgerFox"
+            keytool -genkeypair -keystore release.jks -storepass "$PASS" -keypass "$PASS" -alias ledgerfox -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=Foxlator"
             echo "::warning::APK signed with a temporary key. Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets for stable updates."
           fi
           "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
@@ -131,4 +131,4 @@ jobs:
         run: |
           NOTES="docs/releases/$VERSION.md"
           if [ -f "$NOTES" ]; then printf '\n\nInstallers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds.\n' >> "$NOTES"; else NOTES=$(mktemp); echo "Installers for Windows, macOS, Linux and Android. See DESKTOP.md for first-run steps on unsigned builds." > "$NOTES"; fi
-          gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "LedgerFox $VERSION" --notes-file "$NOTES"
+          gh release create "$VERSION" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Foxlator $VERSION" --notes-file "$NOTES"

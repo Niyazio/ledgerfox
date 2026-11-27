@@ -1,10 +1,10 @@
-# LedgerFox Desktop (Windows, macOS, Linux)
+# Foxlator Desktop (Windows, macOS, Linux)
 
-The desktop app is LedgerFox online in its own window: sign in with the same email and password as the website, and work on the same data as your team. There is no Free plan: without a current plan or trial you can view, print and export, but new entries wait until you renew.
+The desktop app is Foxlator online in its own window: sign in with the same email and password as the website, and work on the same data as your team. There is no Free plan: without a current plan or trial you can view, print and export, but new entries wait until you renew.
 
 ## How it works
 
-- **Online, with offline billing.** The window shows https://ledgerfox.niyazio.com. The data is stored in the LedgerFox cloud database (Cloudflare D1), not on the computer. Without internet, screens opened recently still show from the computer's cache, and new POS bills, invoices, payments, expenses, contacts and journals wait on the computer. They are sent, and numbered, automatically when the internet is back (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
+- **Online, with offline billing.** The window shows https://ledgerfox.niyazio.com. The data is stored in the Foxlator cloud database (Cloudflare D1), not on the computer. Without internet, screens opened recently still show from the computer's cache, and new POS bills, invoices, payments, expenses, contacts and journals wait on the computer. They are sent, and numbered, automatically when the internet is back (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
 - **Automatic local copy.** While signed in and online, every company is copied automatically to a folder on the computer (default `Documents\LedgerFox Data`; change it in File → Change local copy folder): `<Company> - latest.json`, updated every 15 minutes when something changed, plus one copy per day for the last 30 days. Nothing to export by hand. File → Save local copy now (Ctrl+B) does it at once, and File → Open local copy folder shows it. The cloud (D1) stays the main copy.
 - **Old data files.** Versions up to 0.4.6 could keep the books in a `.ledgerfox` file. Such files are never changed or deleted. They open **view-only** (File → Open an old data file, or double-click the file), to look things up and export them; new entries go online. The internet link, Wi-Fi access and phone copy in the Access menu still work for an old file, view-only.
 
@@ -13,7 +13,7 @@ Self-hosted builds and the information below about data files, Wi-Fi access and 
 ## Microsoft Store (no warning, free)
 
 Microsoft lets individual developers publish on the Microsoft Store free of charge; Store apps are signed by Microsoft, install without the "unknown publisher" warning and update themselves. To publish:
-1. Register as an individual developer in **Partner Center** (free; ID check), and reserve the app name **LedgerFox**.
+1. Register as an individual developer in **Partner Center** (free; ID check), and reserve the app name **Foxlator**.
 2. In Partner Center → the app → Product identity, copy **Package/Identity/Name**, **Package/Identity/Publisher** (starts with `CN=`) and **Publisher display name**.
 3. In GitHub → Settings → Secrets and variables → Actions → **Variables**, add `MS_STORE_IDENTITY_NAME`, `MS_STORE_PUBLISHER` and `MS_STORE_PUBLISHER_DISPLAY_NAME` with those values.
 4. The next release also builds `LedgerFox-Store-x64.appx` (workflow artifact **microsoft-store-package**). Upload it in Partner Center → Packages, fill the listing (description, screenshots, privacy policy https://ledgerfox.niyazio.com/privacy), and submit for certification.
@@ -25,9 +25,9 @@ Store installs update from the Store, not from GitHub. The direct download stays
 | System | File | First launch |
 |---|---|---|
 | Windows 10/11 (64-bit) | `LedgerFox-Setup-<version>-x64.exe` | Windows SmartScreen may say "Windows protected your PC" because the installer is not code-signed. Click **More info → Run anyway**. |
-| macOS (Apple Silicon) | `LedgerFox-<version>-arm64.dmg` | Drag LedgerFox to Applications. The first time, macOS blocks it (not notarised). Open **System Settings → Privacy & Security** and click **Open Anyway**. |
-| macOS (Intel) | `LedgerFox-<version>-x64.dmg` | Same as above. |
-| Linux | `LedgerFox-<version>-x86_64.AppImage` | `chmod +x` the file and run it. |
+| macOS (Apple Silicon) | `Foxlator-<version>-arm64.dmg` | Drag Foxlator to Applications. The first time, macOS blocks it (not notarised). Open **System Settings → Privacy & Security** and click **Open Anyway**. |
+| macOS (Intel) | `Foxlator-<version>-x64.dmg` | Same as above. |
+| Linux | `Foxlator-<version>-x86_64.AppImage` | `chmod +x` the file and run it. |
 
 The warnings appear because code-signing certificates cost money (Windows: a few thousand rupees a year or more;
 Apple Developer Program: US$99/year). Nothing was purchased. Installers are built by the free GitHub Actions workflow
@@ -36,38 +36,38 @@ to publish a GitHub Release).
 
 ## Your data
 
-- On first launch LedgerFox asks where to keep your accounts and creates one data file there, for example
-  `C:\LedgerFox\Data\My Business.ledgerfox` or `~/Documents/LedgerFox/My Business.ledgerfox`.
+- On first launch Foxlator asks where to keep your accounts and creates one data file there, for example
+  `C:\Foxlator\Data\My Business.ledgerfox` or `~/Documents/Foxlator/My Business.ledgerfox`.
 - One data file can hold several companies. Use **File → New data file…** / **Open data file…** to keep separate files
   (e.g. one per client). Double-clicking a `.ledgerfox` file opens it.
-- **Automatic backup:** once a day LedgerFox saves a dated copy in a `LedgerFox Backups` folder next to the data file
+- **Automatic backup:** once a day Foxlator saves a dated copy in a `Foxlator Backups` folder next to the data file
   and keeps the newest 14. **File → Back up now…** saves a copy anywhere (USB drive, Google Drive folder, etc.).
 - Backups are consistent snapshots (SQLite `VACUUM INTO`), safe to take while the app is open. To restore, open the
   backup file with **File → Open data file…**.
 - **First sign-in: username `admin` with the one-time password shown on the sign-in page** (only on the computer
-  itself; the headless server prints it in its console). LedgerFox immediately asks for your own password (and lets you
+  itself; the headless server prints it in its console). Foxlator immediately asks for your own password (and lets you
   pick your own username). The one-time password never works from phones or the internet link.
-- Add staff in **Settings → Users & permissions → Add a user**: LedgerFox creates a random one-time password and
+- Add staff in **Settings → Users & permissions → Add a user**: Foxlator creates a random one-time password and
   shows it once; the person chooses their own password at first sign-in. Limit them to branches with **Change** in
   the Branches column. Nobody can register themselves.
-- The file is a standard SQLite database. It is **not encrypted** by LedgerFox; protect the computer with a login
+- The file is a standard SQLite database. It is **not encrypted** by Foxlator; protect the computer with a login
   password and disk encryption (BitLocker / FileVault).
 - Use one computer per data file. Do **not** open the same file from several computers over a shared network drive —
   that can corrupt it. For several users, use phone/network access below or the cloud edition.
 
 ## Use it on phones and other computers
 
-**Same Wi-Fi / office network (free, no internet needed)** — **Access → Phones on the same Wi-Fi**. LedgerFox shows
+**Same Wi-Fi / office network (free, no internet needed)** — **Access → Phones on the same Wi-Fi**. Foxlator shows
 an address like `http://192.168.1.20:4780` and a QR code. Scan it with the phone camera and sign in. The computer
-must stay on with LedgerFox open. When Windows asks about the firewall, allow **private networks only**. Traffic is
+must stay on with Foxlator open. When Windows asks about the firewall, allow **private networks only**. Traffic is
 plain http inside your network, so only use this on a network you trust.
 
 **Anywhere over the internet (free, temporary)** — **Access → Start internet link…** starts a Cloudflare Quick
 Tunnel: no Cloudflare account, card or router changes. The `cloudflared` program (~40 MB) is downloaded once from
 Cloudflare's official GitHub releases. You get an `https://<random>.trycloudflare.com` address and QR code.
-- Sign-in with the LedgerFox password is always required. The recommended option also asks Cloudflare to email a
-  one-time code to the LedgerFox users' addresses before the login page is shown.
-- The address is random and **changes every time** the link is started; it stops when LedgerFox closes or the
+- Sign-in with the Foxlator password is always required. The recommended option also asks Cloudflare to email a
+  one-time code to the Foxlator users' addresses before the login page is shown.
+- The address is random and **changes every time** the link is started; it stops when Foxlator closes or the
   computer sleeps or loses internet. Cloudflare describes Quick Tunnels as intended for testing, with no uptime
   guarantee. Treat it as a convenience, not a production service.
 - A permanent address per client (e.g. `rao-traders.ledgerfox.niyazio.com`) is **not implemented**. It is possible
@@ -76,16 +76,16 @@ Cloudflare's official GitHub releases. You get an `https://<random>.trycloudflar
 
 ## Automatic updates
 
-- **Windows and Linux:** LedgerFox checks GitHub Releases at start-up and every 6 hours, downloads new versions in the
+- **Windows and Linux:** Foxlator checks GitHub Releases at start-up and every 6 hours, downloads new versions in the
   background and asks to restart. Help → Check for updates… checks immediately.
-- **macOS:** macOS only lets signed apps replace themselves (Apple Developer ID, US$99/year), so LedgerFox shows a
+- **macOS:** macOS only lets signed apps replace themselves (Apple Developer ID, US$99/year), so Foxlator shows a
   "new version available" message with a link to the download page instead.
 - Updates never touch your data file.
 
 ## Cloud backup (automatic, encrypted, free)
 
-Settings → **Cloud backup** (owner/admin, on the computer itself): sign in with a free LedgerFox Cloud account once
-and choose a backup passphrase. Every day while the computer is online, LedgerFox compresses and encrypts the data
+Settings → **Cloud backup** (owner/admin, on the computer itself): sign in with a free Foxlator Cloud account once
+and choose a backup passphrase. Every day while the computer is online, Foxlator compresses and encrypts the data
 file (AES-256-GCM, key derived from your passphrase with scrypt) and uploads it to your cloud account. The website
 only stores unreadable bytes; the newest 5 backups are kept. If the computer is offline it retries hourly, and the
 local daily backups continue regardless. **Keep the passphrase safe** — without it the cloud copies cannot be
@@ -94,14 +94,14 @@ restored. Restore writes the backup as a new data file next to the current one.
 ## Copy data to a phone (view-only, works offline)
 
 On the computer: **Access → Copy data to phone (view-only)…** shows a one-time QR code (valid 10 minutes). In the
-LedgerFox Android app tap **Scan QR code**: the phone saves a copy of the data file and opens the full LedgerFox
+Foxlator Android app tap **Scan QR code**: the phone saves a copy of the data file and opens the full Foxlator
 screens from it, with no internet needed. Sign in with your usual username and password. The copy is view-only
 (changes are refused with a message); scan a new code to refresh it. Login sessions, recovery codes and backup keys
 are removed from the copy.
 
 ## Android app
 
-`LedgerFox-android.apk` (from the download page) opens LedgerFox Cloud or your office computer. On the computer turn on
+`LedgerFox-android.apk` (from the download page) opens Foxlator Cloud or your office computer. On the computer turn on
 **Access → Phones on the same Wi-Fi**, then in the app tap **Scan QR code** (or type the address). Android asks to
 allow installing apps from your browser because the app is not on Google Play (publishing there needs a one-time
 US$25 Google developer account). Builds are signed with your key when the repository secrets
@@ -121,7 +121,7 @@ For an office PC or mini-PC that stays on, the same server runs headless:
 
 ```bash
 npm ci && npm run build:desktop
-node --disable-warning=ExperimentalWarning server-build/ledgerfox-server.mjs --data "C:\LedgerFox\Data\My Business.ledgerfox" --lan
+node --disable-warning=ExperimentalWarning server-build/ledgerfox-server.mjs --data "C:\Foxlator\Data\My Business.ledgerfox" --lan
 ```
 
 Without `--lan` only that computer can connect. Requires Node.js 22.13 or later.

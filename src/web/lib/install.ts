@@ -1,5 +1,5 @@
 /**
- * "Install app" from the browser (a Progressive Web App): LedgerFox gets its own icon and window on Android, Windows,
+ * "Install app" from the browser (a Progressive Web App): Foxlator gets its own icon and window on Android, Windows,
  * Mac, Linux and iPhone, straight from the website — nothing to download, so no "unknown app" or "Windows protected
  * your PC" warnings, and it always runs the latest version.
  *
@@ -73,10 +73,10 @@ export function installSteps(state: InstallState): string[] {
   const android = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
   switch (state) {
     case "ios": return ["Open this page in Safari.", "Tap the Share button (the square with an arrow).", "Tap “Add to Home Screen”, then “Add”."];
-    case "safari-mac": return ["In Safari's menu bar, choose File → Add to Dock.", "Click “Add”. LedgerFox opens from the Dock like any app."];
+    case "safari-mac": return ["In Safari's menu bar, choose File → Add to Dock.", "Click “Add”. Foxlator opens from the Dock like any app."];
     case "menu": return android
       ? ["Open the browser menu (⋮ at the top right).", "Tap “Install app” or “Add to Home screen”."]
-      : ["Look for the install icon at the right end of the address bar (a screen with a down arrow), or open the browser menu (⋮).", "Choose “Install LedgerFox” (Chrome) or “Apps → Install this site as an app” (Edge)."];
+      : ["Look for the install icon at the right end of the address bar (a screen with a down arrow), or open the browser menu (⋮).", "Choose “Install Foxlator” (Chrome) or “Apps → Install this site as an app” (Edge)."];
     case "unsupported": return ["This browser cannot install web apps. Open this page in Chrome or Edge (or Safari on iPhone / Mac) and install from there."];
     default: return [];
   }

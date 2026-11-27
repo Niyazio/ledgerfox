@@ -107,9 +107,9 @@ app.get("/api/health", async (c) => {
   } catch {
     db = "error";
   }
-  // Public and non-sensitive; readable cross-origin so the Android launcher can confirm an address is a LedgerFox server.
+  // Public and non-sensitive; readable cross-origin so the Android launcher can confirm an address is a Foxlator server.
   c.header("Access-Control-Allow-Origin", "*");
-  return c.json({ status: db === "ok" ? "ok" : "degraded", db, version: VERSION, brand: c.env.BRAND_NAME ?? "LedgerFox", time: new Date().toISOString() }, db === "ok" ? 200 : 503);
+  return c.json({ status: db === "ok" ? "ok" : "degraded", db, version: VERSION, brand: c.env.BRAND_NAME ?? "Foxlator", time: new Date().toISOString() }, db === "ok" ? 200 : 503);
 });
 
 app.route("/api/auth", authRoutes);
@@ -129,22 +129,22 @@ async function renewMessage(env: Env) {
   const keep = "Your data is safe: you can still view, print and export everything.";
   if (!licensingOn(env)) return `Your free trial or plan has ended. Renew in Settings → Plan & billing to continue adding entries. ${keep}`;
   const l = await desktopLicenceState(env);
-  if (l.reason === "not_connected") return `Sign in to your LedgerFox account in Settings → Plan & billing to continue (new accounts get a ${TRIAL_DAYS}-day free trial). ${keep}`;
+  if (l.reason === "not_connected") return `Sign in to your Foxlator account in Settings → Plan & billing to continue (new accounts get a ${TRIAL_DAYS}-day free trial). ${keep}`;
   if (l.reason === "check_overdue") return `Connect this computer to the internet so it can check your plan, then click “Check now” in Settings → Plan & billing. ${keep}`;
-  if (l.reason === "autopay_required") return `Start your free trial on the LedgerFox website first (set up auto-pay), then click “Check now” in Settings → Plan & billing. ${keep}`;
-  return `Your free trial or plan has ended. Renew on the LedgerFox website, then click “Check now” in Settings → Plan & billing. ${keep}`;
+  if (l.reason === "autopay_required") return `Start your free trial on the Foxlator website first (set up auto-pay), then click “Check now” in Settings → Plan & billing. ${keep}`;
+  return `Your free trial or plan has ended. Renew on the Foxlator website, then click “Check now” in Settings → Plan & billing. ${keep}`;
 }
 
 const company = new Hono<AppEnv>();
 company.use("*", requireAuth, requireCompany, idempotency);
-// An old desktop data file opened view-only: LedgerFox works online now, so this copy is for looking up and exporting.
+// An old desktop data file opened view-only: Foxlator works online now, so this copy is for looking up and exporting.
 company.use("*", async (c, next) => {
   if (c.env.DESKTOP_READONLY === "true" && c.req.method !== "GET") {
-    throw new AppError(403, "READ_ONLY_FILE", "This old data file is open to view and export only. LedgerFox now works online: use File → Work online, and sign in with your LedgerFox account.");
+    throw new AppError(403, "READ_ONLY_FILE", "This old data file is open to view and export only. Foxlator now works online: use File → Work online, and sign in with your Foxlator account.");
   }
   await next();
 });
-// Education mode: only for organisations LedgerFox approved, on a limited number of devices.
+// Education mode: only for organisations Foxlator approved, on a limited number of devices.
 company.use("*", async (c, next) => { await checkPracticeAccess(c); await next(); });
 // Free trial with auto-pay required: everything can be viewed, but new entries wait until auto-pay is set up.
 company.use("*", async (c, next) => {
@@ -161,7 +161,7 @@ company.use("*", async (c, next) => {
   }
   await next();
 });
-// Education mode: a practice company cannot produce documents that leave LedgerFox as real ones (government
+// Education mode: a practice company cannot produce documents that leave Foxlator as real ones (government
 // e-invoice / e-way bill files, public verification QR codes).
 company.use("*", async (c, next) => {
   if (c.get("company").is_practice && c.req.method !== "GET" && /\/(documents\/[^/]+\/gst\/(einvoice|eway)|verify)$/.test(c.req.path)) {

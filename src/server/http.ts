@@ -1,5 +1,5 @@
 /**
- * Runs LedgerFox on a PC: the same Hono app as the cloud Worker, backed by a local SQLite file, plus the built web UI.
+ * Runs Foxlator on a PC: the same Hono app as the cloud Worker, backed by a local SQLite file, plus the built web UI.
  * Used by the desktop app (src/desktop) and the headless `ledgerfox-server` command.
  */
 import { serve, type ServerType } from "@hono/node-server";
@@ -53,7 +53,7 @@ export interface RunningServer {
   publicHosts: Set<string>;
   /** One-time code (valid 10 minutes) that lets a phone download a view-only copy of the data file. */
   createPairToken: () => string;
-  /** Encrypted automatic backup of this data file to LedgerFox Cloud. */
+  /** Encrypted automatic backup of this data file to Foxlator Cloud. */
   backup: CloudBackup;
   close: () => Promise<void>;
 }
@@ -80,14 +80,14 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   migrate(db, opts.migrationsDir);
   const env: Env = {
     DB: asD1(db),
-    BRAND_NAME: "LedgerFox",
+    BRAND_NAME: "Foxlator",
     APP_ENV: "desktop",
     // 100k is the most the cloud runtime accepts, so a file moved to the cloud later keeps working logins.
     PBKDF2_ITERATIONS: "100000",
     // First sign-in is "admin" with a random one-time password shown on this computer; more users come from Settings → Users.
     ALLOW_REGISTRATION: "false",
     PASSWORD_MIN_LENGTH: "6",
-    // Plans come from a licence issued by the LedgerFox website; the computer's name shows in the vendor's admin panel.
+    // Plans come from a licence issued by the Foxlator website; the computer's name shows in the vendor's admin panel.
     DEVICE_NAME: hostname().slice(0, 80),
     ...(process.env.LEDGERFOX_LICENCE_SERVER ? { LICENCE_SERVER: process.env.LEDGERFOX_LICENCE_SERVER } : {}),
     ...opts.env,
@@ -184,21 +184,21 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       // Anyone may see the version; only the owner/administrator at this computer checks and installs.
       if (!upd[1] && req.method === "GET") return json({ available: true, can_install: await localAdmin(req, bindings.incoming.socket.remoteAddress ?? ""), ...opts.updater.status() });
       if (req.method !== "POST" || req.headers.get("x-requested-with") !== "ledgerfox") return json({ error: { code: "CSRF", message: "Missing request header" } }, 403);
-      if (!(await localAdmin(req, bindings.incoming.socket.remoteAddress ?? ""))) return json({ error: { code: "FORBIDDEN", message: "Updates are installed by the owner or an administrator on the computer running LedgerFox" } }, 403);
+      if (!(await localAdmin(req, bindings.incoming.socket.remoteAddress ?? ""))) return json({ error: { code: "FORBIDDEN", message: "Updates are installed by the owner or an administrator on the computer running Foxlator" } }, 403);
       if (upd[1] === "check") return json({ available: true, can_install: true, ...(await opts.updater.check()) });
       opts.updater.install();
       return json({ ok: true });
     }
     const pair = /^\/api\/pair\/([A-Za-z0-9_-]{20,40})$/.exec(url.pathname);
     if (pair) {
-      const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "X-LedgerFox-Companies" };
+      const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Expose-Headers": "X-Foxlator-Companies" };
       const exp = pairTokens.get(pair[1]);
       pairTokens.delete(pair[1]);
       for (const [t, e] of pairTokens) if (e < Date.now()) pairTokens.delete(t);
       if (req.method !== "GET" || !exp || exp < Date.now()) return new Response("Not found", { status: 404, headers: cors });
       const { bytes, companies } = await phoneCopy();
       return new Response(new Uint8Array(bytes), { headers: { ...cors, "Content-Type": "application/vnd.sqlite3", "Cache-Control": "no-store",
-        "X-LedgerFox-Companies": companies.map((n) => encodeURIComponent(n)).join("|") } });
+        "X-Foxlator-Companies": companies.map((n) => encodeURIComponent(n)).join("|") } });
     }
     if (!url.pathname.startsWith("/api/")) {
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405 });

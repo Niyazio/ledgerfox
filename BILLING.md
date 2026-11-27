@@ -1,6 +1,6 @@
-# Selling LedgerFox subscriptions
+# Selling Foxlator subscriptions
 
-Subscriptions apply to the hosted website **and the desktop app** (one plan covers both). The desktop app connects to the customer's LedgerFox account in Settings → Plan & billing and receives a signed licence for that organisation's plan; without one, or after 15 days without an online check, new entries wait until it is connected or renewed (everything stays viewable and exportable; nothing is deleted). In online mode the desktop app simply shows the website. The phone's offline copy is view-only and never limited. Self-built copies can set `DESKTOP_LICENSING=off`.
+Subscriptions apply to the hosted website **and the desktop app** (one plan covers both). The desktop app connects to the customer's Foxlator account in Settings → Plan & billing and receives a signed licence for that organisation's plan; without one, or after 15 days without an online check, new entries wait until it is connected or renewed (everything stays viewable and exportable; nothing is deleted). In online mode the desktop app simply shows the website. The phone's offline copy is view-only and never limited. Self-built copies can set `DESKTOP_LICENSING=off`.
 **Billing is off until you switch it on.** While it is off, every organisation has every feature.
 
 ## Plans (edit `src/shared/plans.ts`)
@@ -39,7 +39,7 @@ How plans behave:
    - URL: `https://ledgerfox.niyazio.com/api/billing/webhook`
    - Events: `payment.captured`, `order.paid`, `subscription.authenticated`, `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.paused` and `subscription.resumed`
    - Choose a secret.
-   - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. LedgerFox creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.
+   - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. Foxlator creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.
    - UPI AutoPay allows up to ₹15,000 a charge without extra approval. The yearly Multi-branch plan (₹23,599 with GST) is above that, so those customers will pay with a card or bank mandate, or pay once.
 4. **Store the keys as Worker secrets.** Either add them in Cloudflare → Workers & Pages → `ledgerfox` → Settings → **Variables and Secrets** (type *Secret*), or as GitHub repository secrets with the same names (Settings → Secrets and variables → Actions); every deploy copies the GitHub ones to the Worker. They are never put in code or in the browser. From the command line:
    ```sh
@@ -59,13 +59,13 @@ How plans behave:
 
 ## Email (password reset links, receipts, reminders)
 
-LedgerFox sends email through [Resend](https://resend.com). The free plan covers 3,000 emails a month and 100 a day, with no card needed. Until it is set up, password reset works only with recovery codes or admin-issued links, and no receipts or reminders are sent.
+Foxlator sends email through [Resend](https://resend.com). The free plan covers 3,000 emails a month and 100 a day, with no card needed. Until it is set up, password reset works only with recovery codes or admin-issued links, and no receipts or reminders are sent.
 
 1. Create a Resend account. Add your domain (for example `niyazio.com`) and add the DNS records Resend shows. Your DNS is on Cloudflare, so this takes a few clicks.
 2. Create an API key with "Sending access" only.
 3. In Cloudflare → Worker `ledgerfox` → Settings → Variables and Secrets, add:
    - `RESEND_API_KEY` (**Secret**)
-   - `EMAIL_FROM`, for example `LedgerFox <billing@niyazio.com>` (the domain must be the one verified in Resend)
+   - `EMAIL_FROM`, for example `Foxlator <billing@niyazio.com>` (the domain must be the one verified in Resend)
    - optional `EMAIL_REPLY_TO`, for example `info@niyazio.com`
 4. Open `/vendor`. The Set-up check should show "Email on".
 
@@ -73,7 +73,7 @@ What is sent: address confirmation at sign-up, password reset links (one hour, s
 
 ## Not included yet
 
-- Coupons, a per-branch add-on and refunds from inside LedgerFox. Make refunds in the Razorpay dashboard.
+- Coupons, a per-branch add-on and refunds from inside Foxlator. Make refunds in the Razorpay dashboard.
 - Changing the plan of a running auto-renewal: turn it off and start a new one. Proration is not supported.
 - Tested against Razorpay with a mocked API and real HMAC signatures only. A real test-mode payment, mandate or webhook has not been made yet.
 
@@ -83,11 +83,11 @@ Practice companies (`companies.is_practice = 1`) are free with every feature and
 
 ## Desktop licences
 
-- **Connect:** the owner or an admin on the computer opens Settings → Plan & billing and signs in with their LedgerFox website account (same password, two-factor and rate limits as the website). If they manage several organisations, they choose one.
+- **Connect:** the owner or an admin on the computer opens Settings → Plan & billing and signs in with their Foxlator website account (same password, two-factor and rate limits as the website). If they manage several organisations, they choose one.
 - **The licence:** the website issues a licence signed with an Ed25519 key. The key is created on first use and stored in the `licence_keys` table; its public half is sent to the computer when it connects. The licence holds the plan, its end date (trial end, or paid-until plus 7 days of grace) and a check-by date 15 days ahead.
 - **Checks:** the computer verifies the signature offline, and refreshes the licence in the background at most every 6 hours when it is online. An edited licence fails the signature check and the computer asks to connect again.
 - **On the website:** each connected computer appears in the `desktop_devices` table and in the admin panel's organisation details. Set `revoked_at` to disconnect one; it keeps its last licence only until its check-by date.
-- **Limits:** the source code is open, so someone who builds LedgerFox themselves can switch licensing off. The official installers enforce it.
+- **Limits:** the source code is open, so someone who builds Foxlator themselves can switch licensing off. The official installers enforce it.
 
 ## Admin panel (`/vendor`)
 

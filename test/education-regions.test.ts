@@ -39,10 +39,10 @@ describe("states and regions follow the company's country", () => {
   });
 });
 
-/** Hosted edition with billing on, a LedgerFox admin, and a teacher. */
+/** Hosted edition with billing on, a Foxlator admin, and a teacher. */
 async function school() {
   const { env } = await makeEnv();
-  const admin = await register(env, "LedgerFox staff");
+  const admin = await register(env, "Foxlator staff");
   Object.assign(env, { BILLING_ENABLED: "true", VENDOR_ADMIN_EMAILS: admin.email });
   const teacher = await register(env, "Teacher");
   const login = async () => {
@@ -55,13 +55,13 @@ async function school() {
 }
 
 describe("education mode by approval", () => {
-  it("needs LedgerFox's approval, and allows as many practice companies as LedgerFox set (1 by default)", async () => {
+  it("needs Foxlator's approval, and allows as many practice companies as Foxlator set (1 by default)", async () => {
     const S = await school();
     const practice = company("IN", "INR", { name: "Class 11", is_practice: true, state_code: "29" });
     const refused = await S.teacher.post("/api/orgs", { name: "School", company: practice });
     expect([refused.status, refused.json.error.code]).toEqual([403, "EDUCATION_NOT_APPROVED"]);
     expect((await S.teacher.get("/api/education/me")).json.approved).toBe(false);
-    // Only LedgerFox staff see the approvals.
+    // Only Foxlator staff see the approvals.
     expect((await S.teacher.get("/api/education/admin")).status).toBe(404);
     expect((await S.admin.put(`/api/education/admin/${encodeURIComponent(S.email.toUpperCase())}`, { note: "ABC College" })).json.access).toMatchObject({ email: S.email, devices: 10 });
     expect((await S.teacher.get("/api/education/me")).json.approved).toBe(true);
@@ -71,7 +71,7 @@ describe("education mode by approval", () => {
     const second = await S.teacher.post("/api/orgs", { name: "School 2", company: practice });
     expect([second.status, second.json.error.code]).toEqual([409, "PRACTICE_LIMIT"]);
     expect((await S.teacher.post(`/api/orgs/${ok.json.org_id}/companies`, { ...practice, name: "Class 12" })).json.error.code).toBe("PRACTICE_LIMIT");
-    // ...until LedgerFox allows more (here 3), keeping the devices as they were.
+    // ...until Foxlator allows more (here 3), keeping the devices as they were.
     expect((await S.admin.put(`/api/education/admin/${encodeURIComponent(S.email)}`, { max_companies: 3 })).json.access).toMatchObject({ max_companies: 3, devices: 10 });
     expect((await S.teacher.post(`/api/orgs/${ok.json.org_id}/companies`, { ...practice, name: "Class 12" })).status).toBe(201);
     expect((await S.teacher.post("/api/orgs", { name: "School 2", company: practice })).status).toBe(201);
@@ -98,7 +98,7 @@ describe("education mode by approval", () => {
     expect([info.devices.length, info.allowed]).toEqual([2, 2]);
     expect((await S.teacher.del(`/api/education/orgs/${r.org_id}/devices/${encodeURIComponent(info.devices[0].device_id)}`)).status).toBe(200);
     expect((await third.get(c("/settings"))).status).toBe(200);
-    // The teacher asks for a pack; LedgerFox sees the request and switches it on after payment.
+    // The teacher asks for a pack; Foxlator sees the request and switches it on after payment.
     expect((await S.teacher.post(`/api/education/orgs/${r.org_id}/request`, { pack: "edu25" })).status).toBe(200);
     const admin = (await S.admin.get("/api/education/admin")).json;
     expect(admin.requests[0]).toMatchObject({ owner_email: S.email, details: { pack: "edu25", students: 25 } });
@@ -113,7 +113,7 @@ describe("education mode by approval", () => {
     expect((await S.teacher.get(`/api/education/orgs/${r.org_id}`)).json.allowed).toBe(2);
   });
 
-  it("stops opening when LedgerFox removes the approval, and keeps the data", async () => {
+  it("stops opening when Foxlator removes the approval, and keeps the data", async () => {
     const S = await school();
     await S.admin.put(`/api/education/admin/${encodeURIComponent(S.email)}`, {});
     const r = (await S.teacher.post("/api/orgs", { name: "School", company: company("IN", "INR", { name: "Class", is_practice: true, state_code: "29" }) })).json;

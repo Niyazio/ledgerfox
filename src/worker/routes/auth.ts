@@ -63,7 +63,7 @@ async function makeRecoveryCodes(db: D1Database, userId: string) {
 auth.post("/register", async (c) => {
   if (c.env.ALLOW_REGISTRATION === "false") throw forbidden("Registration is disabled on this instance");
   if (c.env.ALLOW_REGISTRATION === "first" && (await first(c.env.DB, `SELECT 1 FROM users LIMIT 1`))) {
-    throw forbidden("This LedgerFox already has an owner. Ask them to invite you from Settings → Users.");
+    throw forbidden("This Foxlator already has an owner. Ask them to invite you from Settings → Users.");
   }
   if (!(await rateLimit(c.env.DB, `register:${clientIp(c)}`, 10, 3600))) {
     throw new AppError(429, "RATE_LIMITED", "Too many registrations from this address. Try again later.");
@@ -92,7 +92,7 @@ type LoginUser = { id: string; email: string; username: string | null; name: str
 
 /**
  * Username/email + password (+ two-factor code) check with the sign-in rate limits. Shared by the web sign-in and the
- * desktop app's "connect your LedgerFox account". Throws on any failure without revealing whether the account exists.
+ * desktop app's "connect your Foxlator account". Throws on any failure without revealing whether the account exists.
  */
 export async function checkCredentials(c: Context<AppEnv>, input: { login?: string; email?: string; password: string; totp?: string; recovery_code?: string }, opts: { skipTotp?: boolean } = {}): Promise<LoginUser> {
   const login = input.login ?? input.email;
@@ -138,7 +138,7 @@ auth.post("/login", async (c) => {
     totp: z.string().trim().max(10).optional(), recovery_code: z.string().trim().max(40).optional(),
   }));
   const user = await checkCredentials(c, input, { skipTotp: true });
-  // A default or temporary password may only be used on the computer running LedgerFox, never over the network.
+  // A default or temporary password may only be used on the computer running Foxlator, never over the network.
   if (user.must_change_password && c.env.APP_ENV === "desktop" && !isLocalRequest(c)) {
     throw forbidden("This account still has its one-time password. Sign in on the main computer first and change it.");
   }
@@ -166,10 +166,10 @@ auth.get("/me", async (c) => {
       ? await first<{ username: string }>(c.env.DB, `SELECT username FROM users WHERE email = ? AND must_change_password = 1`, DEFAULT_ADMIN.email)
       : null;
     const firstRun = pending ? { username: pending.username, password: firstRunPassword } : null;
-    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition, registration: closed ? "closed" : "open", default_login: Boolean(firstRun), first_run: firstRun, email_enabled: emailOn(c.env) });
+    return c.json({ user: null, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "Foxlator", edition, registration: closed ? "closed" : "open", default_login: Boolean(firstRun), first_run: firstRun, email_enabled: emailOn(c.env) });
   }
   if (user.must_change_password) {
-    return c.json({ user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: true }, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "LedgerFox", edition });
+    return c.json({ user: { id: user.id, email: user.email, username: user.username, name: user.name, must_change_password: true }, organisations: [], companies: [], brand: c.env.BRAND_NAME ?? "Foxlator", edition });
   }
   const orgs = await all<{ org_id: string; org_name: string; role: string }>(
     c.env.DB,
@@ -191,7 +191,7 @@ auth.get("/me", async (c) => {
     is_vendor: isVendor(c.env, user.email),
     organisations: orgs,
     companies,
-    brand: c.env.BRAND_NAME ?? "LedgerFox",
+    brand: c.env.BRAND_NAME ?? "Foxlator",
     edition,
   });
 });
@@ -224,7 +224,7 @@ auth.post("/2fa/setup", requireAuth, async (c) => {
   if (row.totp_enabled) throw badRequest("Two-factor sign-in is already on. Turn it off first to move it to a new phone.");
   const secret = newTotpSecret();
   await run(c.env.DB, `UPDATE users SET totp_secret = ?, totp_last_step = NULL WHERE id = ?`, secret, u.id);
-  return c.json({ secret, otpauth_url: otpauthUrl(secret, u.username ?? u.email, c.env.BRAND_NAME ?? "LedgerFox") });
+  return c.json({ secret, otpauth_url: otpauthUrl(secret, u.username ?? u.email, c.env.BRAND_NAME ?? "Foxlator") });
 });
 
 auth.post("/2fa/enable", requireAuth, async (c) => {
@@ -312,13 +312,13 @@ async function sendVerification(env: AppEnv["Bindings"], requestUrl: string, use
   const token = randomToken(32);
   await run(env.DB, `INSERT INTO email_tokens (id, user_id, purpose, email, expires_at) VALUES (?, ?, 'verify', ?, ?)`, await sha256Hex(token), user.id, user.email, new Date(Date.now() + 24 * HOUR).toISOString());
   const link = `${siteUrl(env, requestUrl)}/verify-email?token=${token}`;
-  return sendMail(env, { to: user.email, subject: "Confirm your email for LedgerFox",
-    text: `Hello ${user.name},\n\nPlease confirm that this is your email address, so we can send you password reset links, receipts and reminders:\n\n${link}\n\nThe link works for 24 hours. If you did not create a LedgerFox account, ignore this email.\n\nLedgerFox` });
+  return sendMail(env, { to: user.email, subject: "Confirm your email for Foxlator",
+    text: `Hello ${user.name},\n\nPlease confirm that this is your email address, so we can send you password reset links, receipts and reminders:\n\n${link}\n\nThe link works for 24 hours. If you did not create a Foxlator account, ignore this email.\n\nFoxlator` });
 }
 
 auth.post("/verify-email/send", requireSession, async (c) => {
   const u = c.get("user");
-  if (!emailOn(c.env)) throw new AppError(503, "EMAIL_OFF", "Email is not set up on this LedgerFox");
+  if (!emailOn(c.env)) throw new AppError(503, "EMAIL_OFF", "Email is not set up on this Foxlator");
   if (!deliverable(u.email)) throw badRequest("This account has no email address that can receive mail");
   if (!(await rateLimit(c.env.DB, `verify-mail:${u.id}`, 5, 3600))) throw new AppError(429, "RATE_LIMITED", "Too many emails. Try again in an hour.");
   if (!(await sendVerification(c.env, c.req.url, u))) throw new AppError(502, "EMAIL_FAILED", "The email could not be sent. Try again later.");
@@ -341,7 +341,7 @@ auth.post("/verify-email", async (c) => {
 
 /**
  * Forgot password: mail a one-hour reset link. The answer is the same whether or not the address has an account, so
- * nobody can use this page to find out who uses LedgerFox.
+ * nobody can use this page to find out who uses Foxlator.
  */
 auth.post("/forgot", async (c) => {
   if (!emailOn(c.env)) throw new AppError(503, "EMAIL_OFF", "Reset by email is not available here. Use a recovery code, or ask your administrator for a reset link.");
@@ -354,8 +354,8 @@ auth.post("/forgot", async (c) => {
     const token = randomToken(32);
     await run(c.env.DB, `INSERT INTO password_resets (id, user_id, created_by, expires_at) VALUES (?,?,?,?)`, await sha256Hex(token), user.id, user.id, new Date(Date.now() + HOUR).toISOString());
     const link = `${siteUrl(c.env, c.req.url)}/reset?token=${token}`;
-    await sendMail(c.env, { to: user.email, subject: "Reset your LedgerFox password",
-      text: `Hello ${user.name},\n\nSomeone (hopefully you) asked to reset the password of your LedgerFox account. Choose a new password here:\n\n${link}\n\nThe link works once, for one hour. If you did not ask for this, ignore this email; your password stays the same.\n\nLedgerFox` });
+    await sendMail(c.env, { to: user.email, subject: "Reset your Foxlator password",
+      text: `Hello ${user.name},\n\nSomeone (hopefully you) asked to reset the password of your Foxlator account. Choose a new password here:\n\n${link}\n\nThe link works once, for one hour. If you did not ask for this, ignore this email; your password stays the same.\n\nFoxlator` });
   }
   return c.json({ ok: true });
 });

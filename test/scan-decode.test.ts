@@ -18,7 +18,7 @@ function paint(rows: boolean[][], scale: number, quiet = 4) {
 }
 
 describe("camera scanning without BarcodeDetector", () => {
-  it("reads the QR codes LedgerFox prints on product labels", async () => {
+  it("reads the QR codes Foxlator prints on product labels", async () => {
     const payload = productQrPayload("P000123");
     const qr = QRCode.create(payload, { errorCorrectionLevel: "M" });
     const n = qr.modules.size;
@@ -27,7 +27,7 @@ describe("camera scanning without BarcodeDetector", () => {
     expect(await decodePixels(px, w, h)).toBe(payload);
   });
 
-  it("reads the Code 128 barcodes LedgerFox prints, and shop barcodes", async () => {
+  it("reads the Code 128 barcodes Foxlator prints, and shop barcodes", async () => {
     for (const text of ["P000123", "8901234500017", "ABC-42"]) {
       const widths = code128(text);
       const bars: boolean[] = [];

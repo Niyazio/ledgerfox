@@ -116,7 +116,7 @@ export async function renewRequired(env: Env, orgId: string, email?: string | nu
  * there is education mode (practice companies). Self-hosted and vendor copies are not limited.
  */
 export async function requireDemoAllowed(c: Context<AppEnv>, orgId: string | null) {
-  const learn = "Teachers and institutes can ask LedgerFox for education mode (a practice company) instead.";
+  const learn = "Teachers and institutes can ask Foxlator for education mode (a practice company) instead.";
   if (!orgId) {
     if (!billingOn(c.env) && !licensingOn(c.env)) return;
     throw new AppError(402, "DEMO_NEEDS_PLAN", `A demo company comes with a paid plan. Create your own company and choose a plan first. ${learn}`);
@@ -276,7 +276,7 @@ export async function razorpayPlanId(env: Env, plan: PlanId, interval: Interval,
   if (known) return known.razorpay_plan_id;
   const created = await razorpay<{ id: string }>(env, "POST", "/plans", {
     period: interval, interval: 1,
-    item: { name: `LedgerFox ${PLANS[plan].name} (${interval})`, amount: total, currency, description: currency === "INR" ? "Including GST" : "Export of services" },
+    item: { name: `Foxlator ${PLANS[plan].name} (${interval})`, amount: total, currency, description: currency === "INR" ? "Including GST" : "Export of services" },
     notes: { plan, interval, currency },
   });
   await run(env.DB, `INSERT INTO billing_rzp_plans (plan_key, razorpay_plan_id) VALUES (?, ?) ON CONFLICT (plan_key) DO NOTHING`, key, created.id);

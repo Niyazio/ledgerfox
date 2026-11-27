@@ -8,7 +8,7 @@ describe("two-factor sign-in", () => {
     const me = (await W.owner.get("/api/auth/me")).json.user;
     expect((await W.owner.post("/api/auth/2fa/setup", { current_password: "wrong" })).status).toBe(400);
     const setup = await W.owner.post("/api/auth/2fa/setup", { current_password: "correct horse battery" });
-    expect(setup.json.otpauth_url).toMatch(/^otpauth:\/\/totp\/LedgerFox%3A.+\?secret=[A-Z2-7]{32}&issuer=LedgerFox/);
+    expect(setup.json.otpauth_url).toMatch(/^otpauth:\/\/totp\/Foxlator%3A.+\?secret=[A-Z2-7]{32}&issuer=Foxlator/);
     const secret = setup.json.secret as string;
     expect((await W.owner.post("/api/auth/2fa/enable", { code: "000000" })).status).toBe(400);
     const en = await W.owner.post("/api/auth/2fa/enable", { code: await totpAt(secret, currentStep()) });

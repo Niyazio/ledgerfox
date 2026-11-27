@@ -2,7 +2,7 @@
   "name": "ledgerfox-mobile",
   "private": true,
   "version": "0.10.1",
-  "description": "LedgerFox Android app: opens LedgerFox Cloud or a LedgerFox desktop on the office network.",
+  "description": "Foxlator Android app: opens Foxlator Cloud or a Foxlator desktop on the office network.",
   "license": "MIT",
   "scripts": {
     "android:prepare": "cap add android && node scripts/prepare-android.mjs && cap sync android"

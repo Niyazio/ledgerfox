@@ -72,7 +72,7 @@ export default function MobileHome() {
   const fromQr = async (raw: string) => {
     setError(null);
     const u = normalise(raw);
-    if (!u) return setError("That is not a LedgerFox address.");
+    if (!u) return setError("That is not a Foxlator address.");
     if (/^\/api\/pair\/[A-Za-z0-9_-]+$/.test(u.pathname)) {
       // One-time code from the computer: download a view-only copy of the data file.
       setBusy("Copying data from the computer");
@@ -80,7 +80,7 @@ export default function MobileHome() {
         const res = await fetch(u.toString());
         if (!res.ok) throw new Error(res.status === 404 ? "This code was already used or has expired. Show a new one on the computer." : `The computer answered ${res.status}`);
         const bytes = new Uint8Array(await res.arrayBuffer());
-        if (new TextDecoder().decode(bytes.slice(0, 15)) !== "SQLite format 3") throw new Error("The download was not a LedgerFox data file");
+        if (new TextDecoder().decode(bytes.slice(0, 15)) !== "SQLite format 3") throw new Error("The download was not a Foxlator data file");
         const c: OfflineCopy = { bytes, savedAt: new Date().toISOString(), source: u.host, companies: (res.headers.get("x-ledgerfox-companies") ?? "").split("|").filter(Boolean).map((n) => { try { return decodeURIComponent(n); } catch { return n; } }) };
         await saveCopy(c);
         setCopy(c);
@@ -97,7 +97,7 @@ export default function MobileHome() {
       remember(u.origin);
       location.href = `${u.origin}/login`;
     } catch {
-      setError(`Could not reach LedgerFox at ${u.origin}. Check that the computer is on with phone access turned on and that this phone is on the same Wi-Fi.`);
+      setError(`Could not reach Foxlator at ${u.origin}. Check that the computer is on with phone access turned on and that this phone is on the same Wi-Fi.`);
       setBusy(null);
     }
   };
@@ -109,7 +109,7 @@ export default function MobileHome() {
     // The phone's own detector where it exists; otherwise ZXing (works on every Android version).
     const Detector = (globalThis as { BarcodeDetector?: new (o: { formats: string[] }) => { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector;
     try { stream.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); }
-    catch { return setError("Camera permission was denied. Allow camera access for LedgerFox in Android settings, or type the address."); }
+    catch { return setError("Camera permission was denied. Allow camera access for Foxlator in Android settings, or type the address."); }
     setScanning(true);
     const { decodeVideoFrame } = await import("../lib/scanDecode");
     requestAnimationFrame(async () => {
@@ -132,7 +132,7 @@ export default function MobileHome() {
   return (
     <div className="mx-auto max-w-md px-4 py-8">
       <div className="mb-6 flex justify-center text-xl"><Wordmark iconClass="h-10 w-10" /></div>
-      {update && <Alert kind="info" className="mb-4">LedgerFox {update} is available. <button className="font-semibold underline" disabled={busy === "update"} onClick={async () => {
+      {update && <Alert kind="info" className="mb-4">Foxlator {update} is available. <button className="font-semibold underline" disabled={busy === "update"} onClick={async () => {
         setBusy("update"); setError(null);
         try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/LedgerFox-android.apk` } as UpdateInfo); }
         catch (e) { setError((e as Error).message || "The update could not be downloaded."); } finally { setBusy(null); }
@@ -140,9 +140,9 @@ export default function MobileHome() {
       {error && <Alert className="mb-4">{error}</Alert>}
       {busy && <Alert kind="info" className="mb-4">{busy}…</Alert>}
       <div className="space-y-4">
-        <Card title={<span className="flex items-center gap-2"><Cloud className="h-4 w-4" />LedgerFox Cloud</span>}>
+        <Card title={<span className="flex items-center gap-2"><Cloud className="h-4 w-4" />Foxlator Cloud</span>}>
           <p className="mb-3 text-sm muted">Your company on ledgerfox.niyazio.com — live, from anywhere.</p>
-          <Button className="w-full" onClick={() => { location.href = `${CLOUD}/app`; }}>Open LedgerFox Cloud</Button>
+          <Button className="w-full" onClick={() => { location.href = `${CLOUD}/app`; }}>Open Foxlator Cloud</Button>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Monitor className="h-4 w-4" />My office computer</span>}>
           <p className="mb-3 text-sm muted">On the computer open <b>Access → Phones on the same Wi-Fi</b> to work live, or <b>Access → Copy data to phone</b> to save a view-only copy here. Then scan the QR code.</p>
@@ -158,7 +158,7 @@ export default function MobileHome() {
           {copy ? (
             <>
               <p className="text-sm">Saved {new Date(copy.savedAt).toLocaleString()} from {copy.source}{copy.companies.length ? ` · ${copy.companies.join(", ")}` : ""}.</p>
-              <p className="mb-3 mt-1 text-xs muted">View-only and works without internet. Sign in with your usual LedgerFox username and password. Scan a new code on the computer to refresh it.</p>
+              <p className="mb-3 mt-1 text-xs muted">View-only and works without internet. Sign in with your usual Foxlator username and password. Scan a new code on the computer to refresh it.</p>
               <div className="flex gap-2">
                 <Button className="flex-1" onClick={() => void openCopy(copy)}><DownloadIcon className="h-4 w-4" />Open offline copy</Button>
                 <Button variant="secondary" aria-label="Delete offline copy" onClick={async () => { if (confirm("Delete the offline copy from this phone?")) { await deleteCopy(); setCopy(null); } }}><Trash2 className="h-4 w-4" /></Button>

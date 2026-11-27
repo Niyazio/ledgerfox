@@ -25,7 +25,7 @@ import { setPracticeExports } from "../lib/csv";
 import { rememberCompany } from "../lib/lastCompany";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
-/** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
+/** Foxlator mark: geometric fox head on a blue tile (matches public/favicon.svg). */
 export function Logo({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
@@ -47,13 +47,13 @@ export function ProductCredit({ className = "" }: { className?: string }) {
   return (
     <p className={`text-xs muted ${className}`}>
       A product of <a href="https://niyazio.com" target="_blank" rel="noreferrer" className="font-medium hover:underline">Niyazio</a> · Support:{" "}
-      <a href={`mailto:${SUPPORT_EMAIL}?subject=LedgerFox%20support`} className="hover:underline">{SUPPORT_EMAIL}</a>
+      <a href={`mailto:${SUPPORT_EMAIL}?subject=Foxlator%20support`} className="hover:underline">{SUPPORT_EMAIL}</a>
     </p>
   );
 }
 
 /** Mark plus brand name. */
-export function Wordmark({ brand = "LedgerFox", iconClass }: { brand?: string; iconClass?: string }) {
+export function Wordmark({ brand = "Foxlator", iconClass }: { brand?: string; iconClass?: string }) {
   return (
     <span className="flex items-center gap-2 font-semibold tracking-tight">
       <Logo className={iconClass} />
@@ -326,7 +326,7 @@ function Shell() {
     nav("/login");
   };
   useEffect(() => {
-    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "LedgerFox"}`;
+    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "Foxlator"}`;
   }, [settings, me?.brand]);
   return (
     <div className="flex h-full">
@@ -361,7 +361,7 @@ function Shell() {
               <Shortcuts items={GOTO_ITEMS} />
               <UpdateCenter />
             </div>
-            <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
+            <a href="/manual/Foxlator-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
             <LangPicker />
             <div className="hidden sm:block"><ThemePicker /></div>
             {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}

@@ -31,7 +31,7 @@ export async function makeEnv(): Promise<{ env: Env; mf: Miniflare }> {
     const { migrate } = await import("../src/server/migrate");
     const db = new SqliteD1(":memory:");
     migrate(db, join(import.meta.dirname, "..", "migrations"));
-    return { env: { DB: asD1(db), PBKDF2_ITERATIONS: "1000", BRAND_NAME: "LedgerFox", APP_ENV: "test" }, mf: { dispose: async () => db.close() } as unknown as Miniflare };
+    return { env: { DB: asD1(db), PBKDF2_ITERATIONS: "1000", BRAND_NAME: "Foxlator", APP_ENV: "test" }, mf: { dispose: async () => db.close() } as unknown as Miniflare };
   }
   const mf = new Miniflare({
     modules: true,
@@ -44,7 +44,7 @@ export async function makeEnv(): Promise<{ env: Env; mf: Miniflare }> {
     const stmts = splitSql(readFileSync(join(dir, f), "utf8"));
     await db.batch(stmts.map((s) => db.prepare(s)));
   }
-  return { env: { DB: db, PBKDF2_ITERATIONS: "1000", BRAND_NAME: "LedgerFox", APP_ENV: "test" }, mf };
+  return { env: { DB: db, PBKDF2_ITERATIONS: "1000", BRAND_NAME: "Foxlator", APP_ENV: "test" }, mf };
 }
 
 export class Client {
@@ -130,7 +130,7 @@ export async function contact(w: World, kind: "customer" | "supplier", extra: Re
   return r.json.id as string;
 }
 
-/** LedgerFox approves an email for education mode (practice companies), as in the admin panel. */
+/** Foxlator approves an email for education mode (practice companies), as in the admin panel. */
 export async function grantEducation(w: { env: Env }, email: string, devices = 10) {
   await w.env.DB.prepare(`INSERT INTO education_access (email, devices) VALUES (?, ?) ON CONFLICT (email) DO UPDATE SET devices = excluded.devices, revoked_at = NULL`).bind(email.toLowerCase(), devices).run();
 }

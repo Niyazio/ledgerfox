@@ -136,7 +136,7 @@ describe("automatic payment reminders", () => {
   it("emails the customer on the due date with the pay link, once", async () => {
     const S = await shop();
     const calls = mockRazorpay();
-    Object.assign(S.W.env, { RESEND_API_KEY: "re_test", EMAIL_FROM: "LedgerFox <billing@example.com>" });
+    Object.assign(S.W.env, { RESEND_API_KEY: "re_test", EMAIL_FROM: "Foxlator <billing@example.com>" });
     expect((await settings(S.W, { reminders_enabled: true })).status).toBe(200);
     expect(await sendPaymentReminders(S.W.env)).toBe(1);
     const mail = calls.filter((x) => x.url === "https://api.resend.com/emails");

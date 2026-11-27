@@ -15,7 +15,7 @@ function mockOut(calls: any[] = []) {
   });
   return calls;
 }
-const withEmail = (W: any) => Object.assign(W.env, { RESEND_API_KEY: "re_test", EMAIL_FROM: "LedgerFox <x@example.com>", DATA_KEY: "a-long-random-data-key-for-tests" });
+const withEmail = (W: any) => Object.assign(W.env, { RESEND_API_KEY: "re_test", EMAIL_FROM: "Foxlator <x@example.com>", DATA_KEY: "a-long-random-data-key-for-tests" });
 
 async function invoice(W: any, cust: string, amount: string) {
   const d = await W.owner.post(W.c("/documents"), { doc_type: "invoice", contact_id: cust, issue_date: day(-1), lines: [{ description: "Service", quantity: "1", unit_price: amount, account_id: W.acc.SALES }] });

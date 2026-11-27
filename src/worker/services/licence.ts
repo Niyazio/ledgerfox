@@ -4,7 +4,7 @@ import { newId } from "../lib/crypto";
 import { TRIAL_PLAN, type PlanId } from "@shared/plans";
 
 /**
- * Desktop licences. The desktop app signs in to the customer's LedgerFox online account; the website then issues a
+ * Desktop licences. The desktop app signs in to the customer's Foxlator online account; the website then issues a
  * licence for that organisation's plan, signed with an Ed25519 key. The desktop app checks the signature offline,
  * and refreshes the licence whenever it has internet. Without a valid licence (never connected, plan ended, or more
  * than OFFLINE_DAYS without a check) there is no Free plan: everything stays viewable and exportable, but new entries
@@ -120,7 +120,7 @@ export async function refreshDesktopLicence(env: Env): Promise<boolean> {
       method: "POST", headers: { "content-type": "application/json", "x-requested-with": "ledgerfox" }, body: JSON.stringify({ device_token: row.device_token }),
     });
     const data = (await res.json().catch(() => ({}))) as { token?: string; error?: { message?: string } };
-    if (!res.ok || !data.token) throw new Error(data.error?.message ?? `The LedgerFox website answered ${res.status}`);
+    if (!res.ok || !data.token) throw new Error(data.error?.message ?? `The Foxlator website answered ${res.status}`);
     if (!(await verifyLicence(data.token, JSON.parse(row.public_jwk)))) throw new Error("The licence from the website could not be verified");
     await run(env.DB, `UPDATE desktop_licence SET token = ?, last_checked_at = ?, last_error = NULL, updated_at = ? WHERE id = 1`, data.token, new Date().toISOString(), new Date().toISOString());
     return true;

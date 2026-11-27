@@ -15,9 +15,9 @@ export function CompanyUnavailable({ code, message, onRetry }: { code: string | 
     other: "This company cannot be opened right now",
   }[kind];
   const body = {
-    education: "Education mode for this company is not active any more. Your practice data is safe and kept. To keep working, start your own business on LedgerFox — every feature free for 30 days — or ask your institute or LedgerFox to renew education access.",
+    education: "Education mode for this company is not active any more. Your practice data is safe and kept. To keep working, start your own business on Foxlator — every feature free for 30 days — or ask your institute or Foxlator to renew education access.",
     devices: "Every allowed device is in use. The organisation's owner can free a device in Settings → Plan & billing, or take a bigger student pack.",
-    paused: "Access to this business has been paused by LedgerFox. Your data is safe. Please contact us to resume.",
+    paused: "Access to this business has been paused by Foxlator. Your data is safe. Please contact us to resume.",
     other: message,
   }[kind];
   const btn = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium";
@@ -31,8 +31,8 @@ export function CompanyUnavailable({ code, message, onRetry }: { code: string | 
         <div className="mt-6 grid gap-2 sm:grid-cols-2">
           {kind === "education" && <Link to="/app/new-company" className={`${btn} bg-brand-700 text-white hover:bg-brand-800 sm:col-span-2`}><Rocket className="h-4 w-4" />Start my business — 30 days free</Link>}
           <Link to="/app" className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}><LayoutGrid className="h-4 w-4" />My companies</Link>
-          <a href="/" className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}><Home className="h-4 w-4" />LedgerFox website</a>
-          <a href={`mailto:${SUPPORT}?subject=${encodeURIComponent(title)}`} className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}><Mail className="h-4 w-4" />Contact LedgerFox</a>
+          <a href="/" className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}><Home className="h-4 w-4" />Foxlator website</a>
+          <a href={`mailto:${SUPPORT}?subject=${encodeURIComponent(title)}`} className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}><Mail className="h-4 w-4" />Contact Foxlator</a>
           {kind === "other" && <button onClick={onRetry} className={`${btn} border border-[var(--border)] hover:bg-[var(--surface-2)]`}>Try again</button>}
         </div>
         <p className="mt-5 text-xs muted">Questions? Write to {SUPPORT}.</p>

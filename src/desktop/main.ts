@@ -1,10 +1,10 @@
 /**
- * LedgerFox desktop app (Windows, macOS, Linux). It works online: the window shows the LedgerFox website, signed in
- * with the same account, and the data is the same everyone in the business sees, on the LedgerFox cloud. Without
+ * Foxlator desktop app (Windows, macOS, Linux). It works online: the window shows the Foxlator website, signed in
+ * with the same account, and the data is the same everyone in the business sees, on the Foxlator cloud. Without
  * internet, recently opened screens still show from this computer's cache, and new invoices, payments and entries
  * wait on this computer and are sent when the connection returns (each once only). Every company is also copied
  * automatically to a folder on this computer (see localcopy.ts).
- * Data files from older versions (one SQLite file, e.g. C:\LedgerFox\MyBusiness.ledgerfox) open view-only, to look
+ * Data files from older versions (one SQLite file, e.g. C:\Foxlator\MyBusiness.ledgerfox) open view-only, to look
  * things up and export them; the same server as the cloud version runs on this computer for that.
  */
 import { app, BrowserWindow, Menu, dialog, shell, net, systemPreferences, type MenuItemConstructorOptions } from "electron";
@@ -24,13 +24,16 @@ interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; 
   /** Automatic local copy of the cloud data (default Documents\LedgerFox Data). */
   localFolder?: string; lastLocalCopy?: string; localCopyError?: string | null; toldLocalCopy?: boolean }
 
-/** The LedgerFox website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
+/** The Foxlator website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
 const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
 const online = () => config.mode === "online";
 
 const resources = app.isPackaged ? process.resourcesPath : join(__dirname, "..");
 const webDir = join(resources, app.isPackaged ? "web" : "dist");
 const migrationsDir = join(resources, "migrations");
+// The app was renamed from LedgerFox to Foxlator: keep using the settings folder existing installs already have
+// (it is named after the app), so nobody is signed out or loses the location of their data.
+app.setPath("userData", join(app.getPath("appData"), "LedgerFox"));
 const configPath = () => join(app.getPath("userData"), "config.json");
 
 let config: Config = {};
@@ -81,7 +84,7 @@ async function boot(dataFile: string) {
   autoBackup();
   app.addRecentDocument(dataFile);
   if (win) {
-    win.setTitle(`LedgerFox — ${basename(dataFile)} (view only)`);
+    win.setTitle(`Foxlator — ${basename(dataFile)} (view only)`);
     await win.loadURL(localUrl());
   }
   buildMenu();
@@ -92,14 +95,14 @@ const OLD_FILE_ENV = { DESKTOP_READONLY: "true", DESKTOP_LICENSING: "off" };
 
 let retryTimer: NodeJS.Timeout | null = null;
 
-/** Online mode: show the LedgerFox website. The data file (if any) is closed but left untouched on disk. */
+/** Online mode: show the Foxlator website. The data file (if any) is closed but left untouched on disk. */
 async function goOnline() {
   await stopTunnel();
   if (server) { await server.close(); server = null; }
   config.mode = "online";
   saveConfig();
   buildMenu();
-  if (win) { win.setTitle("LedgerFox — online"); await loadOnline(); }
+  if (win) { win.setTitle("Foxlator — online"); await loadOnline(); }
 }
 
 async function loadOnline() {
@@ -112,11 +115,11 @@ async function loadOnline() {
 /** Shown only when the website was never opened on this computer and there is no internet; retries by itself. */
 async function showOfflinePage() {
   if (!win || !online()) return;
-  const html = `<!doctype html><meta charset="utf-8"><title>LedgerFox</title>
+  const html = `<!doctype html><meta charset="utf-8"><title>Foxlator</title>
   <style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;height:100vh;background:#f6f7f9;color:#0f172a}div{max-width:460px;padding:24px;text-align:center}p{color:#475569}</style>
   <div><h1 style="font-size:20px">Waiting for the internet</h1>
-  <p>The first time, LedgerFox needs internet to sign in to your account. After that it also opens without internet and sends your new entries when the connection is back.</p>
-  <p>LedgerFox will try again by itself.</p></div>`;
+  <p>The first time, Foxlator needs internet to sign in to your account. After that it also opens without internet and sends your new entries when the connection is back.</p>
+  <p>Foxlator will try again by itself.</p></div>`;
   await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(() => undefined);
   retryTimer = setTimeout(() => void loadOnline(), 15_000);
 }
@@ -133,7 +136,7 @@ function autoBackup() {
   if (!server || !config.dataFile) return;
   if (config.lastBackup && Date.now() - config.lastBackup < 24 * 3600_000) return;
   try {
-    const dir = join(dirname(config.dataFile), "LedgerFox Backups");
+    const dir = join(dirname(config.dataFile), "Foxlator Backups");
     mkdirSync(dir, { recursive: true });
     const stem = basename(config.dataFile, `.${FILE_EXT}`);
     backupTo(join(dir, `${stem} ${new Date().toISOString().slice(0, 10)}.${FILE_EXT}`));
@@ -148,20 +151,20 @@ function autoBackup() {
 }
 
 async function chooseExistingFile(): Promise<string | null> {
-  const r = await dialog.showOpenDialog({ title: "Open a LedgerFox data file", properties: ["openFile"], filters: [{ name: "LedgerFox data", extensions: [FILE_EXT] }] });
+  const r = await dialog.showOpenDialog({ title: "Open a Foxlator data file", properties: ["openFile"], filters: [{ name: "Foxlator data", extensions: [FILE_EXT] }] });
   return r.canceled ? null : r.filePaths[0] ?? null;
 }
 
-/** Once, for people who used a data file before LedgerFox moved online. Their file stays as it is. */
+/** Once, for people who used a data file before Foxlator moved online. Their file stays as it is. */
 async function tellOnlineOnly() {
   if (config.toldOnlineOnly || !config.dataFile) return;
   config.toldOnlineOnly = true;
   saveConfig();
   await dialog.showMessageBox({
     type: "info",
-    title: "LedgerFox now works online",
-    message: "Sign in with your LedgerFox account",
-    detail: `LedgerFox now keeps your books online, so everyone in your business sees the same data and it is backed up for you. Without internet you can keep billing; your entries are sent when the internet is back.\n\nYour old data file is kept as it was:\n${config.dataFile}\nOpen it any time from File → Open an old data file (view only) to look things up or export it.`,
+    title: "Foxlator now works online",
+    message: "Sign in with your Foxlator account",
+    detail: `Foxlator now keeps your books online, so everyone in your business sees the same data and it is backed up for you. Without internet you can keep billing; your entries are sent when the internet is back.\n\nYour old data file is kept as it was:\n${config.dataFile}\nOpen it any time from File → Open an old data file (view only) to look things up or export it.`,
     buttons: ["OK"],
   });
 }
@@ -184,7 +187,7 @@ async function runLocalCopy(manual = false) {
       saveConfig();
       const r = await dialog.showMessageBox({
         type: "info", title: "Local copy on this computer", message: "Your data is also saved on this computer",
-        detail: `LedgerFox keeps your books in the LedgerFox cloud and also copies every company automatically to:\n${localFolder()}\n\nThe copy is updated every 15 minutes while you are online, with one copy per day for the last 30 days. Change the folder any time in File → Change local copy folder.`,
+        detail: `Foxlator keeps your books in the Foxlator cloud and also copies every company automatically to:\n${localFolder()}\n\nThe copy is updated every 15 minutes while you are online, with one copy per day for the last 30 days. Change the folder any time in File → Change local copy folder.`,
         buttons: ["OK", "Change folder…"], cancelId: 0,
       });
       if (r.response === 1) await chooseLocalFolder();
@@ -223,10 +226,10 @@ async function startInternetLink() {
   const choice = await dialog.showMessageBox({
     type: "warning",
     title: "Internet link",
-    message: "Make LedgerFox reachable from anywhere through a temporary internet address?",
+    message: "Make Foxlator reachable from anywhere through a temporary internet address?",
     detail: [
-      "A free Cloudflare Quick Tunnel will be started. The address is random, changes every time, and stops when you close LedgerFox or this computer sleeps. Cloudflare describes Quick Tunnels as intended for testing, without uptime guarantees.",
-      "Everyone still has to sign in with their LedgerFox password.",
+      "A free Cloudflare Quick Tunnel will be started. The address is random, changes every time, and stops when you close Foxlator or this computer sleeps. Cloudflare describes Quick Tunnels as intended for testing, without uptime guarantees.",
+      "Everyone still has to sign in with their Foxlator password.",
       emails.length ? `Recommended: also require an emailed one-time code (from Cloudflare) for: ${emails.join(", ")}.` : "",
       "The first time, the cloudflared program (about 40 MB) is downloaded from Cloudflare's GitHub releases.",
     ].filter(Boolean).join("\n\n"),
@@ -258,22 +261,22 @@ async function showAccess() {
   const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
   const blocks = await Promise.all(links.map(async (l) => `
     <div class="card"><img src="${await QRCode.toDataURL(l.url, { margin: 1, width: 180 })}" alt=""><div><b>${esc(l.label)}</b><code>${esc(l.url)}</code></div></div>`));
-  const html = `<!doctype html><meta charset="utf-8"><title>Use LedgerFox on your phone</title>
+  const html = `<!doctype html><meta charset="utf-8"><title>Use Foxlator on your phone</title>
   <style>body{font:14px system-ui,sans-serif;margin:20px;color:#0f172a}h1{font-size:18px}.card{display:flex;gap:16px;align-items:center;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px 0}
   code{display:block;margin-top:6px;font-size:13px;user-select:all;word-break:break-all}p{color:#475569}</style>
-  <h1>Use LedgerFox on your phone</h1>
+  <h1>Use Foxlator on your phone</h1>
   ${blocks.join("") || "<p>Turn on <b>Access → Phones on the same Wi-Fi</b> or <b>Access → Internet link</b> first.</p>"}
-  <p>Scan the code with the phone camera, then sign in with your LedgerFox email and password. This computer must stay on with LedgerFox open.</p>
-  ${config.lan ? "<p>Same Wi-Fi uses plain http inside your network. If Windows asks, allow LedgerFox on <b>private</b> networks only.</p>" : ""}`;
+  <p>Scan the code with the phone camera, then sign in with your Foxlator email and password. This computer must stay on with Foxlator open.</p>
+  ${config.lan ? "<p>Same Wi-Fi uses plain http inside your network. If Windows asks, allow Foxlator on <b>private</b> networks only.</p>" : ""}`;
   if (!accessWin || accessWin.isDestroyed()) {
-    accessWin = new BrowserWindow({ width: 560, height: 640, title: "Use LedgerFox on your phone", parent: win ?? undefined, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
+    accessWin = new BrowserWindow({ width: 560, height: 640, title: "Use Foxlator on your phone", parent: win ?? undefined, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
     accessWin.setMenuBarVisibility(false);
   }
   await accessWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   accessWin.show();
 }
 
-/** QR code with a one-time link: the LedgerFox Android app scans it and saves a view-only copy of this data file. */
+/** QR code with a one-time link: the Foxlator Android app scans it and saves a view-only copy of this data file. */
 async function showPhoneCopy() {
   if (!server) return;
   if (!config.lan && !tunnel) {
@@ -289,7 +292,7 @@ async function showPhoneCopy() {
   <style>body{font:14px system-ui,sans-serif;margin:20px;color:#0f172a}h1{font-size:18px}.card{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:12px 0;text-align:center}
   code{display:block;margin-top:6px;font-size:12px;word-break:break-all}p{color:#475569}</style>
   <h1>Copy data to phone (view-only)</h1>
-  <p>Open the <b>LedgerFox Android app</b> → <b>Scan QR code</b>. The phone saves a view-only copy of this data file and can open it without internet. Signing in on the phone uses the same usernames and passwords.</p>
+  <p>Open the <b>Foxlator Android app</b> → <b>Scan QR code</b>. The phone saves a view-only copy of this data file and can open it without internet. Signing in on the phone uses the same usernames and passwords.</p>
   ${blocks.join("")}
   <p>The code works once and expires in 10 minutes. Login sessions and recovery codes are not copied. Anyone holding the phone can read the copy after signing in, so protect the phone with a screen lock.</p>`;
   const w = new BrowserWindow({ width: 520, height: 720, title: "Copy data to phone", parent: win ?? undefined, webPreferences: { sandbox: true, contextIsolation: true, javascript: false } });
@@ -314,8 +317,8 @@ function buildMenu() {
         { type: "separator" },
         {
           label: "Copy the old data file…", enabled: Boolean(server) && !online(), click: async () => {
-            const stem = basename(config.dataFile ?? "LedgerFox", `.${FILE_EXT}`);
-            const r = await dialog.showSaveDialog({ title: "Save a backup copy", defaultPath: join(app.getPath("documents"), `${stem} backup ${new Date().toISOString().slice(0, 10)}.${FILE_EXT}`), filters: [{ name: "LedgerFox data", extensions: [FILE_EXT] }] });
+            const stem = basename(config.dataFile ?? "Foxlator", `.${FILE_EXT}`);
+            const r = await dialog.showSaveDialog({ title: "Save a backup copy", defaultPath: join(app.getPath("documents"), `${stem} backup ${new Date().toISOString().slice(0, 10)}.${FILE_EXT}`), filters: [{ name: "Foxlator data", extensions: [FILE_EXT] }] });
             if (r.canceled || !r.filePath) return;
             try { backupTo(r.filePath); dialog.showMessageBox({ type: "info", message: "Backup saved", detail: r.filePath }); } catch (e) { dialog.showErrorBox("Backup failed", (e as Error).message); }
           },
@@ -333,7 +336,7 @@ function buildMenu() {
         tunnel
           ? { label: "Stop internet link", click: async () => { await stopTunnel(); buildMenu(); } }
           : { label: "Start internet link (temporary)…", enabled: Boolean(server), click: () => void startInternetLink() },
-        ...(online() ? [{ label: "Online: phones use the LedgerFox website or app directly", enabled: false }] : []),
+        ...(online() ? [{ label: "Online: phones use the Foxlator website or app directly", enabled: false }] : []),
         { label: "Copy data to phone (view-only)…", enabled: Boolean(server), click: () => void showPhoneCopy() },
         { type: "separator" },
         { label: "Show phone access details", click: () => void showAccess() },
@@ -344,9 +347,9 @@ function buildMenu() {
     {
       role: "help",
       submenu: [
-        { label: "About LedgerFox", click: () => void dialog.showMessageBox({ type: "info", message: `LedgerFox ${app.getVersion()}`, detail: "A product of Niyazio (niyazio.com). Support: info@niyazio.com\n\nFree, open-source double-entry accounting (MIT licence). Your data stays in the file you chose unless you turn on phone, internet or cloud backup." }) },
+        { label: "About Foxlator", click: () => void dialog.showMessageBox({ type: "info", message: `Foxlator ${app.getVersion()}`, detail: "A product of Niyazio (niyazio.com). Support: info@niyazio.com\n\nFree, open-source double-entry accounting (MIT licence). Your data stays in the file you chose unless you turn on phone, internet or cloud backup." }) },
         { label: "Check for updates…", click: () => void checkForUpdatesNow() },
-        { label: "Support: info@niyazio.com", click: () => void shell.openExternal("mailto:info@niyazio.com?subject=LedgerFox%20support") },
+        { label: "Support: info@niyazio.com", click: () => void shell.openExternal("mailto:info@niyazio.com?subject=Foxlator%20support") },
         { label: "Niyazio website", click: () => void shell.openExternal("https://niyazio.com") },
         { type: "separator" },
         { label: online() ? `Online: ${ONLINE_URL}` : `Data file: ${config.dataFile ?? "none"}`, enabled: false },
@@ -359,12 +362,12 @@ function buildMenu() {
 
 async function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 860, minWidth: 380, minHeight: 500, show: false, title: "LedgerFox",
+    width: 1280, height: 860, minWidth: 380, minHeight: 500, show: false, title: "Foxlator",
     backgroundColor: "#f6f7f9",
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   });
   win.once("ready-to-show", () => win?.show());
-  // Links to other sites open in the normal browser; the app window only ever shows LedgerFox.
+  // Links to other sites open in the normal browser; the app window only ever shows Foxlator.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (inApp(url)) return { action: "allow" };
     // Online mode: Razorpay's payment window (UPI, bank and card checks) opens as a pop-up of the website.
@@ -373,7 +376,7 @@ async function createWindow() {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => { if (!inApp(url)) { e.preventDefault(); if (external(url)) void shell.openExternal(url); } });
-  // Camera (barcode / QR scanning) and copy-to-clipboard for LedgerFox's own pages only; nothing else is granted.
+  // Camera (barcode / QR scanning) and copy-to-clipboard for Foxlator's own pages only; nothing else is granted.
   // macOS also asks the person once for camera access.
   const ses = win.webContents.session;
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {

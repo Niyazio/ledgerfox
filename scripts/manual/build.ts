@@ -1,12 +1,13 @@
 /**
- * Builds the LedgerFox user manual (public/manual/LedgerFox-User-Manual.pdf):
- * fills a demo company on a LOCAL LedgerFox, takes screenshots of each screen, and prints the chapters to PDF.
+ * Builds the Foxlator user manual (public/manual/Foxlator-User-Manual.pdf):
+ * fills a demo company on a LOCAL Foxlator, takes screenshots of each screen, and prints the chapters to PDF.
  *
  *   1. Start a local copy with a fresh database (never production):
  *        npx wrangler d1 migrations apply ledgerfox --local --persist-to .manual-db
  *        npx wrangler dev --local --persist-to .manual-db --port 8799     (with .dev.vars: APP_ENV=development, BILLING_REQUIRE_AUTOPAY=false)
  *   2. npm run build   (the local copy serves dist/)
  *   3. npx tsx scripts/manual/build.ts [http://localhost:8799]
+ *      or, for the Microsoft Store screenshots (1920 × 1080 PNG):  … build.ts http://localhost:8799 --store <folder>
  *
  * Chrome: CHROME_PATH, or Playwright's own browser.
  */
@@ -17,8 +18,11 @@ import { isValidGstin } from "../../src/shared/tax";
 import { CHAPTERS, type Block } from "./content";
 
 const B = process.argv[2] ?? "http://localhost:8799";
+const STORE_DIR = process.argv.includes("--store") ? process.argv[process.argv.indexOf("--store") + 1] : null;
+/** The screens shown on the Store listing, in order. */
+const STORE_SHOTS = ["dashboard", "invoice-new", "gst", "crm", "tickets", "rfq", "inventory", "reports", "cheques", "match"];
 const ROOT = join(import.meta.dirname, "..", "..");
-const OUT = join(ROOT, "public", "manual", "LedgerFox-User-Manual.pdf");
+const OUT = join(ROOT, "public", "manual", "Foxlator-User-Manual.pdf");
 const day = (o: number) => new Date(Date.now() + o * 86_400_000).toISOString().slice(0, 10);
 const gstin = (state: string, pan: string) => { for (const ch of "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") { const g = `${state}${pan}1Z${ch}`; if (isValidGstin(g)) return g; } throw new Error("gstin"); };
 
@@ -27,7 +31,7 @@ const shots = new Map<string, string>(); // name → data URL
 
 async function main() {
   const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.25 });
+  const ctx = await browser.newContext(STORE_DIR ? { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 } : { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.25 });
   const page = await ctx.newPage();
   await page.goto(`${B}/login`);
   await page.waitForTimeout(1200);
@@ -101,10 +105,15 @@ async function main() {
   await pp.goto(`${B}/portal/${s.portal.customer}`); await pp.waitForTimeout(1800); await snap(pp, "portal-customer", true);
   await pp.goto(`${B}/portal/${s.portal.supplier}`); await pp.waitForTimeout(1800); await snap(pp, "portal-supplier", true);
   await browser.close();
-  await pdf();
+  if (!STORE_DIR) await pdf();
 }
 
 async function snap(page: Page, name: string, full = false) {
+  if (STORE_DIR) {
+    const n = STORE_SHOTS.indexOf(name);
+    if (n >= 0) { mkdirSync(STORE_DIR, { recursive: true }); await page.screenshot({ path: join(STORE_DIR, `${String(n + 1).padStart(2, "0")}-${name}.png`) }); console.log("store", name); }
+    return;
+  }
   const buf = await page.screenshot({ type: "jpeg", quality: 72, fullPage: full, ...(full ? {} : { clip: { x: 0, y: 0, width: page.viewportSize()!.width, height: page.viewportSize()!.height } }) });
   shots.set(name, `data:image/jpeg;base64,${buf.toString("base64")}`);
   console.log("shot", name, Math.round(buf.length / 1024), "KB");
@@ -209,7 +218,7 @@ function html() {
   };
   const toc = CHAPTERS.map((ch, i) => `<li><span>${i + 1}.</span> ${esc(ch.title)}</li>`).join("");
   const body = CHAPTERS.map((ch, i) => `<section><h2><span>${i + 1}</span>${esc(ch.title)}</h2>${ch.blocks.map(block).join("\n")}</section>`).join("\n");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>LedgerFox User Manual</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Foxlator User Manual</title><style>
     @page { size: A4; margin: 16mm 15mm 18mm; }
     body { font-family: "Segoe UI", Inter, Arial, sans-serif; color: #1e293b; font-size: 10.5pt; line-height: 1.5; }
     .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
@@ -224,7 +233,7 @@ function html() {
     figure.phone img { width: 46%; } figcaption { font-size: 9pt; color: #64748b; margin-top: 4px; }
     .tip { background: #eff6ff; border-left: 4px solid #1d4ed8; padding: 8px 10px; margin: 10px 0; border-radius: 4px; page-break-inside: avoid; }
   </style></head><body>
-    <div class="cover"><img src="${logo}"><h1>LedgerFox</h1><p><b>User manual</b></p><p>Accounting, billing, GST, stock, CRM, service desk and purchasing — step by step, with screenshots.</p>
+    <div class="cover"><img src="${logo}"><h1>Foxlator</h1><p><b>User manual</b></p><p>Accounting, billing, GST, stock, CRM, service desk and purchasing — step by step, with screenshots.</p>
       <p style="margin-top:40px;font-size:10pt">Version ${JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version} · ${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</p>
       <p style="font-size:10pt">A product of Niyazio · Support: info@niyazio.com</p></div>
     <div class="toc"><h2>Contents</h2><ol>${toc}</ol>
@@ -239,7 +248,7 @@ async function pdf() {
   await page.setContent(html(), { waitUntil: "load" });
   mkdirSync(join(ROOT, "public", "manual"), { recursive: true });
   const out = await page.pdf({ format: "A4", printBackground: true, displayHeaderFooter: true, headerTemplate: "<span></span>",
-    footerTemplate: `<div style="font-size:8px;color:#64748b;width:100%;padding:0 15mm;display:flex;justify-content:space-between"><span>LedgerFox user manual</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+    footerTemplate: `<div style="font-size:8px;color:#64748b;width:100%;padding:0 15mm;display:flex;justify-content:space-between"><span>Foxlator user manual</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
     margin: { top: "16mm", bottom: "18mm", left: "15mm", right: "15mm" } });
   writeFileSync(OUT, out);
   console.log("manual", OUT, Math.round(out.length / 1024), "KB");

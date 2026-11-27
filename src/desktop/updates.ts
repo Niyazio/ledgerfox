@@ -36,12 +36,12 @@ async function checkGithub(manual: boolean) {
     if (rel.tag_name && newer(rel.tag_name, app.getVersion())) {
       set({ status: "available", latest: rel.tag_name.replace(/^v/, ""), notes: plain(rel.body) });
       if (manual) {
-        const r = await dialog.showMessageBox({ type: "info", buttons: ["Download", "Later"], message: `LedgerFox ${rel.tag_name} is available`, detail: `You have ${app.getVersion()}. Your data file is kept when you install the new version.` });
+        const r = await dialog.showMessageBox({ type: "info", buttons: ["Download", "Later"], message: `Foxlator ${rel.tag_name} is available`, detail: `You have ${app.getVersion()}. Your data file is kept when you install the new version.` });
         if (r.response === 0) void shell.openExternal(DOWNLOAD_PAGE);
       }
     } else {
       set({ status: "up-to-date" });
-      if (manual) void dialog.showMessageBox({ type: "info", message: "LedgerFox is up to date", detail: `Version ${app.getVersion()}` });
+      if (manual) void dialog.showMessageBox({ type: "info", message: "Foxlator is up to date", detail: `Version ${app.getVersion()}` });
     }
   } catch {
     set({ status: "error" });
@@ -69,7 +69,7 @@ export function setupAutoUpdate() {
   autoUpdater.on("download-progress", (p) => set({ status: "downloading", progress: Math.round(p.percent) }));
   autoUpdater.on("update-downloaded", async (info) => {
     set({ status: "ready", latest: info.version, progress: 100, notes: plain(info.releaseNotes) ?? state.notes });
-    const r = await dialog.showMessageBox({ type: "info", buttons: ["Restart now", "Later"], message: `LedgerFox ${info.version} is ready to install`, detail: "It installs when you restart LedgerFox. Your data file is not changed by updates." });
+    const r = await dialog.showMessageBox({ type: "info", buttons: ["Restart now", "Later"], message: `Foxlator ${info.version} is ready to install`, detail: "It installs when you restart Foxlator. Your data file is not changed by updates." });
     if (r.response === 0) autoUpdater.quitAndInstall();
   });
   autoUpdater.on("error", () => { set({ status: state.status === "ready" ? "ready" : "error" }); /* offline or no release yet: try again later */ });
@@ -85,8 +85,8 @@ export async function checkForUpdatesNow() {
   if (!app.isPackaged || process.platform === "darwin") return checkGithub(true);
   try {
     const r = await autoUpdater.checkForUpdates();
-    if (!r?.isUpdateAvailable) void dialog.showMessageBox({ type: "info", message: "LedgerFox is up to date", detail: `Version ${app.getVersion()}` });
-    else void dialog.showMessageBox({ type: "info", message: `Downloading LedgerFox ${r.updateInfo.version}…`, detail: "You will be asked to restart when it is ready." });
+    if (!r?.isUpdateAvailable) void dialog.showMessageBox({ type: "info", message: "Foxlator is up to date", detail: `Version ${app.getVersion()}` });
+    else void dialog.showMessageBox({ type: "info", message: `Downloading Foxlator ${r.updateInfo.version}…`, detail: "You will be asked to restart when it is ready." });
   } catch {
     void dialog.showMessageBox({ type: "warning", message: "Could not check for updates", detail: "Check the internet connection and try again." });
   }
