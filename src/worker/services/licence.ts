@@ -11,7 +11,7 @@ import { TRIAL_PLAN, type PlanId } from "@shared/plans";
  * wait until the plan is renewed or checked again (see renewRequired). Nothing is ever deleted.
  */
 export const OFFLINE_DAYS = 15;
-export const DEFAULT_LICENCE_SERVER = "https://ledgerfox.niyazio.com";
+export const DEFAULT_LICENCE_SERVER = "https://foxlator.niyazio.com";
 const DAY = 86_400_000;
 const ALG = { name: "Ed25519" } as const;
 

@@ -25,8 +25,7 @@ interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; 
   localFolder?: string; lastLocalCopy?: string; localCopyError?: string | null; toldLocalCopy?: boolean }
 
 /** The Foxlator website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
-// The installed app stays on the original address (same sign-in); it serves the same app as foxlator.niyazio.com.
-const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
+const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://foxlator.niyazio.com";
 const online = () => config.mode === "online";
 
 const resources = app.isPackaged ? process.resourcesPath : join(__dirname, "..");
@@ -55,7 +54,8 @@ function saveConfig() {
 const localUrl = () => `http://127.0.0.1:${server?.port ?? DEFAULT_PORT}`;
 /** Pages the app window may show; everything else opens in the normal browser. */
 const appOrigin = () => (online() ? ONLINE_URL : localUrl());
-const inApp = (url: string) => url === appOrigin() || url.startsWith(`${appOrigin()}/`);
+/** The app's own pages (also on its original address, ledgerfox.niyazio.com, which links made before the move use). */
+const inApp = (url: string) => [appOrigin(), "https://ledgerfox.niyazio.com"].some((o) => url === o || url.startsWith(`${o}/`));
 /** Links that open in the computer's own apps: the browser, email, WhatsApp, phone and UPI apps. */
 const external = (url: string) => /^(https?:|mailto:|tel:|whatsapp:|upi:)/i.test(url);
 

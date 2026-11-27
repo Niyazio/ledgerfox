@@ -20,8 +20,8 @@
   ],
   // Custom Domain: Cloudflare creates the DNS record and TLS certificate on deploy.
   // Requires niyazio.com to be an active zone in the same Cloudflare account.
-  // foxlator.niyazio.com is the main address; ledgerfox.niyazio.com keeps working for existing links, printed QR
-  // codes, Razorpay webhooks and the installed desktop / Android apps.
+  // foxlator.niyazio.com is the address. ledgerfox.niyazio.com (the original) stays attached: browsers there are sent
+  // to foxlator (public/theme.js), while Razorpay webhooks and older installed apps keep working until they move.
   "routes": [{ "pattern": "foxlator.niyazio.com", "custom_domain": true }, { "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
   // Smart Placement (free): runs the Worker close to the D1 database instead of close to the visitor, because one

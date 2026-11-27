@@ -14,7 +14,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SqliteD1 } from "./sqlite-d1";
 
 const MAGIC = Buffer.from("LFBK1");
-export const DEFAULT_CLOUD = process.env.LEDGERFOX_CLOUD_URL ?? "https://ledgerfox.niyazio.com";
+export const DEFAULT_CLOUD = process.env.LEDGERFOX_CLOUD_URL ?? "https://foxlator.niyazio.com";
 
 interface Settings { cloudUrl: string; token: string; user: string; salt: string; key: string; enabled: boolean; lastBackupAt?: string; lastError?: string }
 export interface BackupStatus { connected: boolean; user?: string; cloudUrl?: string; enabled?: boolean; lastBackupAt?: string; lastError?: string }

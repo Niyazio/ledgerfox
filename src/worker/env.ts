@@ -35,7 +35,7 @@ export interface Env {
   DESKTOP_LICENSING?: string;
   /** "true": an old desktop data file opened only to look at and export (Foxlator now works online). */
   DESKTOP_READONLY?: string;
-  /** Desktop app: the website that issues licences (default https://ledgerfox.niyazio.com). */
+  /** Desktop app: the website that issues licences (default https://foxlator.niyazio.com). */
   LICENCE_SERVER?: string;
   /** Desktop app: this computer's name, shown in the admin panel. */
   DEVICE_NAME?: string;
@@ -45,7 +45,7 @@ export interface Env {
   EMAIL_REPLY_TO?: string;
   /** Worker secret (any long random text) that encrypts businesses' own payment-gateway keys stored in the database. */
   DATA_KEY?: string;
-  /** Public https address used in links inside emails, e.g. https://ledgerfox.niyazio.com */
+  /** Public https address used in links inside emails, e.g. https://foxlator.niyazio.com */
   APP_URL?: string;
 }
 
