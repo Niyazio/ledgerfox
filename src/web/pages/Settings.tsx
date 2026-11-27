@@ -108,7 +108,7 @@ function CloudBackupTab() {
           <Field label="Backup passphrase (min. 8 characters)">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.passphrase} onChange={(e) => setV({ ...v, passphrase: e.target.value })} />}</Field>
           <Field label="Repeat passphrase">{(id) => <Input id={id} type="password" autoComplete="new-password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} />}</Field>
         </div>
-        <p className="mt-2 text-xs muted">No cloud account yet? Create one free at <a className="underline" href="https://ledgerfox.niyazio.com/register" target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>.</p>
+        <p className="mt-2 text-xs muted">No cloud account yet? Create one free at <a className="underline" href="https://foxlator.niyazio.com/register" target="_blank" rel="noreferrer">foxlator.niyazio.com</a>.</p>
         <Button className="mt-4" loading={busy} onClick={async () => {
           if (v.passphrase !== v.confirm) return setError("The passphrases do not match");
           if (await run(() => api.post("/api/desktop/backup/connect", { login: v.login, password: v.password, passphrase: v.passphrase }))) {

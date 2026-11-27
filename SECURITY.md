@@ -1,6 +1,6 @@
 # Security
 
-Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/SecurityPage.tsx`). Team playbook (account hardening, monitoring, incident response, answering customers): `docs/SECURITY_PLAYBOOK.md`.
+Customer-facing summary: https://foxlator.niyazio.com/security (`src/web/pages/SecurityPage.tsx`). Team playbook (account hardening, monitoring, incident response, answering customers): `docs/SECURITY_PLAYBOOK.md`.
 
 ## Implemented
 

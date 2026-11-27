@@ -25,6 +25,7 @@ interface Config { mode?: "online" | "local"; dataFile?: string; lan?: boolean; 
   localFolder?: string; lastLocalCopy?: string; localCopyError?: string | null; toldLocalCopy?: boolean }
 
 /** The Foxlator website the online mode shows (LEDGERFOX_ONLINE_URL may point to a test copy; https only). */
+// The installed app stays on the original address (same sign-in); it serves the same app as foxlator.niyazio.com.
 const ONLINE_URL = /^https:\/\/[^/]+$/.test(process.env.LEDGERFOX_ONLINE_URL ?? "") ? process.env.LEDGERFOX_ONLINE_URL! : "https://ledgerfox.niyazio.com";
 const online = () => config.mode === "online";
 

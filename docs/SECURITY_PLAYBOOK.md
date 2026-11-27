@@ -1,6 +1,6 @@
 # Security playbook (for the Foxlator team)
 
-The public page for customers is https://ledgerfox.niyazio.com/security. `SECURITY.md` lists every technical control.
+The public page for customers is https://foxlator.niyazio.com/security. `SECURITY.md` lists every technical control.
 This page covers what *you* do: protecting the accounts that run Foxlator, watching for trouble, and handling an attack.
 
 ## 1. The real risk: your own accounts
@@ -62,7 +62,7 @@ Work through these in order and write down what you did and when.
 
 ## 5. Answering customers
 
-Short answers you can give. Details are on https://ledgerfox.niyazio.com/security.
+Short answers you can give. Details are on https://foxlator.niyazio.com/security.
 
 - **"Is my data safe? Can other businesses see it?"** Each business's data is separated by the server on every request. Other customers get "not found" even if they guess an address, and automated tests check this on every change. Everything travels over HTTPS and is stored encrypted on Cloudflare.
 - **"Do you see my card or UPI PIN?"** No. Payments happen inside Razorpay's own secure window (PCI-DSS). We only receive a confirmation, which is checked with Razorpay's signature.

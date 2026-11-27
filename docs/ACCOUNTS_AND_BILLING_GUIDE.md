@@ -1,6 +1,6 @@
 # Accounts and subscriptions: how it works for your customers
 
-This is for the hosted website (ledgerfox.niyazio.com). The desktop app has no subscriptions and does not send email.
+This is for the hosted website (foxlator.niyazio.com). The desktop app has no subscriptions and does not send email.
 
 ## Creating an account
 1. The customer opens the website and chooses **Create account**. They enter their name, email and a password of at least 10 characters.
@@ -91,7 +91,7 @@ When creating a company, choose the type of business. Foxlator adds suitable acc
 - **Not included yet:** Saudi ZATCA phase 2 (sending signed XML invoices to the FATOORA platform), UAE e-invoicing through an accredited provider, Arabic for the app screens (only bills are in Arabic), and Gulf payroll rules (end-of-service gratuity, WPS salary files). Customers subject to phase 2 must still use an approved e-invoicing solution for that step.
 - **Paying for Foxlator:** UAE customers pay in AED, Saudi customers in SAR, and others in USD, by card, with auto-renew.
 
-## Helping a customer (admin panel, https://ledgerfox.niyazio.com/vendor)
+## Helping a customer (admin panel, https://foxlator.niyazio.com/vendor)
 
 - **"I forgot my password / ID":** Accounts tab → search their name → the sign-in ID is shown. Click **Reset password** and send them the one-time password (WhatsApp or phone). They choose a new one when they sign in. Nobody can see an old password.
 - **"I paid you in cash / by bank":** open the organisation → **Record cash / bank payment** (makes an invoice) or **Give free access** (no invoice).

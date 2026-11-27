@@ -117,7 +117,7 @@ licenceDesktop.post("/connect", async (c) => {
       body: JSON.stringify({ ...input, device_name: c.env.DEVICE_NAME ?? "Foxlator desktop" }),
     });
   } catch {
-    throw new AppError(503, "OFFLINE", "Could not reach ledgerfox.niyazio.com. Connect this computer to the internet and try again.");
+    throw new AppError(503, "OFFLINE", "Could not reach Foxlator Cloud. Connect this computer to the internet and try again.");
   }
   const data = (await res.json().catch(() => ({}))) as { token?: string; public_key?: JsonWebKey; device_token?: string; email?: string; error?: { code: string; message: string; details?: unknown } };
   if (!res.ok || !data.token || !data.public_key || !data.device_token) {

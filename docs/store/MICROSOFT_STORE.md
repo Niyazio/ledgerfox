@@ -64,8 +64,8 @@ accounting, GST billing, invoice, inventory, bookkeeping, CRM, small business
 
 **Store logos**: the 1:1 box art can be `build/appx/LargeTile.scale-200.png` (620 × 620).
 
-**Privacy policy URL**: https://ledgerfox.niyazio.com/privacy
-**Website**: https://ledgerfox.niyazio.com
+**Privacy policy URL**: https://foxlator.niyazio.com/privacy
+**Website**: https://foxlator.niyazio.com
 **Support contact**: info@niyazio.com
 
 ---
@@ -92,7 +92,7 @@ Category: *Productivity / business app*. Answer **No** to violence, sexual conte
 
 Paste, filling in the reviewer account you created:
 
-> Foxlator is a business accounting app (the desktop edition of https://ledgerfox.niyazio.com, which we own and operate). It needs an internet connection and a sign-in.
+> Foxlator is a business accounting app (the desktop edition of https://foxlator.niyazio.com, which we own and operate). It needs an internet connection and a sign-in.
 >
 > Test account (full access, no payment needed):
 > Email: ______________________
@@ -106,7 +106,7 @@ Paste, filling in the reviewer account you created:
 
 ## 6. Before you submit: the reviewer account (5 minutes)
 
-1. Open https://ledgerfox.niyazio.com/register and create an account, e.g. `store-review@niyazio.com` with a strong password (a real mailbox you own). Create its company, e.g. **Foxlator Review**.
+1. Open https://foxlator.niyazio.com/register and create an account, e.g. `store-review@niyazio.com` with a strong password (a real mailbox you own). Create its company, e.g. **Foxlator Review**.
 2. In **your** admin panel (shield icon at the top) → find that organisation → **Give free access** → plan **Business**, 12 months, note “Microsoft Store review”.
 3. Sign in as the reviewer: make a customer and one invoice, or create a demo company with sample data (**My companies → New company → Explore with a demo company**). If you use the demo company, write its name in the notes (section 5).
 4. Check you can make an invoice without being asked to pay.

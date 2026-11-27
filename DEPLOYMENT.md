@@ -51,7 +51,11 @@ npx wrangler d1 migrations apply ledgerfox --remote
 
 …and temporarily set the deploy command to `npx wrangler deploy`.
 
-### 3. Subdomain `ledgerfox.niyazio.com` — configured in code
+### 3. Addresses `foxlator.niyazio.com` (main) and `ledgerfox.niyazio.com` (original) — configured in code
+
+Both are Custom Domains of the same Worker and serve the same app and database. The installed desktop and Android
+apps, printed QR codes, portal links and Razorpay webhooks made before the rename use `ledgerfox.niyazio.com`, so it
+must stay attached. Links in new emails use `APP_URL` (`https://foxlator.niyazio.com`).
 
 `wrangler.jsonc` already declares `ledgerfox.niyazio.com` as a Custom Domain, so the first `wrangler deploy` attaches it.
 Requirements: `niyazio.com` must be an active zone in the same Cloudflare account, and `ledgerfox.niyazio.com` must not

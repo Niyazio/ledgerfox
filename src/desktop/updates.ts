@@ -10,7 +10,7 @@ import { autoUpdater } from "electron-updater";
 import type { DesktopUpdater, UpdateState } from "../server/http";
 
 const REPO = "Niyazio/ledgerfox";
-const DOWNLOAD_PAGE = "https://ledgerfox.niyazio.com/download";
+const DOWNLOAD_PAGE = "https://foxlator.niyazio.com/download";
 
 function newer(latest: string, current: string): boolean {
   const a = latest.replace(/^v/, "").split(".").map(Number);

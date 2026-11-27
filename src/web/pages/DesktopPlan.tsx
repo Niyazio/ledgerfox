@@ -103,7 +103,7 @@ export function DesktopPlanTab() {
         </Card>
       ) : (
         <Card title="Connect your Foxlator account">
-          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>. One subscription covers the website and your computers.</p>
+          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">Foxlator Cloud</a>. One subscription covers the website and your computers.</p>
           <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm dark:border-brand-900 dark:bg-brand-950/30">
             <p className="font-medium">New to Foxlator? Start your {TRIAL_DAYS}-day free trial</p>
             <ol className="mt-1 list-decimal space-y-0.5 pl-5">

@@ -4,7 +4,7 @@
   "webDir": "www",
   "server": {
     "androidScheme": "https",
-    "allowNavigation": ["ledgerfox.niyazio.com", "*"]
+    "allowNavigation": ["ledgerfox.niyazio.com", "foxlator.niyazio.com", "*"]
   },
   "android": {
     "allowMixedContent": true

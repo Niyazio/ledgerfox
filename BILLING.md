@@ -16,7 +16,7 @@ Prices exclude GST (`BILLING_GST_PERCENT`, default 18).
 
 How plans behave:
 
-- **Trial.** A new organisation gets **30 days** of Business. With `BILLING_REQUIRE_AUTOPAY=true` (on for ledgerfox.niyazio.com), the owner first chooses the plan to continue with and approves auto-pay. Razorpay takes ₹5 to check the UPI or card and refunds it, and the first real charge is when the trial ends. Until then everything can be viewed, but new entries wait. The vendor's own staff are never held back.
+- **Trial.** A new organisation gets **30 days** of Business. With `BILLING_REQUIRE_AUTOPAY=true` (on for foxlator.niyazio.com), the owner first chooses the plan to continue with and approves auto-pay. Razorpay takes ₹5 to check the UPI or card and refunds it, and the first real charge is when the trial ends. Until then everything can be viewed, but new entries wait. The vendor's own staff are never held back.
 - **Grace period.** When a paid period ends, there are 7 days of grace. After that, renewal is required.
 - **No Free plan.** When the trial or the paid period plus grace has ended, the organisation's real companies can still be viewed, printed and exported, but adding or changing entries answers `402 RENEW_REQUIRED` and the app shows a "Renew your plan to continue" screen. Company settings stay editable. Data is never deleted. Practice (education mode) companies, demo-only organisations and the vendor's own organisation are never held back.
 - **Payment.** Two ways, both through Razorpay's own window:
@@ -36,7 +36,7 @@ How plans behave:
 2. **Create API keys.** In the Razorpay dashboard, go to **Account & Settings → API Keys** and generate a key pair. Use test mode first, then live.
 3. **Add the webhook.**
    - Go to **Account & Settings → Webhooks**.
-   - URL: `https://ledgerfox.niyazio.com/api/billing/webhook`
+   - URL: `https://foxlator.niyazio.com/api/billing/webhook` (a webhook already set to `https://ledgerfox.niyazio.com/api/billing/webhook` keeps working)
    - Events: `payment.captured`, `order.paid`, `subscription.authenticated`, `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.paused` and `subscription.resumed`
    - Choose a secret.
    - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. Foxlator creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.

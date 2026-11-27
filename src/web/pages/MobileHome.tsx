@@ -8,6 +8,7 @@ import { Wordmark, ProductCredit } from "../components/Layout";
 import { Alert, Button, Card, Input } from "../components/ui";
 import { deleteCopy, loadCopy, saveCopy, type OfflineCopy } from "../local/store";
 
+// Installed apps stay on the original address (same sign-in); it serves the same app as foxlator.niyazio.com.
 const CLOUD = "https://ledgerfox.niyazio.com";
 const REPO = "Niyazio/ledgerfox";
 const RECENT = "ledgerfox-recent";
@@ -141,7 +142,7 @@ export default function MobileHome() {
       {busy && <Alert kind="info" className="mb-4">{busy}…</Alert>}
       <div className="space-y-4">
         <Card title={<span className="flex items-center gap-2"><Cloud className="h-4 w-4" />Foxlator Cloud</span>}>
-          <p className="mb-3 text-sm muted">Your company on ledgerfox.niyazio.com — live, from anywhere.</p>
+          <p className="mb-3 text-sm muted">Your company on Foxlator Cloud — live, from anywhere.</p>
           <Button className="w-full" onClick={() => { location.href = `${CLOUD}/app`; }}>Open Foxlator Cloud</Button>
         </Card>
         <Card title={<span className="flex items-center gap-2"><Monitor className="h-4 w-4" />My office computer</span>}>
