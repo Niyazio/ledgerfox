@@ -53,9 +53,10 @@ npx wrangler d1 migrations apply ledgerfox --remote
 
 ### 3. Addresses `foxlator.niyazio.com` (main) and `ledgerfox.niyazio.com` (original) — configured in code
 
-Both are Custom Domains of the same Worker and serve the same app and database. The installed desktop and Android
-apps, printed QR codes, portal links and Razorpay webhooks made before the rename use `ledgerfox.niyazio.com`, so it
-must stay attached. Links in new emails use `APP_URL` (`https://foxlator.niyazio.com`).
+Both are Custom Domains of the same Worker. **foxlator.niyazio.com is the address.** Browsers that open the original
+address are sent to the same page on foxlator (`public/theme.js`, `src/web/main.tsx`). It stays attached because
+Razorpay webhooks registered before the move and older installed desktop / Android apps still call it; once those are
+updated (webhook URLs in Razorpay, apps on v0.10.2 or later) it can be removed.
 
 `wrangler.jsonc` already declares `ledgerfox.niyazio.com` as a Custom Domain, so the first `wrangler deploy` attaches it.
 Requirements: `niyazio.com` must be an active zone in the same Cloudflare account, and `ledgerfox.niyazio.com` must not
@@ -94,8 +95,8 @@ Cloudflare re-runs the *same old commit*; it does not pick up newer pushes.
    `v0.1.0` (e.g. **Releases → Draft a new release → tag v0.1.0 → Publish**, or `git tag v0.1.0 && git push --tags`).
    The workflow builds Windows (.exe), macOS (.dmg ×2) and Linux on GitHub's free runners and attaches them to the release.
 2. Set `GITHUB_REPO` in `wrangler.jsonc` and deploy. `https://ledgerfox.niyazio.com/download` then offers the files,
-   picking Windows or Mac automatically. File names are stable (`LedgerFox-Setup-x64.exe`, `LedgerFox-mac-arm64.dmg`,
-   `LedgerFox-mac-x64.dmg`), so every new release updates the links with no website change.
+   picking Windows or Mac automatically. The site asks GitHub for the latest release and sends each visitor to the file for their system (`Foxlator-Setup-x64.exe`,
+   `Foxlator-mac-arm64.dmg`, …), so every new release updates the links with no website change.
 
 ## Every deploy
 

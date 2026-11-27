@@ -36,7 +36,7 @@ How plans behave:
 2. **Create API keys.** In the Razorpay dashboard, go to **Account & Settings → API Keys** and generate a key pair. Use test mode first, then live.
 3. **Add the webhook.**
    - Go to **Account & Settings → Webhooks**.
-   - URL: `https://foxlator.niyazio.com/api/billing/webhook` (a webhook already set to `https://ledgerfox.niyazio.com/api/billing/webhook` keeps working)
+   - URL: `https://foxlator.niyazio.com/api/billing/webhook` (a webhook already set to `https://ledgerfox.niyazio.com/api/billing/webhook` keeps working; change it to the foxlator address when convenient)
    - Events: `payment.captured`, `order.paid`, `subscription.authenticated`, `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.paused` and `subscription.resumed`
    - Choose a secret.
    - **Subscriptions** must be enabled on your Razorpay account (Dashboard → Subscriptions). If it asks you to request access, do that first. Foxlator creates the Razorpay plans itself, one for each plan and interval, the first time someone chooses it.

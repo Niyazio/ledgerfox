@@ -70,6 +70,7 @@ jobs:
         name: Smoke test
         run: |
           sleep 5
-          curl -fsS https://ledgerfox.niyazio.com/api/health | tee /dev/stderr | grep -q '"status":"ok"'
-          # The new address gets its certificate on the first deploy; give it a minute, but do not fail the deploy on it.
-          for i in 1 2 3 4 5 6; do curl -fsS https://foxlator.niyazio.com/api/health && break; sleep 10; done || true
+          # The main address. On its first deploy Cloudflare issues its certificate, which can take a few minutes.
+          ok=; for i in $(seq 1 18); do if curl -fsS https://foxlator.niyazio.com/api/health | tee /dev/stderr | grep -q '"status":"ok"'; then ok=1; break; fi; sleep 10; done; [ -n "$ok" ]
+          # The original address still serves webhooks and older installed apps.
+          curl -fsS https://ledgerfox.niyazio.com/api/health | grep -q '"status":"ok"'

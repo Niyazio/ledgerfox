@@ -4,8 +4,8 @@ The desktop app is Foxlator online in its own window: sign in with the same emai
 
 ## How it works
 
-- **Online, with offline billing.** The window shows Foxlator Cloud (https://ledgerfox.niyazio.com, the original address of https://foxlator.niyazio.com). The data is stored in the Foxlator cloud database (Cloudflare D1), not on the computer. Without internet, screens opened recently still show from the computer's cache, and new POS bills, invoices, payments, expenses, contacts and journals wait on the computer. They are sent, and numbered, automatically when the internet is back (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
-- **Automatic local copy.** While signed in and online, every company is copied automatically to a folder on the computer (default `Documents\LedgerFox Data`; change it in File → Change local copy folder): `<Company> - latest.json`, updated every 15 minutes when something changed, plus one copy per day for the last 30 days. Nothing to export by hand. File → Save local copy now (Ctrl+B) does it at once, and File → Open local copy folder shows it. The cloud (D1) stays the main copy.
+- **Online, with offline billing.** The window shows Foxlator Cloud (https://foxlator.niyazio.com). The data is stored in the Foxlator cloud database (Cloudflare D1), not on the computer. Without internet, screens opened recently still show from the computer's cache, and new POS bills, invoices, payments, expenses, contacts and journals wait on the computer. They are sent, and numbered, automatically when the internet is back (each once only, thanks to the Idempotency-Key). Edits to existing records and reports need the internet.
+- **Automatic local copy.** While signed in and online, every company is copied automatically to a folder on the computer (default `Documents\Foxlator Data`; change it in File → Change local copy folder): `<Company> - latest.json`, updated every 15 minutes when something changed, plus one copy per day for the last 30 days. Nothing to export by hand. File → Save local copy now (Ctrl+B) does it at once, and File → Open local copy folder shows it. The cloud (D1) stays the main copy.
 - **Old data files.** Versions up to 0.4.6 could keep the books in a `.ledgerfox` file. Such files are never changed or deleted. They open **view-only** (File → Open an old data file, or double-click the file), to look things up and export them; new entries go online. The internet link, Wi-Fi access and phone copy in the Access menu still work for an old file, view-only.
 
 Self-hosted builds and the information below about data files, Wi-Fi access and the server apply to the open-source code and to old files; the official app works online.
@@ -16,7 +16,7 @@ Microsoft lets individual developers publish on the Microsoft Store free of char
 1. Register as an individual developer in **Partner Center** (free; ID check), and reserve the app name **Foxlator**.
 2. In Partner Center → the app → Product identity, copy **Package/Identity/Name**, **Package/Identity/Publisher** (starts with `CN=`) and **Publisher display name**.
 3. In GitHub → Settings → Secrets and variables → Actions → **Variables**, add `MS_STORE_IDENTITY_NAME`, `MS_STORE_PUBLISHER` and `MS_STORE_PUBLISHER_DISPLAY_NAME` with those values.
-4. The next release also builds `LedgerFox-Store-x64.appx` (workflow artifact **microsoft-store-package**). Upload it in Partner Center → Packages, fill the listing (description, screenshots, privacy policy https://ledgerfox.niyazio.com/privacy), and submit for certification.
+4. The next release also builds `Foxlator-Store-x64.appx` (workflow artifact **microsoft-store-package**). Upload it in Partner Center → Packages, fill the listing (description, screenshots, privacy policy https://ledgerfox.niyazio.com/privacy), and submit for certification.
 
 Store installs update from the Store, not from GitHub. The direct download stays available for people who prefer it.
 
@@ -24,7 +24,7 @@ Store installs update from the Store, not from GitHub. The direct download stays
 
 | System | File | First launch |
 |---|---|---|
-| Windows 10/11 (64-bit) | `LedgerFox-Setup-<version>-x64.exe` | Windows SmartScreen may say "Windows protected your PC" because the installer is not code-signed. Click **More info → Run anyway**. |
+| Windows 10/11 (64-bit) | `Foxlator-Setup-x64.exe` | Windows SmartScreen may say "Windows protected your PC" because the installer is not code-signed. Click **More info → Run anyway**. |
 | macOS (Apple Silicon) | `Foxlator-<version>-arm64.dmg` | Drag Foxlator to Applications. The first time, macOS blocks it (not notarised). Open **System Settings → Privacy & Security** and click **Open Anyway**. |
 | macOS (Intel) | `Foxlator-<version>-x64.dmg` | Same as above. |
 | Linux | `Foxlator-<version>-x86_64.AppImage` | `chmod +x` the file and run it. |
@@ -101,7 +101,7 @@ are removed from the copy.
 
 ## Android app
 
-`LedgerFox-android.apk` (from the download page) opens Foxlator Cloud or your office computer. On the computer turn on
+`Foxlator-android.apk` (from the download page) opens Foxlator Cloud or your office computer. On the computer turn on
 **Access → Phones on the same Wi-Fi**, then in the app tap **Scan QR code** (or type the address). Android asks to
 allow installing apps from your browser because the app is not on Google Play (publishing there needs a one-time
 US$25 Google developer account). Builds are signed with your key when the repository secrets

@@ -8,8 +8,7 @@ import { Wordmark, ProductCredit } from "../components/Layout";
 import { Alert, Button, Card, Input } from "../components/ui";
 import { deleteCopy, loadCopy, saveCopy, type OfflineCopy } from "../local/store";
 
-// Installed apps stay on the original address (same sign-in); it serves the same app as foxlator.niyazio.com.
-const CLOUD = "https://ledgerfox.niyazio.com";
+const CLOUD = "https://foxlator.niyazio.com";
 const REPO = "Niyazio/ledgerfox";
 const RECENT = "ledgerfox-recent";
 
@@ -135,7 +134,7 @@ export default function MobileHome() {
       <div className="mb-6 flex justify-center text-xl"><Wordmark iconClass="h-10 w-10" /></div>
       {update && <Alert kind="info" className="mb-4">Foxlator {update} is available. <button className="font-semibold underline" disabled={busy === "update"} onClick={async () => {
         setBusy("update"); setError(null);
-        try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/LedgerFox-android.apk` } as UpdateInfo); }
+        try { await applyUpdate({ edition: "android", action: "download", url: `https://github.com/${REPO}/releases/download/${update}/Foxlator-android.apk` } as UpdateInfo); }
         catch (e) { setError((e as Error).message || "The update could not be downloaded."); } finally { setBusy(null); }
       }}>{busy === "update" ? "Downloading…" : "Update now"}</button></Alert>}
       {error && <Alert className="mb-4">{error}</Alert>}

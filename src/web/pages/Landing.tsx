@@ -50,7 +50,6 @@ export default function Landing() {
               <Lock className="h-3.5 w-3.5" /> 30-day free trial · works offline · your data, exportable any time
             </p>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Accounting software that keeps the books honest.</h1>
-            <p className="mt-2 text-sm muted">Foxlator is the new name of LedgerFox: same app, same account, same data.</p>
             <p className="mt-5 text-lg muted">
               {brand} is a cloud accounting system for small and growing businesses: invoicing, purchases, expenses, banking, inventory,
               fixed assets and financial statements on a proper double-entry ledger. India GST support is built in; other countries use configurable tax codes.

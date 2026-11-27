@@ -104,13 +104,17 @@ jobs:
             echo "::warning::APK signed with a temporary key. Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets for stable updates."
           fi
           "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
-          "$BT/apksigner" sign --ks release.jks --ks-pass "pass:$PASS" --ks-key-alias ledgerfox --out ../LedgerFox-android.apk aligned.apk
-          "$BT/apksigner" verify ../LedgerFox-android.apk
+          "$BT/apksigner" sign --ks release.jks --ks-pass "pass:$PASS" --ks-key-alias ledgerfox --out ../Foxlator-android.apk aligned.apk
+          "$BT/apksigner" verify ../Foxlator-android.apk
+          # Android apps from before the rename look for this name when they update; drop it once they have.
+          cp ../Foxlator-android.apk ../LedgerFox-android.apk
           rm -f release.jks
       - uses: actions/upload-artifact@v4
         with:
           name: ledgerfox-android
-          path: LedgerFox-android.apk
+          path: |
+            Foxlator-android.apk
+            LedgerFox-android.apk
           if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(inputs.version, 'v')

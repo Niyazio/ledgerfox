@@ -66,7 +66,6 @@ export function Login() {
         <Button type="submit" loading={busy} className="w-full">Sign in</Button>
         </>}
         <p className="text-center text-sm"><Link to="/forgot" className="muted hover:underline">Forgot password?</Link></p>
-        <p className="text-center text-xs muted">LedgerFox is now Foxlator: sign in with the same account.</p>
       </form>
     </AuthCard>
   );

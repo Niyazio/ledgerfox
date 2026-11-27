@@ -34,14 +34,14 @@ appx:
   applicationId: Foxlator
   backgroundColor: "#1d4ed8"
   languages: [en-US, ar, hi]
-  artifactName: LedgerFox-Store-${arch}.${ext}
+  artifactName: Foxlator-Store-${arch}.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  artifactName: LedgerFox-Setup-${arch}.${ext}
+  artifactName: Foxlator-Setup-${arch}.${ext}
 mac:
   target:
     - target: dmg
@@ -52,11 +52,11 @@ mac:
     NSCameraUsageDescription: "Foxlator uses the camera to scan product barcodes and QR codes."
   # Ad-hoc signature only (Apple Developer ID costs money); required for Apple Silicon to launch at all.
   identity: "-"
-  artifactName: LedgerFox-mac-${arch}.${ext}
+  artifactName: Foxlator-mac-${arch}.${ext}
 linux:
   target: [AppImage]
   category: Office
-  artifactName: LedgerFox-linux-${arch}.${ext}
+  artifactName: Foxlator-linux-${arch}.${ext}
 # Update metadata (latest.yml) for in-app auto-update from GitHub Releases.
 publish:
   provider: github

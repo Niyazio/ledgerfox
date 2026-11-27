@@ -84,20 +84,45 @@ app.use("/api/*", async (c, next) => {
 });
 
 /** Where the download page sends people. Installers (~100 MB) live on GitHub Releases: free, and too big for Workers assets. */
+const DOWNLOADS: Record<string, { pattern: RegExp; file: string }> = {
+  windows: { pattern: /-Setup-x64\.exe$/, file: "Foxlator-Setup-x64.exe" },
+  mac_arm64: { pattern: /-mac-arm64\.dmg$/, file: "Foxlator-mac-arm64.dmg" },
+  mac_x64: { pattern: /-mac-x64\.dmg$/, file: "Foxlator-mac-x64.dmg" },
+  linux: { pattern: /-linux-x86_64\.AppImage$/, file: "Foxlator-linux-x86_64.AppImage" },
+  android: { pattern: /^Foxlator-android\.apk$|-android\.apk$/, file: "Foxlator-android.apk" },
+};
+const repoOf = (env: Env) => (env.GITHUB_REPO && /^[\w.-]+\/[\w.-]+$/.test(env.GITHUB_REPO) ? env.GITHUB_REPO : null);
 app.get("/api/downloads", (c) => {
-  const repo = c.env.GITHUB_REPO && /^[\w.-]+\/[\w.-]+$/.test(c.env.GITHUB_REPO) ? c.env.GITHUB_REPO : null;
-  const latest = repo ? `https://github.com/${repo}/releases/latest/download/` : null;
+  const repo = repoOf(c.env);
   return c.json({
     available: Boolean(repo),
     releases_page: repo ? `https://github.com/${repo}/releases/latest` : null,
-    files: latest ? {
-      windows: `${latest}LedgerFox-Setup-x64.exe`,
-      mac_arm64: `${latest}LedgerFox-mac-arm64.dmg`,
-      mac_x64: `${latest}LedgerFox-mac-x64.dmg`,
-      linux: `${latest}LedgerFox-linux-x86_64.AppImage`,
-      android: `${latest}LedgerFox-android.apk`,
-    } : null,
+    files: repo ? Object.fromEntries(Object.keys(DOWNLOADS).map((k) => [k, `/api/downloads/${k}`])) : null,
   });
+});
+/** Sends the visitor to the latest release's file for their system, whatever the file is called in that release. */
+app.get("/api/downloads/:platform", async (c) => {
+  const repo = repoOf(c.env);
+  const d = DOWNLOADS[c.req.param("platform")];
+  if (!repo || !d) return c.json({ error: { code: "NOT_FOUND", message: "Unknown download" } }, 404);
+  const fallback = `https://github.com/${repo}/releases/latest/download/${d.file}`;
+  try {
+    // The release list is cached for 10 minutes, so GitHub is asked a few times an hour at most.
+    const api = `https://api.github.com/repos/${repo}/releases/latest`;
+    const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+    let res = cache ? await cache.match(api) : undefined;
+    if (!res) {
+      const fresh = await fetch(api, { headers: { "user-agent": "foxlator-downloads", accept: "application/vnd.github+json" } });
+      if (!fresh.ok) return c.redirect(fallback, 302);
+      res = new Response(await fresh.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=600" } });
+      if (cache) await cache.put(api, res.clone());
+    }
+    const rel = (await res.json()) as { assets?: { name: string; browser_download_url: string }[] };
+    const asset = rel.assets?.find((a) => a.name === d.file) ?? rel.assets?.find((a) => d.pattern.test(a.name));
+    return c.redirect(asset?.browser_download_url ?? fallback, 302);
+  } catch {
+    return c.redirect(fallback, 302);
+  }
 });
 
 app.get("/api/health", async (c) => {
