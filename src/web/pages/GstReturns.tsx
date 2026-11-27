@@ -37,7 +37,8 @@ export default function GstReturns() {
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
   const q = `period=${period}${gstin ? `&gstin=${gstin}` : ""}`;
   const g1 = useApi<any>(path(`/reports/gstr1?${q}`));
-  const sheets = useApi<any>(tab === "gstr1" ? path(`/reports/gstr1?${q}&format=sheets`) : null);
+  // The filing sheets are asked for only once the return itself loads (not twice when the GSTIN is missing).
+  const sheets = useApi<any>(tab === "gstr1" && g1.data ? path(`/reports/gstr1?${q}&format=sheets`) : null);
   const g3 = useApi<any>(tab === "gstr3b" ? path(`/reports/gstr3b?${q}`) : null);
   if (settings && settings.company.country !== "IN") return <Alert>GST returns apply to companies registered in India.</Alert>;
   const fp = period.replace(/^(\d{4})-(\d{2})$/, "$2$1");
@@ -55,7 +56,9 @@ export default function GstReturns() {
       </div>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "gstr1", label: "GSTR-1 (outward supplies)" }, { value: "gstr3b", label: "GSTR-3B (summary & tax)" }, { value: "gstr2b", label: "GSTR-2B matching" }]} />
       {tab === "gstr2b" && <div className="mt-4"><Gstr2bMatch /></div>}
-      {err && <Alert className="mb-3">{err}</Alert>}
+      {err && (/GSTIN/.test(err)
+        ? <Alert kind="info" className="mb-3">GST returns need your GSTIN. <Link className="font-medium underline" to={`/app/${id}/settings`}>Add it in Settings → Company</Link> and the returns are prepared from your invoices and bills.</Alert>
+        : <Alert className="mb-3">{err}</Alert>)}
       {(g1.data?.warnings ?? []).map((w: string) => <Alert key={w} kind="info" className="mb-2">{w}</Alert>)}
       {tab === "gstr1" && (g1.loading && !g1.data ? <Spinner /> : g1.data && (
         <div className="space-y-4">

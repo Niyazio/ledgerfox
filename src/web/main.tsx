@@ -85,7 +85,19 @@ function Keyed({ children }: { children: (k: string) => ReactNode }) {
 }
 
 function NotFound() {
-  return <div className="p-10 text-center"><p className="text-lg font-semibold">Page not found</p><a className="text-brand-700 underline" href="/app">Go to the app</a></div>;
+  return (
+    <div className="flex min-h-full items-center justify-center px-4 py-16">
+      <div className="card w-full max-w-md p-8 text-center">
+        <img src="/favicon.svg" alt="" className="mx-auto h-12 w-12" />
+        <h1 className="mt-4 text-xl font-semibold">Page not found</h1>
+        <p className="mt-2 text-sm muted">This page does not exist or has moved. Check the address, or go back to your companies.</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <a className="rounded-xl bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800" href="/app">My companies</a>
+          <a className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium hover:bg-[var(--surface-2)]" href="/">Home page</a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
