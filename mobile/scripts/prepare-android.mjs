@@ -48,7 +48,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-/** Downloads a new LedgerFox APK from the project's GitHub releases and opens Android's installer for it. */
+/** Downloads a new Foxlator APK from the project's GitHub releases and opens Android's installer for it. */
 @CapacitorPlugin(name = "ApkUpdater")
 public class ApkUpdaterPlugin extends Plugin {
     private static final String ALLOWED = "https://github.com/Niyazio/ledgerfox/releases/download/";
@@ -63,12 +63,12 @@ public class ApkUpdaterPlugin extends Plugin {
     @PluginMethod
     public void install(PluginCall call) {
         final String url = call.getString("url", "");
-        if (!url.startsWith(ALLOWED) || !url.endsWith(".apk")) { call.reject("Only LedgerFox releases can be installed"); return; }
+        if (!url.startsWith(ALLOWED) || !url.endsWith(".apk")) { call.reject("Only Foxlator releases can be installed"); return; }
         if (Build.VERSION.SDK_INT >= 26 && !getContext().getPackageManager().canRequestPackageInstalls()) {
             Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
             settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(settings);
-            call.reject("Allow LedgerFox to install updates (the setting just opened), then tap Update again.", "PERMISSION");
+            call.reject("Allow Foxlator to install updates (the setting just opened), then tap Update again.", "PERMISSION");
             return;
         }
         new Thread(() -> {

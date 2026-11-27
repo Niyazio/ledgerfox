@@ -11,7 +11,7 @@ interface Msg { from: "me" | "bot"; text: string; reply?: Reply }
 const START: Msg = { from: "bot", text: "", reply: { text: "Hello! Ask me about your sales, dues, customers, stock, GST or how to do something.", suggestions: ["Sales this month", "Who owes me money?", "Overdue invoices", "Top customers", "Cash and bank balance", "How do I create an invoice?"] } };
 const key = (id: string) => `ledgerfox-assistant-${id}`;
 
-/** Floating "Ask LedgerFox" chat. Answers come from this company's books on the server (no AI service). */
+/** Floating "Ask Foxlator" chat. Answers come from this company's books on the server (no AI service). */
 export function Assistant() {
   const { id, path } = useCompany();
   const [open, setOpen] = useState(false);
@@ -40,15 +40,15 @@ export function Assistant() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="no-print fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-brand-700 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-brand-800" aria-label="Ask LedgerFox">
+      <button onClick={() => setOpen(true)} className="no-print fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-brand-700 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-brand-800" aria-label="Ask Foxlator">
         <MessageCircle className="h-5 w-5" /><span className="hidden sm:inline">Ask</span>
       </button>
     );
   }
   return (
-    <section aria-label="Ask LedgerFox" className="no-print fixed inset-x-2 bottom-2 z-40 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl sm:inset-x-auto sm:right-5 sm:w-[26rem]">
+    <section aria-label="Ask Foxlator" className="no-print fixed inset-x-2 bottom-2 z-40 flex max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl sm:inset-x-auto sm:right-5 sm:w-[26rem]">
       <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
-        <p className="font-semibold">Ask LedgerFox</p>
+        <p className="font-semibold">Ask Foxlator</p>
         <div className="flex items-center gap-1">
           <button className="rounded px-2 py-1 text-xs muted hover:bg-[var(--surface-2)]" onClick={() => setMsgs([START])}>Clear</button>
           <button className="rounded p-1 hover:bg-[var(--surface-2)]" onClick={() => setOpen(false)} aria-label="Close"><X className="h-4 w-4" /></button>
@@ -77,7 +77,7 @@ export function Assistant() {
         <input ref={input} className="input flex-1" placeholder="e.g. sales last month" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} aria-label="Your question" />
         <Button type="submit" disabled={!text.trim() || busy} aria-label="Send"><Send className="h-4 w-4" /></Button>
       </form>
-      <p className="px-3 pb-2 text-[10px] muted">Answers come from your own books, with your access rights. No AI service is used and nothing leaves LedgerFox.</p>
+      <p className="px-3 pb-2 text-[10px] muted">Answers come from your own books, with your access rights. No AI service is used and nothing leaves Foxlator.</p>
     </section>
   );
 }

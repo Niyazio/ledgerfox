@@ -17,9 +17,9 @@ const PATTERNS = [
 const START_B = 104;
 const STOP = 106;
 
-export const productQrPayload = (code: string, origin = "https://ledgerfox.niyazio.com") => `${origin}/scan?p=${encodeURIComponent(code)}`;
+export const productQrPayload = (code: string, origin = "https://foxlator.niyazio.com") => `${origin}/scan?p=${encodeURIComponent(code)}`;
 
-/** The product code inside anything a scanner read: a LedgerFox QR link, an older `LF1|P|` QR, or a plain code. */
+/** The product code inside anything a scanner read: a Foxlator QR link, an older `LF1|P|` QR, or a plain code. */
 export function scannedCode(raw: string): string {
   const v = raw.trim();
   const old = /^LF1\|P\|([A-Z0-9._-]{1,32})$/i.exec(v);

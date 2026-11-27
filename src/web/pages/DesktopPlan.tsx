@@ -24,15 +24,15 @@ const day = (iso: string | null) => (iso ? fmtDate(iso.slice(0, 10)) : "—");
 
 /** What a licence state means for the person at the desk, in one sentence. */
 export function licenceMessage(l: LicenceState) {
-  if (l.reason === "not_connected") return `Sign in to your LedgerFox account to continue. New accounts get a ${TRIAL_DAYS}-day free trial. Until then you can view and export, but not add entries.`;
+  if (l.reason === "not_connected") return `Sign in to your Foxlator account to continue. New accounts get a ${TRIAL_DAYS}-day free trial. Until then you can view and export, but not add entries.`;
   if (l.reason === "check_overdue") return `Connect to the internet so this computer can check your plan (needed at least every ${l.offline_days} days), then click “Check now”. Until then you can view and export, but not add entries.`;
-  if (l.reason === "autopay_required") return `Start your ${TRIAL_DAYS}-day free trial: set up auto-pay on the LedgerFox website (₹5 check, refunded; nothing is charged until the trial ends), then click “Check now”.`;
-  if (l.reason === "plan_ended") return "Your trial or plan has ended. Renew on the LedgerFox website, then click “Check now” to continue adding entries. Your data is safe.";
-  if (l.reason === "invalid") return "The licence on this computer could not be verified. Connect your LedgerFox account again.";
+  if (l.reason === "autopay_required") return `Start your ${TRIAL_DAYS}-day free trial: set up auto-pay on the Foxlator website (₹5 check, refunded; nothing is charged until the trial ends), then click “Check now”.`;
+  if (l.reason === "plan_ended") return "Your trial or plan has ended. Renew on the Foxlator website, then click “Check now” to continue adding entries. Your data is safe.";
+  if (l.reason === "invalid") return "The licence on this computer could not be verified. Connect your Foxlator account again.";
   return null;
 }
 
-/** Desktop app → Settings → Plan & billing: connect this computer to the customer's LedgerFox account. */
+/** Desktop app → Settings → Plan & billing: connect this computer to the customer's Foxlator account. */
 export function DesktopPlanTab() {
   const toast = useToast();
   const { settings } = useCompany();
@@ -56,7 +56,7 @@ export function DesktopPlanTab() {
     try {
       const r = await api.post<LicenceState>("/api/desktop/licence/connect", { login: form.login, password: form.password, totp: form.totp || undefined, org_id: form.org_id || undefined });
       setData(r); changed(); setForm({ login: "", password: "", totp: "", org_id: "" }); setOrgs(null); setNeedCode(false);
-      toast("success", "This computer is connected to your LedgerFox account");
+      toast("success", "This computer is connected to your Foxlator account");
       usage.reload();
     } catch (err) {
       if (err instanceof ApiError && err.code === "CHOOSE_ORG") { setOrgs((err.details as any)?.organisations ?? []); setProblem("Choose the organisation this computer belongs to, then connect again."); }
@@ -84,7 +84,7 @@ export function DesktopPlanTab() {
       </Card>
 
       {data.connected ? (
-        <Card title="LedgerFox account">
+        <Card title="Foxlator account">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="muted">Account</dt><dd>{data.email ?? "—"}</dd>
             <dt className="muted">Organisation</dt><dd>{data.org_name ?? "—"}</dd>
@@ -102,10 +102,10 @@ export function DesktopPlanTab() {
           </div>
         </Card>
       ) : (
-        <Card title="Connect your LedgerFox account">
-          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">ledgerfox.niyazio.com</a>. One subscription covers the website and your computers.</p>
+        <Card title="Connect your Foxlator account">
+          <p className="mb-3 text-sm">Sign in with the account you use on <a className="underline" href={buy} target="_blank" rel="noreferrer">Foxlator Cloud</a>. One subscription covers the website and your computers.</p>
           <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm dark:border-brand-900 dark:bg-brand-950/30">
-            <p className="font-medium">New to LedgerFox? Start your {TRIAL_DAYS}-day free trial</p>
+            <p className="font-medium">New to Foxlator? Start your {TRIAL_DAYS}-day free trial</p>
             <ol className="mt-1 list-decimal space-y-0.5 pl-5">
               <li>Create your free account and company on the website.</li>
               <li>Set up auto-pay there: Razorpay takes ₹5 to check it and refunds it; nothing is charged until the trial ends.</li>
@@ -146,7 +146,7 @@ export function DesktopLicenceBanner() {
   if (!note && !soon) return null;
   return (
     <div className="no-print border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-      {note ?? `Your free trial ends on ${day(data.plan_until)}. Choose a plan on the LedgerFox website to keep every feature.`}{" "}
+      {note ?? `Your free trial ends on ${day(data.plan_until)}. Choose a plan on the Foxlator website to keep every feature.`}{" "}
       <Link className="font-medium underline" to={`/app/${id}/settings?tab=billing`}>Plan & billing</Link>
     </div>
   );

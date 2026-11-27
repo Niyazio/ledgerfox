@@ -302,7 +302,7 @@ function Tds24q() {
         <Field label="Quarter">{(fid) => <Select id={fid} value={v.quarter} onChange={(e) => setV({ ...v, quarter: e.target.value })}><option value="1">Q1 Apr–Jun</option><option value="2">Q2 Jul–Sep</option><option value="3">Q3 Oct–Dec</option><option value="4">Q4 Jan–Mar</option></Select>}</Field>
         <span className="self-center text-sm muted">Deductee rows:</span><DownloadButtons onDownload={download} />
       </div>
-      <p className="mt-2 text-xs muted">Copy the rows into the deductee sheet of NSDL's free Return Preparation Utility, add the challan details, then validate with the FVU. LedgerFox does not file the return.</p>
+      <p className="mt-2 text-xs muted">Copy the rows into the deductee sheet of NSDL's free Return Preparation Utility, add the challan details, then validate with the FVU. Foxlator does not file the return.</p>
     </Card>
   );
 }

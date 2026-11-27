@@ -39,5 +39,5 @@ export async function sendMail(env: Env, mail: Mail): Promise<boolean> {
 /** The public address of this site for links in mail: APP_URL when set, otherwise the address the request came to. */
 export function siteUrl(env: Env, requestUrl?: string) {
   if (env.APP_URL && /^https:\/\/[^/]+$/.test(env.APP_URL)) return env.APP_URL;
-  return requestUrl ? new URL(requestUrl).origin : "https://ledgerfox.niyazio.com";
+  return requestUrl ? new URL(requestUrl).origin : "https://foxlator.niyazio.com";
 }

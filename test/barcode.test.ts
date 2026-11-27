@@ -26,12 +26,13 @@ describe("Code 128 barcodes", () => {
   it("rejects characters outside printable ASCII and builds SVG", () => {
     expect(() => code128("₹100")).toThrow();
     expect(code128Svg("ABC")).toContain("<rect");
-    expect(productQrPayload("P000123")).toBe("https://ledgerfox.niyazio.com/scan?p=P000123");
+    expect(productQrPayload("P000123")).toBe("https://foxlator.niyazio.com/scan?p=P000123");
     expect(productQrPayload("P000123", "http://192.168.1.5:4780")).toBe("http://192.168.1.5:4780/scan?p=P000123");
   });
 
   it("finds the product code in whatever a scanner read", () => {
-    expect(scannedCode("https://ledgerfox.niyazio.com/scan?p=P000123")).toBe("P000123");
+    expect(scannedCode("https://ledgerfox.niyazio.com/scan?p=P000123")).toBe("P000123"); // labels printed before the move
+    expect(scannedCode("https://foxlator.niyazio.com/scan?p=P000123")).toBe("P000123");
     expect(scannedCode("http://192.168.1.5:4780/scan?x=1&p=GOLD22")).toBe("GOLD22");
     expect(scannedCode("LF1|P|P000123")).toBe("P000123");
     expect(scannedCode(" 8900000000017 ")).toBe("8900000000017");

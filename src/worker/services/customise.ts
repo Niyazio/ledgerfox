@@ -1,5 +1,5 @@
 /**
- * Customising LedgerFox for a business:
+ * Customising Foxlator for a business:
  * - custom fields on sales and purchase documents, customers & suppliers and products;
  * - reports emailed on a schedule (daily summary, profit & loss, receivables, payables, stock);
  * - automation rules: when an invoice is issued, a payment arrives, a quotation is accepted… send an email or call a
@@ -152,7 +152,7 @@ export async function runAutomations(env: Env, company: Pick<CompanyRow, "id" | 
           ok = sent.some(Boolean); detail = ok ? "sent" : "email not sent (email is off or the address is invalid)";
         } else {
           const body = JSON.stringify({ event, company_id: company.id, sent_at: new Date().toISOString(), data });
-          const headers: Record<string, string> = { "content-type": "application/json", "user-agent": "LedgerFox-Webhooks/1", "x-ledgerfox-event": event };
+          const headers: Record<string, string> = { "content-type": "application/json", "user-agent": "Foxlator-Webhooks/1", "x-ledgerfox-event": event };
           if (r.secret_enc) headers["x-ledgerfox-signature"] = `sha256=${await hmacHex(await decryptSecret(env, r.secret_enc), body)}`;
           const res = await fetch(r.target, { method: "POST", headers, body, signal: AbortSignal.timeout(8000), redirect: "manual" });
           ok = res.status >= 200 && res.status < 300; detail = `HTTP ${res.status}`;

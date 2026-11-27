@@ -60,7 +60,7 @@ export function withGst(amount: number, gstPercent: number) {
 }
 
 /**
- * Education mode (practice companies) is given by LedgerFox to the emails it approves — a teacher, an institute or a
+ * Education mode (practice companies) is given by Foxlator to the emails it approves — a teacher, an institute or a
  * trainer. It is free for up to EDUCATION_FREE_DEVICES devices; a class that needs more buys a student pack, which
  * runs for 6 months. Prices are in minor units before tax. Edit freely.
  */

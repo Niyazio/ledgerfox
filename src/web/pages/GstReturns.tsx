@@ -37,7 +37,8 @@ export default function GstReturns() {
   const set = (k: string, v: string) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
   const q = `period=${period}${gstin ? `&gstin=${gstin}` : ""}`;
   const g1 = useApi<any>(path(`/reports/gstr1?${q}`));
-  const sheets = useApi<any>(tab === "gstr1" ? path(`/reports/gstr1?${q}&format=sheets`) : null);
+  // The filing sheets are asked for only once the return itself loads (not twice when the GSTIN is missing).
+  const sheets = useApi<any>(tab === "gstr1" && g1.data ? path(`/reports/gstr1?${q}&format=sheets`) : null);
   const g3 = useApi<any>(tab === "gstr3b" ? path(`/reports/gstr3b?${q}`) : null);
   if (settings && settings.company.country !== "IN") return <Alert>GST returns apply to companies registered in India.</Alert>;
   const fp = period.replace(/^(\d{4})-(\d{2})$/, "$2$1");
@@ -55,7 +56,9 @@ export default function GstReturns() {
       </div>
       <Tabs value={tab} onChange={setTab} tabs={[{ value: "gstr1", label: "GSTR-1 (outward supplies)" }, { value: "gstr3b", label: "GSTR-3B (summary & tax)" }, { value: "gstr2b", label: "GSTR-2B matching" }]} />
       {tab === "gstr2b" && <div className="mt-4"><Gstr2bMatch /></div>}
-      {err && <Alert className="mb-3">{err}</Alert>}
+      {err && (/GSTIN/.test(err)
+        ? <Alert kind="info" className="mb-3">GST returns need your GSTIN. <Link className="font-medium underline" to={`/app/${id}/settings`}>Add it in Settings → Company</Link> and the returns are prepared from your invoices and bills.</Alert>
+        : <Alert className="mb-3">{err}</Alert>)}
       {(g1.data?.warnings ?? []).map((w: string) => <Alert key={w} kind="info" className="mb-2">{w}</Alert>)}
       {tab === "gstr1" && (g1.loading && !g1.data ? <Spinner /> : g1.data && (
         <div className="space-y-4">
@@ -68,7 +71,7 @@ export default function GstReturns() {
                 <div key={l as string} className="rounded-lg border border-[var(--border)] p-3"><p className="muted">{l}</p><p className="text-lg font-semibold">{n}</p>{t !== undefined && <p className="text-xs muted">Taxable ₹{inr(t as number)} · Tax ₹{inr(x as number)}</p>}</div>
               ))}
             </div>
-            <p className="mt-3 text-xs muted">Upload the JSON in the GST offline tool (or the portal's “Prepare offline → Upload”), which validates it before you file. Nothing is sent to the GST portal from LedgerFox.</p>
+            <p className="mt-3 text-xs muted">Upload the JSON in the GST offline tool (or the portal's “Prepare offline → Upload”), which validates it before you file. Nothing is sent to the GST portal from Foxlator.</p>
           </Card>
           {s ? (["b2b", "b2cl", "b2cs", "cdnr", "hsn", "docs"] as const).map((k) => (
             <Card key={k} title={{ b2b: "4A — B2B invoices", b2cl: "5 — B2C large invoices", b2cs: "7 — B2C others", cdnr: "9B — Credit notes (registered)", hsn: "12 — HSN summary", docs: "13 — Documents issued" }[k]}>

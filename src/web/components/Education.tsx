@@ -25,13 +25,13 @@ export function EducationCard({ orgId }: { orgId: string }) {
   const a = data.access;
   const request = async (pack: string) => {
     setBusy(pack);
-    try { await api.post(`/api/education/orgs/${orgId}/request`, { pack }); toast("success", "Request sent. LedgerFox will send you the payment link and switch the pack on."); reload(); }
+    try { await api.post(`/api/education/orgs/${orgId}/request`, { pack }); toast("success", "Request sent. Foxlator will send you the payment link and switch the pack on."); reload(); }
     catch (e) { toast("error", errorMessage(e)); } finally { setBusy(null); }
   };
   return (
     <Card title={<span className="flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Education mode</span>}>
       {!data.approved ? (
-        <Alert>Education mode is not switched on for this organisation's owner. LedgerFox gives it to approved teachers, institutes and trainers: write to info@niyazio.com with the email you sign in with.</Alert>
+        <Alert>Education mode is not switched on for this organisation's owner. Foxlator gives it to approved teachers, institutes and trainers: write to info@niyazio.com with the email you sign in with.</Alert>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -68,7 +68,7 @@ export function EducationCard({ orgId }: { orgId: string }) {
                 </div>
               ))}
             </div>
-            {data.last_request && <p className="mt-2 text-xs muted">Requested the {data.last_request.students}-student pack on {day(data.last_request.at)}. LedgerFox will contact you with the payment link.</p>}
+            {data.last_request && <p className="mt-2 text-xs muted">Requested the {data.last_request.students}-student pack on {day(data.last_request.at)}. Foxlator will contact you with the payment link.</p>}
           </div>
         </div>
       )}

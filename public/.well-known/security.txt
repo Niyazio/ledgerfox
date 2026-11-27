@@ -1,5 +1,6 @@
 Contact: mailto:info@niyazio.com
 Expires: 2027-10-29T00:00:00.000Z
 Preferred-Languages: en
-Policy: https://ledgerfox.niyazio.com/security
+Policy: https://foxlator.niyazio.com/security
+Canonical: https://foxlator.niyazio.com/.well-known/security.txt
 Canonical: https://ledgerfox.niyazio.com/.well-known/security.txt

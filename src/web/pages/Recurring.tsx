@@ -29,7 +29,7 @@ export function RepeatButton({ invoiceId, number, issueDate }: { invoiceId: stri
           <Field label="End date (optional)">{(fid) => <Input id={fid} type="date" value={v.end_date} onChange={(e) => setV({ ...v, end_date: e.target.value })} />}</Field>
           {can("sales.post") && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.auto_issue} onChange={(e) => setV({ ...v, auto_issue: e.target.checked })} />Issue automatically (otherwise each one is created as a draft for you to check)</label>}
         </div>
-        <p className="mt-3 text-xs muted">The same customer, items, prices and taxes are copied. Invoices are created when anyone opens LedgerFox on or after the date (or with “Create due invoices now”).</p>
+        <p className="mt-3 text-xs muted">The same customer, items, prices and taxes are copied. Invoices are created when anyone opens Foxlator on or after the date (or with “Create due invoices now”).</p>
       </Modal>
     </>
   );

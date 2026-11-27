@@ -1,8 +1,8 @@
 /**
- * Education mode by invitation. LedgerFox approves the emails that may run practice companies; each organisation
+ * Education mode by invitation. Foxlator approves the emails that may run practice companies; each organisation
  * with a practice company may use it on a limited number of devices (10 free, or a 25 / 50 / 100 student pack for
  * 6 months). An organisation holds at most one demo or practice company, so classes stay light on the servers.
- * Applies to the hosted edition with billing on; self-hosted copies and LedgerFox staff are not limited.
+ * Applies to the hosted edition with billing on; self-hosted copies and Foxlator staff are not limited.
  */
 import type { Context } from "hono";
 import type { AppEnv, Env } from "../env";
@@ -65,11 +65,11 @@ export async function unapprovedPracticeOwners(env: Env) {
 }
 
 const notApproved = () => new AppError(403, "EDUCATION_NOT_APPROVED",
-  "Education mode is given by LedgerFox to approved teachers, institutes and trainers. Ask for access at info@niyazio.com with the email you sign in with.");
+  "Education mode is given by Foxlator to approved teachers, institutes and trainers. Ask for access at info@niyazio.com with the email you sign in with.");
 
 /**
  * Before a practice company is created: the owner must be approved, may have only as many practice companies as
- * LedgerFox allowed them (1 unless the admin panel says more), and an organisation with a demo company holds no practice one.
+ * Foxlator allowed them (1 unless the admin panel says more), and an organisation with a demo company holds no practice one.
  */
 export async function requirePracticeAllowed(c: Context<AppEnv>, orgId: string | null) {
   const user = c.get("user");
@@ -87,8 +87,8 @@ export async function requirePracticeAllowed(c: Context<AppEnv>, orgId: string |
   const n = (await first<{ n: number }>(c.env.DB,
     `SELECT COUNT(*) AS n FROM companies c JOIN organisations o ON o.id = c.org_id WHERE o.owner_user_id = ? AND c.is_practice = 1`, owner!.id))?.n ?? 0;
   if (n >= max) throw new AppError(409, "PRACTICE_LIMIT", max === 1
-    ? "Your education access includes one practice company, and it is already created. Use that one, or ask LedgerFox (info@niyazio.com) to allow more."
-    : `Your education access includes ${max} practice companies, and all are created. Ask LedgerFox (info@niyazio.com) to allow more.`);
+    ? "Your education access includes one practice company, and it is already created. Use that one, or ask Foxlator (info@niyazio.com) to allow more."
+    : `Your education access includes ${max} practice companies, and all are created. Ask Foxlator (info@niyazio.com) to allow more.`);
 }
 
 /** One demo or practice company per organisation. */
@@ -125,7 +125,7 @@ const keepDeviceCookie = (c: Context<AppEnv>, id: string) =>
 function deviceLabel(ua: string | undefined) {
   const s = ua ?? "";
   const os = /Android/i.test(s) ? "Android" : /iPhone|iPad/i.test(s) ? "iPhone / iPad" : /Windows/i.test(s) ? "Windows" : /Mac OS/i.test(s) ? "Mac" : /Linux/i.test(s) ? "Linux" : "Device";
-  const app = /Electron|LedgerFox/i.test(s) ? "desktop app" : /wv\)|Capacitor/i.test(s) ? "phone app" : /Edg\//.test(s) ? "Edge" : /Chrome\//.test(s) ? "Chrome" : /Firefox\//.test(s) ? "Firefox" : /Safari\//.test(s) ? "Safari" : "browser";
+  const app = /Electron|Foxlator/i.test(s) ? "desktop app" : /wv\)|Capacitor/i.test(s) ? "phone app" : /Edg\//.test(s) ? "Edge" : /Chrome\//.test(s) ? "Chrome" : /Firefox\//.test(s) ? "Firefox" : /Safari\//.test(s) ? "Safari" : "browser";
   return `${os} · ${app}`;
 }
 
@@ -140,7 +140,7 @@ export async function checkPracticeAccess(c: Context<AppEnv>) {
   if (isVendor(c.env, owner?.email)) return;
   const access = await educationAccess(c.env, owner?.email);
   if (!access) throw new AppError(403, "EDUCATION_NOT_APPROVED",
-    "This practice company is not open: education mode is given by LedgerFox to approved teachers and institutes. The organisation's owner can ask for access at info@niyazio.com.");
+    "This practice company is not open: education mode is given by Foxlator to approved teachers and institutes. The organisation's owner can ask for access at info@niyazio.com.");
   const id = deviceId(c);
   const now = new Date();
   const known = await first<{ last_seen_at: string }>(c.env.DB, `SELECT last_seen_at FROM education_devices WHERE org_id = ? AND device_id = ?`, company.org_id, id);

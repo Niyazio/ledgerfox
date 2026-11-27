@@ -43,7 +43,7 @@ describe("encrypted cloud backup", () => {
 
   it("connects with a backup-only key, uploads, lists and restores the data file", async () => {
     const b = new CloudBackup(join(dir, "Shop.ledgerfox"), desk, cloudFetch);
-    await expect(b.connect(email, "wrong password!", PHRASE, CLOUD)).rejects.toThrow(/Wrong LedgerFox Cloud/);
+    await expect(b.connect(email, "wrong password!", PHRASE, CLOUD)).rejects.toThrow(/Wrong Foxlator Cloud/);
     await b.connect(email, PASS, PHRASE, CLOUD);
     expect(b.status()).toMatchObject({ connected: true, enabled: true });
     const r = await b.backupNow();

@@ -1,6 +1,6 @@
 # Security
 
-Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/SecurityPage.tsx`). Team playbook (account hardening, monitoring, incident response, answering customers): `docs/SECURITY_PLAYBOOK.md`.
+Customer-facing summary: https://foxlator.niyazio.com/security (`src/web/pages/SecurityPage.tsx`). Team playbook (account hardening, monitoring, incident response, answering customers): `docs/SECURITY_PLAYBOOK.md`.
 
 ## Implemented
 
@@ -30,7 +30,7 @@ Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/
    (600,000 for PBKDF2-SHA256). On a paid Workers plan set `PBKDF2_ITERATIONS=100000` (the Workers maximum); hashes
    upgrade automatically at next login.
 2. **Two-factor sign-in is optional** (TOTP authenticator apps; the owner can require it for everyone). There is no SMS or email code.
-3. **Email verification is not required.** With email on, new accounts get a confirmation link and a reminder bar, but they can use LedgerFox before confirming. Invitation acceptance requires the logged-in email to match the invited email.
+3. **Email verification is not required.** With email on, new accounts get a confirmation link and a reminder bar, but they can use Foxlator before confirming. Invitation acceptance requires the logged-in email to match the invited email.
 4. Rate limiting is per-isolate-consistent via D1 but is not a WAF; Cloudflare's free DDoS protection applies in front.
 5. Attachments are stored in D1 (not encrypted at the application layer; D1 encrypts at rest per Cloudflare).
 6. Audit log immutability is enforced by triggers; someone with Cloudflare account access could still alter the database.
@@ -49,18 +49,18 @@ Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/
 ## Desktop edition
 
 - Data stays in the user's file; nothing leaves the computer unless phone or internet access is turned on.
-- The data file and its automatic backups are **not encrypted** by LedgerFox. Use OS login passwords and
+- The data file and its automatic backups are **not encrypted** by Foxlator. Use OS login passwords and
   BitLocker/FileVault. Anyone who can copy the file can read it with SQLite tools.
 - Only the first user can register; others are invited. Passwords use PBKDF2-SHA256 at 100,000 iterations (the
   maximum the cloud runtime accepts, kept so a file can later move to the cloud).
 - Same-Wi-Fi access is plain http inside the local network: anyone on that network who can capture traffic could see
   session cookies. Enable it only on trusted networks; Windows firewall should allow private networks only.
-- Internet link: https via Cloudflare; LedgerFox login always required; optional Cloudflare email one-time code in
+- Internet link: https via Cloudflare; Foxlator login always required; optional Cloudflare email one-time code in
   front. Client IPs are taken from Cloudflare's header only for requests that arrive through the local tunnel process.
   The random address is the only thing that changes; it is not a secret and must not be relied on for protection.
 - Installers are unsigned (no paid certificates), so users see OS warnings and cannot verify the publisher; download
   only from the project's GitHub Releases.
-- The window shows only LedgerFox (`127.0.0.1`); other links open in the system browser. Renderer is sandboxed,
+- The window shows only Foxlator (`127.0.0.1`); other links open in the system browser. Renderer is sandboxed,
   context-isolated, with no Node integration.
 
 ## Features added in v0.2
@@ -81,7 +81,7 @@ Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/
 - **AdSense:** loaded only on the public home, download and privacy pages of the cloud website, with a relaxed CSP on
   those three paths only. Links into the app do full page loads, so ad code is never present on sign-in, app,
   verification or desktop pages. The strict CSP still applies everywhere else.
-- **Android app:** a launcher that only opens http(s) addresses after confirming `/api/health` is LedgerFox;
+- **Android app:** a launcher that only opens http(s) addresses after confirming `/api/health` is Foxlator;
   cleartext is enabled for office-network addresses (same caveat as Wi-Fi access).
 
 ## Features added in v0.3
@@ -121,7 +121,7 @@ Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/
 
 ## Subscription payments (hosted edition)
 
-- **Card and UPI details never reach LedgerFox.** Payment happens in Razorpay's own window; LedgerFox only receives
+- **Card and UPI details never reach Foxlator.** Payment happens in Razorpay's own window; Foxlator only receives
   Razorpay ids and signatures.
 - **Keys stay on the server.** `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` are Worker secrets, never in code,
   in the repository or in the browser. Only the public key id is sent to the checkout page.
@@ -143,15 +143,15 @@ Customer-facing summary: https://ledgerfox.niyazio.com/security (`src/web/pages/
   account data is on screen there), and links into the app do a full page load so the ad script is gone first.
   An ad script inside the app could read invoices, customers and amounts on screen. Google's AdSense rules also do
   not allow ads inside installed software (the desktop and Android apps).
-- **Free-plan promotions** in the hosted app are plain text cards stored in LedgerFox's own database (title, text and
-  an https link checked by the server), rendered by LedgerFox itself under the same strict CSP. They are shown only
+- **Free-plan promotions** in the hosted app are plain text cards stored in Foxlator's own database (title, text and
+  an https link checked by the server), rendered by Foxlator itself under the same strict CSP. They are shown only
   to organisations on the Free plan, never to trial or paying organisations or the desktop app. They load no images or
   trackers from elsewhere. Links open in a new tab with `rel="noopener noreferrer sponsored"`, so the advertiser does
   not learn which page or company the click came from.
 
 ## What "secure" means here
 
-No software can honestly promise 100% security. LedgerFox follows the measures above, is covered by automated security
+No software can honestly promise 100% security. Foxlator follows the measures above, is covered by automated security
 tests (tenant isolation, permissions, CSRF, injection, signatures), and fails CI on high-severity dependency advisories.
 It has **not** had an independent penetration test (see "Known limitations"). Before taking real customers' money,
 consider one, and turn on two-factor sign-in for every account that can see financial data.

@@ -103,7 +103,7 @@ function Sheet({ format, name, text, children }: { format: Format; name?: string
         style={{ width: f.width, minHeight: thermal ? undefined : format === "a5" ? "210mm" : "297mm", position: "relative" }}>
         {practice && <p className="mb-2 border-2 border-orange-600 py-1 text-center text-[11px] font-black uppercase tracking-wider text-orange-700">Practice company — education mode — not a valid tax document</p>}
         {children}
-        {practice && <p className="mt-3 border-t-2 border-orange-600 pt-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">For learning only · LedgerFox education mode · not valid for any business or tax purpose</p>}
+        {practice && <p className="mt-3 border-t-2 border-orange-600 pt-1 text-center text-[10px] font-bold uppercase tracking-wider text-orange-700">For learning only · Foxlator education mode · not valid for any business or tax purpose</p>}
         {practice && <PracticeWatermark small={thermal} />}
       </div>
     </div>

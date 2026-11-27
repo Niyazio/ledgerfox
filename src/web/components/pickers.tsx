@@ -83,7 +83,7 @@ export function RegionSelect({ country, value, onChange, id, disabled, india = "
   );
 }
 
-/** Every country LedgerFox has a tax pack for, plus the stored value if it is another ISO code. */
+/** Every country Foxlator has a tax pack for, plus the stored value if it is another ISO code. */
 export function CountrySelect({ value, onChange, id, disabled }: { value: string; onChange: (code: string) => void; id?: string; disabled?: boolean }) {
   const known = COUNTRY_PACKS.some((p) => p.code === value);
   return (

@@ -1,6 +1,6 @@
 # Accounts and subscriptions: how it works for your customers
 
-This is for the hosted website (ledgerfox.niyazio.com). The desktop app has no subscriptions and does not send email.
+This is for the hosted website (foxlator.niyazio.com). The desktop app has no subscriptions and does not send email.
 
 ## Creating an account
 1. The customer opens the website and chooses **Create account**. They enter their name, email and a password of at least 10 characters.
@@ -28,7 +28,7 @@ The **owner** opens Settings → **Plan & billing** and picks Starter, Business 
   3. Razorpay then charges every month or year. It notifies the customer before each UPI debit.
 - **Pay once** (untick the box): one prepaid month or year. Renewing the same plan adds the new period to the end of the current one.
 
-LedgerFox never sees card numbers or UPI PINs. Payment happens inside Razorpay's window.
+Foxlator never sees card numbers or UPI PINs. Payment happens inside Razorpay's window.
 
 ## After paying
 - The plan shows **Active** with the end date. An emailed receipt includes:
@@ -75,13 +75,13 @@ For students, trainees and beginners: tick **Practice company (education mode)**
 
 ## Business types
 
-When creating a company, choose the type of business. LedgerFox adds suitable accounts, units, sample items, HSN codes and GST rates. Types: general, supermarket / retail, jewellery / gold & silver, clothing / textiles, mobile / electronics, medical store / pharmacy, hardware / paints, automobile garage, salon / spa / gym, agri inputs, furniture, restaurant / café, software / IT, school / coaching, clinic / hospital, manufacturing, wholesale, construction, hotel, professional services, NGO / trust, transport, and real estate / rentals.
+When creating a company, choose the type of business. Foxlator adds suitable accounts, units, sample items, HSN codes and GST rates. Types: general, supermarket / retail, jewellery / gold & silver, clothing / textiles, mobile / electronics, medical store / pharmacy, hardware / paints, automobile garage, salon / spa / gym, agri inputs, furniture, restaurant / café, software / IT, school / coaching, clinic / hospital, manufacturing, wholesale, construction, hotel, professional services, NGO / trust, transport, and real estate / rentals.
 
 **Jewellery shops:** items are priced per gram (22K, 18K, 24K, silver). Enter the weight as the quantity, to 3 decimals (12.345). Add making charges as a second line (also per gram, or a fixed amount). Update the day's gold rate in Products & stock. Old gold taken in exchange: record it as a purchase bill from the same customer (set the contact as "both" customer and supplier; account "Old Gold Purchased (Exchange)"). Their balance then shows only the difference to collect. GST rates and HSN codes are defaults: check them with your accountant.
 
 ## Customers in the Gulf and other countries
 
-- **Creating a company:** choose the country, and LedgerFox sets up its currency, financial year and tax rates. UAE: VAT 5% (plus 0%, exempt, out of scope and reverse charge). Saudi Arabia: VAT 15%. Bahrain: VAT 10%. Oman: VAT 5%. Qatar and Kuwait: no VAT.
+- **Creating a company:** choose the country, and Foxlator sets up its currency, financial year and tax rates. UAE: VAT 5% (plus 0%, exempt, out of scope and reverse charge). Saudi Arabia: VAT 15%. Bahrain: VAT 10%. Oman: VAT 5%. Qatar and Kuwait: no VAT.
 - **Tax number:** UAE asks for the 15-digit **TRN**; Saudi Arabia for the 15-digit **VAT number** (starts and ends with 3). Both are checked.
 - **Invoices:** VAT-registered sellers print a **Tax Invoice** with both parties' VAT numbers. In Saudi Arabia, a sale to someone without a VAT number prints as a **Simplified Tax Invoice**. Saudi invoices always print in English and Arabic and carry the **ZATCA QR code**. Any company can choose English + Arabic in Settings → Bill language.
 - **Wider region:** Egypt, Jordan, Lebanon, Iraq, Türkiye, Morocco, Algeria, Tunisia, Libya and Pakistan are also set up with their tax rates and currencies (3-decimal dinars where official).
@@ -89,9 +89,9 @@ When creating a company, choose the type of business. LedgerFox adds suitable ac
 - **Gratuity:** Payroll → End-of-service gratuity (UAE and Saudi labour law), from each employee's joining date and basic salary.
 - **Arabic:** the app menu and POS in Arabic (right to left); Saudi invoices also show the Hijri date.
 - **Not included yet:** Saudi ZATCA phase 2 (sending signed XML invoices to the FATOORA platform), UAE e-invoicing through an accredited provider, Arabic for the app screens (only bills are in Arabic), and Gulf payroll rules (end-of-service gratuity, WPS salary files). Customers subject to phase 2 must still use an approved e-invoicing solution for that step.
-- **Paying for LedgerFox:** UAE customers pay in AED, Saudi customers in SAR, and others in USD, by card, with auto-renew.
+- **Paying for Foxlator:** UAE customers pay in AED, Saudi customers in SAR, and others in USD, by card, with auto-renew.
 
-## Helping a customer (admin panel, https://ledgerfox.niyazio.com/vendor)
+## Helping a customer (admin panel, https://foxlator.niyazio.com/vendor)
 
 - **"I forgot my password / ID":** Accounts tab → search their name → the sign-in ID is shown. Click **Reset password** and send them the one-time password (WhatsApp or phone). They choose a new one when they sign in. Nobody can see an old password.
 - **"I paid you in cash / by bank":** open the organisation → **Record cash / bank payment** (makes an invoice) or **Give free access** (no invoice).

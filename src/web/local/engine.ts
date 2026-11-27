@@ -1,5 +1,5 @@
 /**
- * Offline copy engine for the Android app: runs the same LedgerFox API (src/worker) inside the phone's WebView against
+ * Offline copy engine for the Android app: runs the same Foxlator API (src/worker) inside the phone's WebView against
  * a read-only copy of the desktop data file, so every screen works without a network.
  */
 import initSqlJs from "sql.js";
@@ -15,7 +15,7 @@ export async function startEngine(bytes: Uint8Array) {
   const SQL = await initSqlJs({ locateFile: () => wasmUrl });
   const db = new SqlJsD1(new SQL.Database(bytes));
   const { default: app } = await import("../../worker/index");
-  const env = { DB: db as unknown as D1Database, BRAND_NAME: "LedgerFox", APP_ENV: "offline", PBKDF2_ITERATIONS: "100000", ALLOW_REGISTRATION: "false" };
+  const env = { DB: db as unknown as D1Database, BRAND_NAME: "Foxlator", APP_ENV: "offline", PBKDF2_ITERATIONS: "100000", ALLOW_REGISTRATION: "false" };
   try { session = sessionStorage.getItem("ledgerfox-offline-session") ?? ""; } catch { /* unavailable */ }
   fetcher = async (req: Request) => {
     const url = new URL(req.url);

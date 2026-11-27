@@ -91,7 +91,7 @@ export default function Verify() {
             <div className="text-center">
               <ShieldX className="mx-auto h-12 w-12 text-red-600" />
               <h1 className="mt-3 text-xl font-semibold">Not verified</h1>
-              <p className="mt-1 text-sm muted">This code does not match any record. The document may be altered or not issued through LedgerFox.</p>
+              <p className="mt-1 text-sm muted">This code does not match any record. The document may be altered or not issued through Foxlator.</p>
             </div>
           )}
           {data?.lines && <SharedDocument data={data} />}

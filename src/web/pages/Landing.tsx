@@ -28,7 +28,7 @@ export default function Landing() {
   if (me?.user) return <Navigate to="/app" replace />;
   // The desktop app has no marketing page: first launch creates the owner, later launches sign in.
   if (me?.edition === "desktop") return <Navigate to={me.registration === "open" ? "/register" : "/login"} replace />;
-  const brand = me?.brand ?? "LedgerFox";
+  const brand = me?.brand ?? "Foxlator";
   return (
     <div className="min-h-full">
       <AdSense />
@@ -38,7 +38,7 @@ export default function Landing() {
           <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Toggle theme">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
           <InstallAppButton oneClickOnly className="hidden sm:inline-flex" />
           <Link to="/download" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] sm:inline-block">Get the app</Link>
-          <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] md:inline-block">User manual</a>
+          <a href="/manual/Foxlator-User-Manual.pdf" target="_blank" rel="noreferrer" className="hidden rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)] md:inline-block">User manual</a>
           <a href="/login" className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-[var(--surface-2)]">Sign in</a>
           <a href="/register" className="rounded-lg bg-brand-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-800">Create account</a>
         </nav>
@@ -50,6 +50,7 @@ export default function Landing() {
               <Lock className="h-3.5 w-3.5" /> 30-day free trial · works offline · your data, exportable any time
             </p>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Accounting software that keeps the books honest.</h1>
+            <p className="mt-2 text-sm muted">Foxlator is the new name of LedgerFox: same app, same account, same data.</p>
             <p className="mt-5 text-lg muted">
               {brand} is a cloud accounting system for small and growing businesses: invoicing, purchases, expenses, banking, inventory,
               fixed assets and financial statements on a proper double-entry ledger. India GST support is built in; other countries use configurable tax codes.

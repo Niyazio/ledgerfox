@@ -11,7 +11,7 @@ import { PAID_PLANS, type Interval } from "@shared/plans";
 import { PromotionsAdmin, SetupCheck } from "./Billing";
 
 /**
- * /vendor — the admin panel for the people selling LedgerFox (VENDOR_ADMIN_EMAILS): organisations, sign-in accounts,
+ * /vendor — the admin panel for the people selling Foxlator (VENDOR_ADMIN_EMAILS): organisations, sign-in accounts,
  * subscriptions, trials, auto-pay, payments, set-up and promotions. Customers' business records are only counted.
  */
 
@@ -53,7 +53,7 @@ const detailText = (raw: string | null) => {
 /** A one-time password created by the admin, shown once to pass on to the customer. */
 function TempPassword({ result, onClose }: { result: { sign_in_id: string; email: string; temporary_password: string } | null; onClose: () => void }) {
   if (!result) return null;
-  const text = `LedgerFox sign-in\nID: ${result.sign_in_id}\nOne-time password: ${result.temporary_password}\nYou will choose your own password after signing in.`;
+  const text = `Foxlator sign-in\nID: ${result.sign_in_id}\nOne-time password: ${result.temporary_password}\nYou will choose your own password after signing in.`;
   return (
     <Modal open title="New one-time password" onClose={onClose}>
       <div className="space-y-3 text-sm">
@@ -123,7 +123,7 @@ export function VendorPanel() {
   const [tab, setTab] = useState<TabId>("overview");
   const [openOrg, setOpenOrg] = useState<string | null>(null);
   const probe = useApi<any>("/api/billing/vendor/overview");
-  if (probe.error) return <div className="mx-auto max-w-xl p-8"><Alert>{probe.error}</Alert><p className="mt-3 text-sm muted">This page is for LedgerFox's own staff (VENDOR_ADMIN_EMAILS).</p></div>;
+  if (probe.error) return <div className="mx-auto max-w-xl p-8"><Alert>{probe.error}</Alert><p className="mt-3 text-sm muted">This page is for Foxlator's own staff (VENDOR_ADMIN_EMAILS).</p></div>;
   if (!probe.data) return <Spinner />;
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">

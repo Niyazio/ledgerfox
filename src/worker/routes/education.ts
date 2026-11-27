@@ -9,7 +9,7 @@ import { billingEvent, isVendor, orgBillingCurrency } from "../services/billing"
 import { educationAccess, educationEnforced, listEducationAccess, unapprovedPracticeOwners } from "../services/education";
 import { EDUCATION_FREE_DEVICES, EDUCATION_PACK_IDS, EDUCATION_PACK_MONTHS, EDUCATION_PACKS, type EducationPackId } from "@shared/plans";
 
-/** Education mode: the owner's view (devices, packs) and LedgerFox's approvals in the admin panel. */
+/** Education mode: the owner's view (devices, packs) and Foxlator's approvals in the admin panel. */
 export const education = new Hono<AppEnv>();
 education.use("*", requireAuth);
 
@@ -57,19 +57,19 @@ education.delete("/orgs/:orgId/devices/:deviceId", async (c) => {
   return c.json({ ok: true });
 });
 
-/** Ask LedgerFox for a student pack; LedgerFox sends the payment link and switches it on in the admin panel. */
+/** Ask Foxlator for a student pack; Foxlator sends the payment link and switches it on in the admin panel. */
 education.post("/orgs/:orgId/request", async (c) => {
   const orgId = c.req.param("orgId");
   await manager(c, orgId);
   const input = await body(c, z.object({ pack: z.enum(EDUCATION_PACK_IDS as [EducationPackId, ...EducationPackId[]]), note: shortText(500).nullish() }));
   const recent = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM billing_events WHERE org_id = ? AND kind = 'education_pack_requested' AND created_at > ?`,
     orgId, new Date(Date.now() - 86_400_000).toISOString());
-  if ((recent?.n ?? 0) >= 3) throw new AppError(429, "TOO_MANY_REQUESTS", "Your request has already been sent. LedgerFox will contact you soon.");
+  if ((recent?.n ?? 0) >= 3) throw new AppError(429, "TOO_MANY_REQUESTS", "Your request has already been sent. Foxlator will contact you soon.");
   await billingEvent(c.env, orgId, "education_pack_requested", { pack: input.pack, students: EDUCATION_PACKS[input.pack].students, note: input.note ?? null, email: c.get("user").email }, c.get("user").email, c.get("user").id);
   return c.json({ ok: true });
 });
 
-// ── LedgerFox staff (admin panel) ──
+// ── Foxlator staff (admin panel) ──
 
 const vendorOnly = (c: Context<AppEnv>) => { if (!isVendor(c.env, c.get("user").email)) throw notFound("Page"); };
 

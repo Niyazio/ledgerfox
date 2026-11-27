@@ -25,17 +25,24 @@ import { setPracticeExports } from "../lib/csv";
 import { rememberCompany } from "../lib/lastCompany";
 import { flushOutbox, removeOutboxEntry, retryOutboxEntry, useOnline, useOutbox, warmOfflineCache } from "../lib/offline";
 
-/** LedgerFox mark: geometric fox head on a blue tile (matches public/favicon.svg). */
+/** Foxlator mark: geometric fox whose face is a calculator, on a blue tile (matches public/favicon.svg). */
 export function Logo({ className = "h-7 w-7" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#1d4ed8" />
-      <path d="M6.5 5.5 13 11.5h6l6.5-6v10.5L16 27 6.5 16z" fill="#fff" />
-      <path d="M8.6 8.9 11.4 11.5 8.6 13.9z M23.4 8.9 20.6 11.5 23.4 13.9z" fill="#93c5fd" />
-      <path d="M6.5 16 16 27l-4.6-9.6z M25.5 16 16 27l4.6-9.6z" fill="#dbeafe" />
-      <circle cx="12.4" cy="15.6" r="1.25" fill="#172554" />
-      <circle cx="19.6" cy="15.6" r="1.25" fill="#172554" />
-      <path d="M14.6 20.6h2.8L16 22.4z" fill="#172554" />
+    <svg viewBox="0 0 200 200" className={className} aria-hidden>
+      <rect width="200" height="200" rx="44" fill="#1F4FD8" />
+      <g transform="translate(14,10) scale(0.86)">
+        <path d="M38 28 L72 58 H128 L162 28 V98 L100 172 L38 98 Z" fill="#FFFFFF" />
+        <path d="M47 46 V70 L62 58 Z M153 46 V70 L138 58 Z" fill="#93C5FD" />
+        <path d="M38 98 L74 106 L100 172 Z M162 98 L126 106 L100 172 Z" fill="#DBEAFE" />
+        <rect x="68" y="63" width="64" height="17" rx="4.5" fill="#13214F" />
+        <path d="M112 69 H124 M112 74 H124" stroke="#93C5FD" strokeWidth="2.4" strokeLinecap="round" />
+        <circle cx="80" cy="97" r="7" fill="#13214F" />
+        <circle cx="120" cy="97" r="7" fill="#13214F" />
+        <path d="M91 116 H109 L100 128 Z" fill="#13214F" />
+        <rect x="58" y="106" width="15" height="15" rx="3.5" fill="#93C5FD" />
+        <rect x="127" y="106" width="15" height="15" rx="3.5" fill="#93C5FD" />
+        <path d="M65.5 109.5 V117.5 M61.5 113.5 H69.5 M130.5 113.5 H138.5" stroke="#13214F" strokeWidth="2.4" strokeLinecap="round" />
+      </g>
     </svg>
   );
 }
@@ -47,13 +54,13 @@ export function ProductCredit({ className = "" }: { className?: string }) {
   return (
     <p className={`text-xs muted ${className}`}>
       A product of <a href="https://niyazio.com" target="_blank" rel="noreferrer" className="font-medium hover:underline">Niyazio</a> · Support:{" "}
-      <a href={`mailto:${SUPPORT_EMAIL}?subject=LedgerFox%20support`} className="hover:underline">{SUPPORT_EMAIL}</a>
+      <a href={`mailto:${SUPPORT_EMAIL}?subject=Foxlator%20support`} className="hover:underline">{SUPPORT_EMAIL}</a>
     </p>
   );
 }
 
 /** Mark plus brand name. */
-export function Wordmark({ brand = "LedgerFox", iconClass }: { brand?: string; iconClass?: string }) {
+export function Wordmark({ brand = "Foxlator", iconClass }: { brand?: string; iconClass?: string }) {
   return (
     <span className="flex items-center gap-2 font-semibold tracking-tight">
       <Logo className={iconClass} />
@@ -326,7 +333,7 @@ function Shell() {
     nav("/login");
   };
   useEffect(() => {
-    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "LedgerFox"}`;
+    if (settings) document.title = `${settings.company.name} · ${me?.brand ?? "Foxlator"}`;
   }, [settings, me?.brand]);
   return (
     <div className="flex h-full">
@@ -361,7 +368,7 @@ function Shell() {
               <Shortcuts items={GOTO_ITEMS} />
               <UpdateCenter />
             </div>
-            <a href="/manual/LedgerFox-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
+            <a href="/manual/Foxlator-User-Manual.pdf" target="_blank" rel="noreferrer" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="User manual" title="User manual (PDF, with screenshots)"><BookOpen className="h-4 w-4" /></a>
             <LangPicker />
             <div className="hidden sm:block"><ThemePicker /></div>
             {me?.is_vendor && <a href="/vendor" className="rounded-lg p-2 hover:bg-[var(--surface-2)]" aria-label="Admin panel" title="Admin panel (subscribers, trials, payments)"><ShieldCheck className="h-4 w-4" /></a>}

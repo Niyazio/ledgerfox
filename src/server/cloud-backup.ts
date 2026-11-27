@@ -1,7 +1,7 @@
 /**
  * Automatic encrypted cloud backup for a desktop data file.
  * The file is compressed and encrypted here (AES-256-GCM, key = scrypt(passphrase, random salt)), then uploaded in
- * parts to the owner's LedgerFox Cloud account. The server never sees the passphrase or the data.
+ * parts to the owner's Foxlator Cloud account. The server never sees the passphrase or the data.
  * Settings live next to the data file in "<file>.cloud.json" (owner-only permissions).
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
@@ -31,7 +31,7 @@ export function encrypt(plain: Buffer, key: Buffer, salt: Buffer): Buffer {
 }
 
 export function decrypt(blob: Buffer, passphrase: string): Buffer {
-  if (!blob.subarray(0, 5).equals(MAGIC)) throw new Error("Not a LedgerFox backup");
+  if (!blob.subarray(0, 5).equals(MAGIC)) throw new Error("Not a Foxlator backup");
   const salt = blob.subarray(5, 21), iv = blob.subarray(21, 33), tag = blob.subarray(blob.length - 16), body = blob.subarray(33, blob.length - 16);
   const d = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt), iv);
   d.setAuthTag(tag);
@@ -63,21 +63,21 @@ export class CloudBackup {
     if (token) headers.set("authorization", `Bearer ${token}`);
     const res = await this.fetchImpl(`${base}${path}`, { ...init, headers });
     if (!res.ok) {
-      let msg = `LedgerFox Cloud answered ${res.status}`;
+      let msg = `Foxlator Cloud answered ${res.status}`;
       try { msg = ((await res.json()) as { error?: { message?: string } }).error?.message ?? msg; } catch { /* not JSON */ }
       throw new Error(msg);
     }
     return res;
   }
 
-  /** Sign in to LedgerFox Cloud once, obtain a backup-only key, and remember the encryption key derived from the passphrase. */
+  /** Sign in to Foxlator Cloud once, obtain a backup-only key, and remember the encryption key derived from the passphrase. */
   async connect(login: string, password: string, passphrase: string, cloudUrl = DEFAULT_CLOUD) {
     if (passphrase.length < 8) throw new Error("Use a backup passphrase of at least 8 characters");
     this.settings = null;
     const res = await this.fetchImpl(`${cloudUrl}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json", "x-requested-with": "ledgerfox" }, body: JSON.stringify({ login, password }) });
-    if (!res.ok) throw new Error(res.status === 401 ? "Wrong LedgerFox Cloud username or password" : `LedgerFox Cloud sign-in failed (${res.status})`);
+    if (!res.ok) throw new Error(res.status === 401 ? "Wrong Foxlator Cloud username or password" : `Foxlator Cloud sign-in failed (${res.status})`);
     const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0];
-    if (!cookie) throw new Error("LedgerFox Cloud did not return a session");
+    if (!cookie) throw new Error("Foxlator Cloud did not return a session");
     const tok = await this.fetchImpl(`${cloudUrl}/api/backups/token`, { method: "POST", headers: { "content-type": "application/json", "x-requested-with": "ledgerfox", cookie }, body: JSON.stringify({ label: `Desktop backup · ${basename(this.dataFile)}` }) });
     if (!tok.ok) throw new Error(`Could not create a backup key (${tok.status})`);
     const { token } = (await tok.json()) as { token: string };
@@ -151,7 +151,7 @@ export class CloudBackup {
     const blob = Buffer.concat(parts);
     if (createHash("sha256").update(blob).digest("hex") !== b.sha256) throw new Error("The downloaded backup is damaged (checksum mismatch)");
     const plain = gunzipSync(decrypt(blob, passphrase));
-    if (plain.subarray(0, 15).toString() !== "SQLite format 3") throw new Error("The backup does not contain a LedgerFox data file");
+    if (plain.subarray(0, 15).toString() !== "SQLite format 3") throw new Error("The backup does not contain a Foxlator data file");
     const stem = basename(this.dataFile).replace(/\.ledgerfox$/i, "");
     const target = join(dirname(this.dataFile), `${stem} (restored ${b.created_at.slice(0, 16).replace(/[T:]/g, "-")}).ledgerfox`);
     await writeFile(target, plain);

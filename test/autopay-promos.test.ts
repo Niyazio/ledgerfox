@@ -11,7 +11,7 @@ async function billedWorld() {
   return W;
 }
 
-/** A small stand-in for Razorpay's API that records what LedgerFox asked for. */
+/** A small stand-in for Razorpay's API that records what Foxlator asked for. */
 function mockRazorpay(payments: Record<string, { amount: number; status: string }> = {}) {
   const calls: { method: string; path: string; body: any }[] = [];
   let n = 0;

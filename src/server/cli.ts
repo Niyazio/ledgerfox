@@ -1,6 +1,6 @@
 /**
- * Headless LedgerFox server for an always-on office computer or mini-PC.
- *   node ledgerfox-server.mjs --data "C:\LedgerFox\Data\My Business.ledgerfox" [--port 4780] [--lan]
+ * Headless Foxlator server for an always-on office computer or mini-PC.
+ *   node ledgerfox-server.mjs --data "C:\Foxlator\Data\My Business.ledgerfox" [--port 4780] [--lan]
  * Without --lan only this computer can connect; with --lan, phones and PCs on the same network can too.
  */
 import { resolve, join, dirname } from "node:path";
@@ -16,7 +16,7 @@ function arg(name: string): string | undefined {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dataFile = resolve(arg("data") ?? "LedgerFox.ledgerfox");
+const dataFile = resolve(arg("data") ?? "Foxlator.ledgerfox");
 const lan = process.argv.includes("--lan");
 mkdirSync(dirname(dataFile), { recursive: true });
 
@@ -27,13 +27,13 @@ const server = await startServer({
   host: lan ? "0.0.0.0" : "127.0.0.1",
   port: Number(arg("port") ?? 4780),
 });
-console.log(`LedgerFox is running. Data file: ${dataFile}`);
+console.log(`Foxlator is running. Data file: ${dataFile}`);
 console.log(`  This computer: http://127.0.0.1:${server.port}`);
 const firstPassword = getFirstRunPassword();
 if (firstPassword) console.log(`  First sign-in: username "admin", one-time password ${firstPassword} (change it when asked)`);
 if (lan) for (const list of Object.values(networkInterfaces())) for (const a of list ?? []) if (a.family === "IPv4" && !a.internal) console.log(`  Same network:  http://${a.address}:${server.port}`);
 if (process.argv.includes("--pair")) {
-  // One-time code for the LedgerFox Android app to download a view-only copy (valid 10 minutes).
+  // One-time code for the Foxlator Android app to download a view-only copy (valid 10 minutes).
   const t = server.createPairToken();
   console.log(`  Phone copy:    http://127.0.0.1:${server.port}/api/pair/${t}`);
 }

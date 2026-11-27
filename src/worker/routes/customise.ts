@@ -108,7 +108,7 @@ customise.get("/report-schedules", async (c) => {
 customise.post("/report-schedules", async (c) => {
   requirePerm(c, "reports.read");
   requirePerm(c, "company.manage");
-  if (!emailOn(c.env)) throw new AppError(409, "EMAIL_OFF", "Reports are sent by email, which is not set up on this LedgerFox yet. Please contact LedgerFox.");
+  if (!emailOn(c.env)) throw new AppError(409, "EMAIL_OFF", "Reports are sent by email, which is not set up on this Foxlator yet. Please contact Foxlator.");
   const company = c.get("company");
   const input = await body(c, z.object({ report: z.enum(REPORTS), frequency: z.enum(["daily", "weekly", "monthly"]), weekday: z.number().int().min(0).max(6).optional(), recipients: emails, send_now: z.boolean().optional() }));
   const id = newId();
@@ -154,7 +154,7 @@ customise.post("/automations", async (c) => {
     let u: URL;
     try { u = new URL(target); } catch { throw badRequest("Enter the full https:// address of the webhook"); }
     if (u.protocol !== "https:" || /^(localhost|127\.|10\.|192\.168\.|169\.254\.)/.test(u.hostname)) throw badRequest("The webhook must be a public https:// address");
-    if (!secretsReady(c.env)) throw new AppError(503, "DATA_KEY_MISSING", "Webhooks are not available yet: the LedgerFox server needs its DATA_KEY secret. Please contact LedgerFox.");
+    if (!secretsReady(c.env)) throw new AppError(503, "DATA_KEY_MISSING", "Webhooks are not available yet: the Foxlator server needs its DATA_KEY secret. Please contact Foxlator.");
     secret = `whsec_${randomToken(24)}`;
   }
   const n = await first<{ n: number }>(c.env.DB, `SELECT COUNT(*) AS n FROM automation_rules WHERE company_id = ?`, company.id);
@@ -166,7 +166,7 @@ customise.post("/automations", async (c) => {
       id, company.id, input.name, input.event, min, input.action, target, secret ? await encryptSecret(c.env, secret) : null, c.get("user").id),
     audit(c, "automation.create", "automation_rule", id, { name: input.name, event: input.event, action: input.action }),
   ]);
-  // The signing secret is shown once, so the receiving system can check the X-LedgerFox-Signature header.
+  // The signing secret is shown once, so the receiving system can check the X-Foxlator-Signature header.
   return c.json({ id, signing_secret: secret }, 201);
 });
 

@@ -71,3 +71,5 @@ jobs:
         run: |
           sleep 5
           curl -fsS https://ledgerfox.niyazio.com/api/health | tee /dev/stderr | grep -q '"status":"ok"'
+          # The new address gets its certificate on the first deploy; give it a minute, but do not fail the deploy on it.
+          for i in 1 2 3 4 5 6; do curl -fsS https://foxlator.niyazio.com/api/health && break; sleep 10; done || true

@@ -20,7 +20,9 @@
   ],
   // Custom Domain: Cloudflare creates the DNS record and TLS certificate on deploy.
   // Requires niyazio.com to be an active zone in the same Cloudflare account.
-  "routes": [{ "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
+  // foxlator.niyazio.com is the main address; ledgerfox.niyazio.com keeps working for existing links, printed QR
+  // codes, Razorpay webhooks and the installed desktop / Android apps.
+  "routes": [{ "pattern": "foxlator.niyazio.com", "custom_domain": true }, { "pattern": "ledgerfox.niyazio.com", "custom_domain": true }],
   "observability": { "enabled": true },
   // Smart Placement (free): runs the Worker close to the D1 database instead of close to the visitor, because one
   // screen makes several database queries and each one would otherwise cross the world and back.
@@ -30,7 +32,7 @@
   // Keep variables added in the Cloudflare dashboard (e.g. VENDOR_ADMIN_EMAILS) when CI deploys; values below still win.
   "keep_vars": true,
   "vars": {
-    "BRAND_NAME": "LedgerFox",
+    "BRAND_NAME": "Foxlator",
     "APP_ENV": "production",
     "PBKDF2_ITERATIONS": "50000",
     "ALLOW_REGISTRATION": "true",
@@ -38,7 +40,7 @@
     // Subscriptions on the hosted website (BILLING.md). Razorpay keys are Worker secrets, never in this file.
     "BILLING_ENABLED": "true",
     // Public address used in links inside emails.
-    "APP_URL": "https://ledgerfox.niyazio.com",
+    "APP_URL": "https://foxlator.niyazio.com",
     // Printed on subscription invoices (public business registration number).
     "VENDOR_UDYAM": "UDYAM-KR-11-0094729",
     // New organisations set up auto-pay (₹5 refundable check) to start the 30-day free trial.

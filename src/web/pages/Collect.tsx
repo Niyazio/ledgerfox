@@ -42,7 +42,7 @@ export function CollectionTab() {
     <div className="space-y-4">
       {err && <Alert>{err}</Alert>}
       {data.secrets_ready && <Card title={<span className="flex items-center gap-2"><CreditCard className="h-5 w-5" />Customers pay invoices online</span>}>
-        <p className="text-sm muted">Customers pay from the invoice link you send (or their customer portal) by UPI, card, net banking or wallet. The money goes straight to <b>your own Razorpay account</b>, and LedgerFox records the receipt against the invoice automatically.</p>
+        <p className="text-sm muted">Customers pay from the invoice link you send (or their customer portal) by UPI, card, net banking or wallet. The money goes straight to <b>your own Razorpay account</b>, and Foxlator records the receipt against the invoice automatically.</p>
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
           <li>Sign up or log in at razorpay.com (free; Razorpay charges a small fee per payment).</li>
           <li>Razorpay → Account &amp; Settings → <b>API Keys</b>: generate a key and copy the Key ID and Key Secret here.</li>
@@ -328,7 +328,7 @@ export function CustomerPortal() {
       </>}
       <p className="mt-6 text-xs muted">This page is private to you. Questions about your account? Contact {data.business.name}{data.business.phone ? ` on ${data.business.phone}` : ""}.</p>
       <ProductCredit className="mt-4 text-center" />
-      <Link to="/" className="sr-only">LedgerFox</Link>
+      <Link to="/" className="sr-only">Foxlator</Link>
     </div>
   );
 }

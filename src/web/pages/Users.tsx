@@ -15,7 +15,7 @@ function OneTimePassword({ who, password, onClose }: { who: string; password: st
   const toast = useToast();
   return (
     <Modal open title="One-time password" onClose={onClose}>
-      <p className="text-sm">Give this to <b>{who}</b> privately. It is shown only now; LedgerFox stores only a hash. They must choose their own password at first sign-in.</p>
+      <p className="text-sm">Give this to <b>{who}</b> privately. It is shown only now; Foxlator stores only a hash. They must choose their own password at first sign-in.</p>
       <p className="my-4 select-all rounded-lg bg-[var(--surface-2)] p-3 text-center font-mono text-lg tracking-wide">{password}</p>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(password); toast("success", "Copied"); }}><Copy className="h-4 w-4" />Copy</Button>
@@ -93,7 +93,7 @@ function RoleEditor({ orgId }: { orgId: string }) {
       <div className="mt-4 flex flex-wrap gap-2">
         <Button loading={busy} disabled={!draft} onClick={async () => { if (await run(() => api.put(`/api/orgs/${orgId}/roles/${role}`, { permissions: perms }))) { toast("success", `${ROLE_LABELS[role]} updated`); setDraft(null); roles.reload(); } }}>Save {ROLE_LABELS[role]}</Button>
         {draft && <Button variant="secondary" onClick={() => setDraft(null)}>Discard changes</Button>}
-        {current?.customised && <ConfirmButton label="Reset to defaults" title={`Reset ${ROLE_LABELS[role]}?`} body="The role goes back to LedgerFox's default permissions." confirmLabel="Reset" onConfirm={async () => { await api.del(`/api/orgs/${orgId}/roles/${role}`); setDraft(null); roles.reload(); }} />}
+        {current?.customised && <ConfirmButton label="Reset to defaults" title={`Reset ${ROLE_LABELS[role]}?`} body="The role goes back to Foxlator's default permissions." confirmLabel="Reset" onConfirm={async () => { await api.del(`/api/orgs/${orgId}/roles/${role}`); setDraft(null); roles.reload(); }} />}
       </div>
     </Card>
   );
@@ -157,7 +157,7 @@ export function MembersTab() {
             <Field label="Role">{(id) => <Select id={id} value={nu.role} onChange={(e) => setNu({ ...nu, role: e.target.value })}>{assignable.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>}</Field>
             <Button loading={busy} onClick={async () => { const r = await run(() => api.post(`/api/orgs/${orgId}/users`, { ...nu, ...(scope?.all === false ? { branches: { company_id: companyId, all_branches: false, branch_ids: scope.ids } } : {}) })); if (r) { setShown({ who: nu.name || r.username, password: r.temporary_password }); setNu({ name: "", username: "", role: nu.role }); org.reload(); } }}>Add user</Button>
           </div>
-          <p className="mt-2 text-xs muted">LedgerFox creates a random one-time password for each person (never a shared default). {scope?.all === false ? "New users work in your branches; adjust with “Change” in the Branches column." : "New users can see all branches until you limit them with “Change” in the Branches column."}</p>
+          <p className="mt-2 text-xs muted">Foxlator creates a random one-time password for each person (never a shared default). {scope?.all === false ? "New users work in your branches; adjust with “Change” in the Branches column." : "New users can see all branches until you limit them with “Change” in the Branches column."}</p>
           <p className="mt-2 text-xs muted">{ROLE_LABELS[nu.role as Role]}: {ROLE_DESCRIPTIONS[nu.role as Role]}</p>
         </Card>
       )}

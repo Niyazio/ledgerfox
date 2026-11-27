@@ -17,7 +17,7 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "lf-desktop-"));
   const web = join(dir, "web");
   mkdirSync(join(web, "assets"), { recursive: true });
-  writeFileSync(join(web, "index.html"), "<!doctype html><title>LedgerFox</title>");
+  writeFileSync(join(web, "index.html"), "<!doctype html><title>Foxlator</title>");
   writeFileSync(join(web, "assets", "app.js"), "console.log(1)");
   writeFileSync(join(dir, "secret.txt"), "do not serve");
   srv = await startServer({ dataFile: join(dir, "data", "Test.ledgerfox"), webDir: web, migrationsDir: join(import.meta.dirname, "..", "migrations"), host: "127.0.0.1", port: 0, env: { PBKDF2_ITERATIONS: "1000", DESKTOP_LICENSING: "off" } }); // licensing has its own tests (licence.test.ts)
@@ -46,7 +46,7 @@ describe("desktop server", () => {
   it("serves the UI with SPA fallback, security headers, and nothing outside the web folder", async () => {
     const page = await fetch(`${base}/app/anything`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("<title>LedgerFox</title>");
+    expect(await page.text()).toContain("<title>Foxlator</title>");
     expect(page.headers.get("content-security-policy")).toContain("script-src 'self'");
     expect((await fetch(`${base}/assets/app.js`)).headers.get("cache-control")).toContain("immutable");
     expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);

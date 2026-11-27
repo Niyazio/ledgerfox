@@ -36,7 +36,7 @@ describe("desktop app licence", () => {
     expect((await deskOwner.get("/api/desktop/licence")).json).toMatchObject({ connected: false, plan: "free", reason: "not_connected" });
     const held = await deskOwner.post(c("/items"), { kind: "goods", name: "Soap", sale_price: "5" });
     expect([held.status, held.json.error.code]).toEqual([402, "RENEW_REQUIRED"]);
-    expect(held.json.error.message).toMatch(/Sign in to your LedgerFox account/);
+    expect(held.json.error.message).toMatch(/Sign in to your Foxlator account/);
     expect((await deskOwner.get(`/api/billing/org/${deskOrg}`)).json.renew_required).toBe(true);
     expect((await deskOwner.get(c("/items"))).status).toBe(200);
     expect((await deskOwner.post(`/api/orgs/${deskOrg}/users`, { name: "Staff", username: "desk.staff", role: "billing" })).json.error.code).toBe("PLAN_LIMIT");

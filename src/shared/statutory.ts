@@ -27,7 +27,7 @@ const rupees = (paise: number) => Math.round(paise / 100);
 const pctRupees = (paiseBase: number, bp: number) => Math.round((rupees(paiseBase) * bp) / 10_000);
 
 export function ecrRow(s: StatSlip) {
-  // LedgerFox computes PF on basic up to the ₹15,000 ceiling, so EPF, EPS and EDLI wages are the same figure.
+  // Foxlator computes PF on basic up to the ₹15,000 ceiling, so EPF, EPS and EDLI wages are the same figure.
   const capped = Math.min(s.basic, PF_WAGE_CEILING);
   const epf = rupees(s.pf_employee);
   const eps = Math.min(pctRupees(capped, EPS_RATE_BP), rupees(s.pf_employer));

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isNativeApp } from "./api";
 
 /**
- * Is a newer LedgerFox available, and how is it applied?
+ * Is a newer Foxlator available, and how is it applied?
  * - Website: the server already runs the new version after a deploy; an open tab compares /version.json with its own
  *   build and offers "Reload".
  * - Desktop: the app's updater (via the local server) downloads in the background; "Restart to update".

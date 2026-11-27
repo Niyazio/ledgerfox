@@ -24,7 +24,7 @@ export function buildPdf(pages: PdfPage[], title = "Document"): Uint8Array {
   const pageIds = pages.map((_, i) => 4 + i * 3);
   obj(1, ["<< /Type /Catalog /Pages 2 0 R >>"]);
   obj(2, [`<< /Type /Pages /Count ${pages.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`]);
-  obj(3, [`<< /Title (${safeTitle}) /Producer (LedgerFox) >>`]);
+  obj(3, [`<< /Title (${safeTitle}) /Producer (Foxlator) >>`]);
   pages.forEach((p, i) => {
     const id = pageIds[i];
     const w = (p.widthMm * MM_PT).toFixed(2), h = (p.heightMm * MM_PT).toFixed(2);

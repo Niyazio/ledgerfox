@@ -209,7 +209,7 @@ org.get("/:orgId/invoice/:paymentId", async (c) => {
 interface Promo { id: string; title: string; body: string; cta: string; link_url: string | null; to: string | null; sponsor: string | null }
 const HOUSE: Promo[] = [
   { id: "house-plans", title: "Remove these messages", body: "Paid plans show no promotions and add GST returns, POS billing, payroll and more users.", cta: "See plans", link_url: null, to: "settings?tab=billing", sponsor: null },
-  { id: "house-desktop", title: "Work without internet", body: "The free LedgerFox desktop app keeps your books on your own computer and shares them over the office network.", cta: "Download", link_url: "/download", to: null, sponsor: null },
+  { id: "house-desktop", title: "Work without internet", body: "The free Foxlator desktop app keeps your books on your own computer and shares them over the office network.", cta: "Download", link_url: "/download", to: null, sponsor: null },
 ];
 
 /** One card for an organisation on the Free plan; nothing for trial, paid or unlimited (desktop) organisations. */
@@ -239,7 +239,7 @@ org.post("/:orgId/promo/:promoId/click", async (c) => {
 
 billing.route("/org", org);
 
-// ── Vendor admin: the people who sell LedgerFox (emails listed in VENDOR_ADMIN_EMAILS) ──
+// ── Vendor admin: the people who sell Foxlator (emails listed in VENDOR_ADMIN_EMAILS) ──
 const vendor = new Hono<AppEnv>();
 vendor.use("*", requireAuth, async (c, next) => {
   if (!isVendor(c.env, c.get("user").email)) throw notFound("Page");

@@ -3,7 +3,7 @@
   "version": "0.10.1",
   "private": true,
   "type": "module",
-  "description": "LedgerFox accounting by Niyazio — GST billing, inventory and double-entry accounts",
+  "description": "Foxlator accounting by Niyazio — GST billing, inventory and double-entry accounts",
   "license": "MIT",
   "scripts": {
     "dev": "npm run build && wrangler dev",
@@ -75,5 +75,5 @@
     "email": "info@niyazio.com",
     "url": "https://niyazio.com"
   },
-  "homepage": "https://ledgerfox.niyazio.com"
+  "homepage": "https://foxlator.niyazio.com"
 }
