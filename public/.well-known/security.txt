@@ -3,4 +3,3 @@ Expires: 2027-10-29T00:00:00.000Z
 Preferred-Languages: en
 Policy: https://foxlator.niyazio.com/security
 Canonical: https://foxlator.niyazio.com/.well-known/security.txt
-Canonical: https://ledgerfox.niyazio.com/.well-known/security.txt

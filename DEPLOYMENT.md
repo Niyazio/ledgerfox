@@ -53,9 +53,10 @@ npx wrangler d1 migrations apply ledgerfox --remote
 
 ### 3. Addresses `foxlator.niyazio.com` (main) and `ledgerfox.niyazio.com` (original) — configured in code
 
-Both are Custom Domains of the same Worker and serve the same app and database. The installed desktop and Android
-apps, printed QR codes, portal links and Razorpay webhooks made before the rename use `ledgerfox.niyazio.com`, so it
-must stay attached. Links in new emails use `APP_URL` (`https://foxlator.niyazio.com`).
+Both are Custom Domains of the same Worker. **foxlator.niyazio.com is the address.** Browsers that open the original
+address are sent to the same page on foxlator (`public/theme.js`, `src/web/main.tsx`). It stays attached because
+Razorpay webhooks registered before the move and older installed desktop / Android apps still call it; once those are
+updated (webhook URLs in Razorpay, apps on v0.10.2 or later) it can be removed.
 
 `wrangler.jsonc` already declares `ledgerfox.niyazio.com` as a Custom Domain, so the first `wrangler deploy` attaches it.
 Requirements: `niyazio.com` must be an active zone in the same Cloudflare account, and `ledgerfox.niyazio.com` must not

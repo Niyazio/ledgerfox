@@ -1,3 +1,12 @@
+// The app moved to foxlator.niyazio.com: browsers on the old address go there, keeping the page they asked for.
+// Installed desktop / Android apps of older versions stay on the old address (it still serves them) until they update.
+try {
+  if (location.hostname === "ledgerfox.niyazio.com" && !/Electron\//.test(navigator.userAgent) && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
+    location.replace("https://foxlator.niyazio.com" + location.pathname + location.search + location.hash);
+  }
+} catch {
+  /* never block the page */
+}
 // Applies the saved appearance before the page paints (no flash): mode, accent colour and background style.
 try {
   var t = localStorage.getItem("ledgerfox-theme");

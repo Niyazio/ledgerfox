@@ -8,8 +8,7 @@ import { Wordmark, ProductCredit } from "../components/Layout";
 import { Alert, Button, Card, Input } from "../components/ui";
 import { deleteCopy, loadCopy, saveCopy, type OfflineCopy } from "../local/store";
 
-// Installed apps stay on the original address (same sign-in); it serves the same app as foxlator.niyazio.com.
-const CLOUD = "https://ledgerfox.niyazio.com";
+const CLOUD = "https://foxlator.niyazio.com";
 const REPO = "Niyazio/ledgerfox";
 const RECENT = "ledgerfox-recent";
 

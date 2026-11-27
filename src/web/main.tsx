@@ -4,6 +4,12 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "
 import "./styles.css";
 // Catches the browser's install offer as early as possible (it can arrive before any page shows a button).
 import "./lib/install";
+import { isNativeApp } from "./lib/api";
+
+// The app moved to foxlator.niyazio.com (see also public/theme.js, which runs first). Older installed apps stay put.
+if (location.hostname === "ledgerfox.niyazio.com" && !/Electron\//.test(navigator.userAgent) && !isNativeApp()) {
+  location.replace(`https://foxlator.niyazio.com${location.pathname}${location.search}${location.hash}`);
+}
 import { SessionProvider, useSession } from "./lib/session";
 import { Spinner, ToastProvider } from "./components/ui";
 import { CompanyLayout } from "./components/Layout";
