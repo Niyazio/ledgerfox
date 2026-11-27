@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512">
+  <title>Foxlator</title>
+  <path d="M38 28 L72 58 H128 L162 28 V98 L100 172 L38 98 Z" fill="#FFFFFF"/>
+  <path d="M47 46 V70 L62 58 Z" fill="#93C5FD"/>
+  <path d="M153 46 V70 L138 58 Z" fill="#93C5FD"/>
+  <path d="M38 98 L74 106 L100 172 Z" fill="#DBEAFE"/>
+  <path d="M162 98 L126 106 L100 172 Z" fill="#DBEAFE"/>
+  <rect x="68" y="63" width="64" height="17" rx="4.5" fill="#13214F"/>
+  <path d="M112 69 H124 M112 74 H124" stroke="#93C5FD" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="80" cy="97" r="7" fill="#13214F"/>
+  <circle cx="120" cy="97" r="7" fill="#13214F"/>
+  <path d="M91 116 H109 L100 128 Z" fill="#13214F"/>
+  <rect x="58" y="106" width="15" height="15" rx="3.5" fill="#93C5FD"/>
+  <rect x="127" y="106" width="15" height="15" rx="3.5" fill="#93C5FD"/>
+  <path d="M65.5 109.5 V117.5 M61.5 113.5 H69.5" stroke="#13214F" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M130.5 113.5 H138.5" stroke="#13214F" stroke-width="2.4" stroke-linecap="round"/>
+</svg>
