@@ -1,7 +1,7 @@
 {
   "name": "ledgerfox-mobile",
   "private": true,
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Foxlator Android app: opens Foxlator Cloud or a Foxlator desktop on the office network.",
   "license": "MIT",
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "ledgerfox",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": true,
   "type": "module",
   "description": "Foxlator accounting by Niyazio — GST billing, inventory and double-entry accounts",
